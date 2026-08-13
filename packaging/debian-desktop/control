@@ -1,0 +1,12 @@
+Package: orcheroute-desktop
+Version: 0.5.3-16
+Section: net
+Priority: optional
+Architecture: amd64
+Maintainer: Ivan Kiselev <kiselev.ivan1111@gmail.com>
+Depends: ca-certificates, iproute2, nftables, systemd, libgtk-3-0, libwebkit2gtk-4.0-37
+Conflicts: orcheroute
+Provides: orcheroute-runtime
+Description: native Linux desktop interface for OrcheRoute
+ Standalone Wails/GTK desktop shell, local unauthenticated loopback Go control
+ plane and Mihomo transport. The interface is not published as a site.

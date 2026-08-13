@@ -1,0 +1,16 @@
+[Unit]
+Description=Role-based policy routing for OrcheRoute egress interfaces (Go)
+Before=orcheroute-core.service
+After=network-online.target
+Wants=network-online.target
+PartOf=orcheroute-core.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+WorkingDirectory=/var/lib/orcheroute
+ExecStart=/opt/orcheroute/bin/orcheroute-network-go --action apply --profile /var/lib/orcheroute/network-active.json
+ExecStop=/opt/orcheroute/bin/orcheroute-network-go --action remove --profile /var/lib/orcheroute/network-active.json
+
+[Install]
+WantedBy=multi-user.target

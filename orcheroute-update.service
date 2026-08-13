@@ -1,0 +1,12 @@
+[Unit]
+Description=Update OrcheRoute subscription pools (Go)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/var/lib/orcheroute
+ExecStart=/opt/orcheroute/bin/orcheroute-update-go --state-dir /var/lib/orcheroute --output-state-dir /var/lib/orcheroute
+Nice=10
+IOSchedulingClass=idle

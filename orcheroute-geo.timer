@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically update OrcheRoute GEO databases
+
+[Timer]
+OnActiveSec=5min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=orcheroute-geo.service
+
+[Install]
+WantedBy=timers.target

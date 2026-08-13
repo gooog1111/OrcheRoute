@@ -1,0 +1,11 @@
+[Unit]
+Description=Update and validate OrcheRoute GEO databases (Go)
+After=network-online.target orcheroute-core.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/var/lib/orcheroute
+ExecStart=/opt/orcheroute/bin/orcheroute-components-go --component geo
+TimeoutStartSec=10min

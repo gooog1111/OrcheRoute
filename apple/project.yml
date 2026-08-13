@@ -1,0 +1,110 @@
+name: OrcheRouteApple
+options:
+  bundleIdPrefix: online.gooog1111
+  deploymentTarget:
+    iOS: "16.0"
+    macOS: "13.0"
+settings:
+  base:
+    SWIFT_VERSION: 5.10
+    DEVELOPMENT_TEAM: $(ORCHEROUTE_DEVELOPMENT_TEAM)
+    CODE_SIGN_STYLE: Automatic
+    CURRENT_PROJECT_VERSION: 1
+    MARKETING_VERSION: 0.1.0
+    OTHER_LDFLAGS: $(inherited) -ObjC
+targets:
+  OrcheRoute-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/Shared
+      - path: Sources/iOS
+    info:
+      path: Config/iOS-Info.plist
+      properties:
+        CFBundleDisplayName: OrcheRoute
+        UILaunchScreen: {}
+    entitlements:
+      path: Config/App.entitlements
+    dependencies:
+      - target: OrcheRouteTunnel-iOS
+      - framework: Frameworks/OrcheRouteCore.xcframework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: online.gooog1111.orcheroute
+  OrcheRouteTunnel-iOS:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/Tunnel
+      - path: Sources/Shared/CoreBridge.swift
+      - path: Sources/Shared/SharedState.swift
+    info:
+      path: Config/Tunnel-Info.plist
+      properties:
+        CFBundleDisplayName: OrcheRoute Tunnel
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: Config/Tunnel.entitlements
+    dependencies:
+      - framework: Frameworks/OrcheRouteCore.xcframework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: online.gooog1111.orcheroute.tunnel
+  OrcheRoute-macOS:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/Shared
+      - path: Sources/macOS
+    info:
+      path: Config/macOS-Info.plist
+      properties:
+        CFBundleDisplayName: OrcheRoute
+        LSApplicationCategoryType: public.app-category.utilities
+    entitlements:
+      path: Config/App.entitlements
+    dependencies:
+      - target: OrcheRouteTunnel-macOS
+      - framework: Frameworks/OrcheRouteCore.xcframework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: online.gooog1111.orcheroute.macos
+  OrcheRouteTunnel-macOS:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Sources/Tunnel
+      - path: Sources/Shared/CoreBridge.swift
+      - path: Sources/Shared/SharedState.swift
+    info:
+      path: Config/Tunnel-Info.plist
+      properties:
+        CFBundleDisplayName: OrcheRoute Tunnel
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: Config/Tunnel.entitlements
+    dependencies:
+      - framework: Frameworks/OrcheRouteCore.xcframework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: online.gooog1111.orcheroute.macos.tunnel
+schemes:
+  OrcheRoute-iOS:
+    build:
+      targets:
+        OrcheRoute-iOS: all
+        OrcheRouteTunnel-iOS: all
+  OrcheRoute-macOS:
+    build:
+      targets:
+        OrcheRoute-macOS: all
+        OrcheRouteTunnel-macOS: all

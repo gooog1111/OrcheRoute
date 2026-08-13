@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OrcheRoute
+Comment=Traffic orchestration and VPN control
+Exec=/usr/bin/orcheroute-desktop
+Icon=orcheroute
+Terminal=false
+Categories=Network;Utility;
+StartupNotify=true
+StartupWMClass=OrcheRoute

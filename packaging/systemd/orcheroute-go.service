@@ -1,0 +1,23 @@
+[Unit]
+Description=OrcheRoute unified control plane
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+UMask=0077
+ExecStart=/opt/orcheroute/bin/orcheroute-server --listen 127.0.0.1:19100 --web-listen :19110 --web-tls-listen :19111 --production-state /var/lib/orcheroute --state-dir /var/lib/orcheroute --web-root /opt/orcheroute/webui --runtime-env /etc/orcheroute/runtime.env --mihomo-api http://127.0.0.1:19090 --mihomo /opt/orcheroute/bin/mihomo --core-service orcheroute-core.service
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/opt/orcheroute/webui
+ReadWritePaths=/etc/orcheroute /var/lib/orcheroute /opt/orcheroute/bin
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

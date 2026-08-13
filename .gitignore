@@ -1,0 +1,67 @@
+# Local secrets and machine-specific configuration
+.env
+.env.*
+*.env
+runtime.env
+initial-credentials
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+local.properties
+
+# Generated packages, binaries and release staging
+/dist/
+/build/
+*.apk
+*.deb
+*.exe
+*.msi
+*.aar
+*.so
+*.dll
+*.dylib
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# Keep the gomobile binding used by the current Android baseline. It is
+# explicitly allow-listed until the unified build pipeline regenerates it.
+!/android/app/libs/mobilecore.aar
+
+# Language and tool caches
+__pycache__/
+*.py[cod]
+.cache/
+*.test
+*.out
+
+# Android/Gradle
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/.idea/
+
+# Web/Node
+/webui/node_modules/
+/webui/.next/
+/webui/.git.pre-monorepo-backup/
+/webui/tsconfig.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Desktop generated binaries; UI snapshots remain tracked for the baseline
+/desktop/build/bin/
+
+# IDE and OS noise
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo

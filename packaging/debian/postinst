@@ -1,0 +1,63 @@
+#!/bin/sh
+set -e
+
+core_was_active=0
+if systemctl is-active --quiet orcheroute-core.service; then
+    core_was_active=1
+fi
+
+install -d -m 0750 /etc/orcheroute
+install -d -m 0700 /var/lib/orcheroute
+credentials=$(/opt/orcheroute/bin/orcheroute-bootstrap --output /etc/orcheroute/runtime.env)
+chmod 0640 /etc/orcheroute/runtime.env
+if [ -n "$credentials" ]; then
+    printf '%s\n' "$credentials" > /etc/orcheroute/initial-credentials
+    chmod 0600 /etc/orcheroute/initial-credentials
+    echo "OrcheRoute WebUI credentials:"
+    printf '%s\n' "$credentials"
+    echo "Saved in /etc/orcheroute/initial-credentials"
+fi
+systemctl daemon-reload >/dev/null 2>&1 || true
+systemctl enable orcheroute-go.service >/dev/null
+systemctl restart orcheroute-go.service
+systemctl enable --now orcheroute-update.timer orcheroute-geo.timer
+systemctl start --no-block orcheroute-update.service >/dev/null 2>&1 || true
+if [ -n "${2:-}" ] && [ "$core_was_active" -eq 1 ]; then
+    # Upgrade only what was running before dpkg replaced the files. A clean
+    # install and an intentionally stopped VPN remain stopped.
+    systemctl enable orcheroute-routing.service orcheroute-core.service >/dev/null 2>&1 || true
+    systemctl restart orcheroute-routing.service orcheroute-core.service
+fi
+
+echo
+echo "OrcheRoute Server is installed."
+echo "Login method: HTTP Basic authentication"
+echo "WebUI addresses:"
+printf '  http://127.0.0.1:19110/\n'
+for address in $(hostname -I 2>/dev/null || true); do
+    case "$address" in *:*) ;; *) printf '  http://%s:19110/\n' "$address" ;; esac
+done
+if [ -s /etc/orcheroute/initial-credentials ]; then
+    echo "Credentials:"
+    sed 's/^/  /' /etc/orcheroute/initial-credentials
+else
+    username=$(sed -n 's/^webui_username=//p' /etc/orcheroute/runtime.env | head -n 1)
+    printf 'Username: %s\n' "${username:-admin}"
+    echo "Password: existing password retained (not recoverable from its hash)"
+fi
+echo "Credentials file: sudo cat /etc/orcheroute/initial-credentials"
+echo "Service status: systemctl status orcheroute-go --no-pager"
+if systemctl is-active --quiet orcheroute-go.service; then
+    echo "Control plane: running"
+else
+    echo "Control plane: FAILED"
+    systemctl status orcheroute-go.service --no-pager || true
+    exit 1
+fi
+if systemctl is-active --quiet orcheroute-core.service; then
+    echo "VPN transport: configured and started"
+else
+    echo "VPN transport: ready, waiting for the first Enable command in WebUI"
+fi
+
+exit 0

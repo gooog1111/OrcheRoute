@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = remove ]; then
+    systemctl disable --now orcheroute-update.timer orcheroute-geo.timer >/dev/null 2>&1 || true
+    systemctl disable --now orcheroute-go.service orcheroute-core.service orcheroute-routing.service >/dev/null 2>&1 || true
+fi
+
+exit 0
+

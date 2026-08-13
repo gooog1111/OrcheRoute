@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+# dpkg runs the new preinst even when an older package's prerm did not know how
+# to stop a running Wails window during upgrade. Loading new assets into the
+# old GUI process produces a mixed-version client, so always close that process
+# before replacing its executable. The user's VPN services and state are left
+# untouched.
+if [ "$1" = install ] || [ "$1" = upgrade ]; then
+	pkill -TERM -f '^/usr/lib/orcheroute/orcheroute-desktop-bin([[:space:]]|$)' >/dev/null 2>&1 || true
+	count=0
+	while pgrep -f '^/usr/lib/orcheroute/orcheroute-desktop-bin([[:space:]]|$)' >/dev/null 2>&1 && [ "$count" -lt 20 ]; do
+		sleep 0.1
+		count=$((count + 1))
+	done
+	pkill -KILL -f '^/usr/lib/orcheroute/orcheroute-desktop-bin([[:space:]]|$)' >/dev/null 2>&1 || true
+fi
+
+exit 0

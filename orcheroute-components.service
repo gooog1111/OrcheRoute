@@ -1,0 +1,11 @@
+[Unit]
+Description=Update OrcheRoute components and GEO databases (Go)
+After=network-online.target orcheroute-core.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/var/lib/orcheroute
+ExecStart=/opt/orcheroute/bin/orcheroute-components-go --component all
+TimeoutStartSec=10min

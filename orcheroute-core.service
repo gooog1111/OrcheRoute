@@ -1,0 +1,22 @@
+[Unit]
+Description=OrcheRoute Mihomo core
+After=network-online.target orcheroute-update.service orcheroute-routing.service
+Wants=network-online.target orcheroute-routing.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/lib/orcheroute
+ExecStart=/opt/orcheroute/bin/mihomo -d /var/lib/orcheroute -f /etc/orcheroute/config.json
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/etc/orcheroute /opt/orcheroute
+ReadWritePaths=/var/lib/orcheroute /opt/orcheroute/bin
+
+[Install]
+WantedBy=multi-user.target

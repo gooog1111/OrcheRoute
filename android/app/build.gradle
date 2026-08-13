@@ -1,0 +1,43 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "online.gooog1111.orcheroute"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "online.gooog1111.orcheroute"
+        minSdk 26
+        targetSdk 36
+        versionCode 23
+        versionName "0.5.5"
+        ndk {
+            abiFilters "arm64-v8a"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
+}
+
+dependencies {
+    implementation files("libs/mobilecore.aar")
+    implementation "androidx.activity:activity:1.13.0"
+    implementation "androidx.core:core:1.17.0"
+    implementation "androidx.webkit:webkit:1.16.0"
+    implementation "com.google.android.gms:play-services-code-scanner:16.1.0"
+}

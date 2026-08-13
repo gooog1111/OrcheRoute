@@ -1,0 +1,63 @@
+#!/bin/sh
+set -eu
+
+uid=$(id -u)
+if [ "$uid" -eq 0 ]; then
+    echo "OrcheRoute Desktop must be started as a regular desktop user, not with sudo." >&2
+    exit 1
+fi
+
+account=$(getent passwd "$uid" || true)
+user=$(printf '%s' "$account" | cut -d: -f1)
+home=$(printf '%s' "$account" | cut -d: -f6)
+if [ -z "$user" ] || [ -z "$home" ] || [ ! -d "$home" ]; then
+    echo "Unable to determine the desktop user's home directory." >&2
+    exit 1
+fi
+
+export USER=$user
+export LOGNAME=$user
+export HOME=$home
+export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$home/.cache}
+export XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$home/.config}
+export XDG_DATA_HOME=${XDG_DATA_HOME:-$home/.local/share}
+case "$XDG_CACHE_HOME:$XDG_CONFIG_HOME:$XDG_DATA_HOME" in
+    *'/root/'*)
+        export XDG_CACHE_HOME=$home/.cache
+        export XDG_CONFIG_HOME=$home/.config
+        export XDG_DATA_HOME=$home/.local/share
+        ;;
+esac
+mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+
+runtime=/run/user/$uid
+if [ -d "$runtime" ]; then
+    export XDG_RUNTIME_DIR=$runtime
+    if [ -S "$runtime/bus" ]; then
+        export DBUS_SESSION_BUS_ADDRESS=unix:path=$runtime/bus
+    fi
+fi
+case "${DBUS_SESSION_BUS_ADDRESS:-}" in
+    *'/root/'*) unset DBUS_SESSION_BUS_ADDRESS ;;
+esac
+export NO_AT_BRIDGE=1
+
+if [ "${1:-}" = --diagnose ]; then
+    printf 'user=%s uid=%s home=%s\n' "$user" "$uid" "$HOME"
+    printf 'display=%s wayland=%s runtime=%s\n' "${DISPLAY:-}" "${WAYLAND_DISPLAY:-}" "${XDG_RUNTIME_DIR:-}"
+    echo 'runtime_env=not_required'
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+        echo 'graphical_session=available'
+    else
+        echo 'graphical_session=missing'
+    fi
+    /usr/lib/orcheroute/orcheroute-desktop-bin --diagnose || true
+    exit 0
+fi
+
+if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    echo "No graphical session found. Start OrcheRoute from the desktop session, not SSH or a text console." >&2
+    exit 1
+fi
+
+exec /usr/lib/orcheroute/orcheroute-desktop-bin "$@"

@@ -1,0 +1,22 @@
+OrcheRoute for Debian and Astra Linux
+=====================================
+
+The package installs the unified Go implementation and does not overwrite or
+remove host-specific configuration and state:
+
+  /etc/orcheroute/runtime.env
+  /etc/orcheroute/config.json
+  /var/lib/orcheroute/network-active.json
+  /var/lib/orcheroute/
+
+The control plane and update timers start during installation. On an already
+configured host, routing and Mihomo also restart. On a clean host, the VPN
+transport waits for the first explicit Enable command in WebUI.
+
+WebUI listeners are configured by orcheroute-go.service. The default server
+ports are HTTP 19110 and HTTPS 19111.
+
+The installer prints all local/LAN HTTP addresses and the Basic-auth login.
+Initial credentials are also stored root-only in:
+
+  /etc/orcheroute/initial-credentials

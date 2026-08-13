@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically update OrcheRoute subscription pools
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+RandomizedDelaySec=30s
+Persistent=true
+Unit=orcheroute-update.service
+
+[Install]
+WantedBy=timers.target
