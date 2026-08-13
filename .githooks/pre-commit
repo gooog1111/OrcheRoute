@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+set -eu
+
+changed="$(git diff --cached --name-only --diff-filter=ACMR)"
+if ! printf '%s\n' "$changed" | grep -Eq '^(go\.mod|go\.sum|cmd/|internal/|mobilecore/|webui/|desktop/|android/app/|android/build\.gradle|android/settings\.gradle|scripts/build-all\.(ps1|sh)|\.github/workflows/cross-platform\.yml)$'; then
+  exit 0
+fi
+
+root="$(git rev-parse --show-toplevel)"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    windows_root="$(cygpath -w "$root")"
+    exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$windows_root\\scripts\\build-all.ps1" -Target all
+    ;;
+  *)
+    echo "Full local matrix requires the configured Windows + WSL builder." >&2
+    echo "Run ./scripts/build-all.sh for this host; GitHub CI verifies every platform." >&2
+    exit 1
+    ;;
+esac
