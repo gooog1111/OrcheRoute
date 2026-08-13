@@ -1,0 +1,75 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+)
+
+func TestReplaceDirectoryCopiesFreshTreeAndRemovesStaleFiles(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "webui", "out")
+	destination := filepath.Join(root, "desktop", "frontend", "dist")
+	if err := os.MkdirAll(filepath.Join(source, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "index.html"), []byte("fresh"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "assets", "app.js"), []byte("js"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(destination, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(destination, "stale.js"), []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := replaceDirectory(source, destination); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(destination, "stale.js")); !os.IsNotExist(err) {
+		t.Fatalf("stale file was not removed: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(destination, "assets", "app.js"))
+	if err != nil || string(data) != "js" {
+		t.Fatalf("copied asset = %q, %v", data, err)
+	}
+}
+
+func TestReplaceDirectoryRejectsUnrelatedDestination(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "webui", "out")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceDirectory(source, filepath.Join(root, "important")); err == nil {
+		t.Fatal("unsafe destination was accepted")
+	}
+}
+
+func TestAndroidEnvironmentUsesConfiguredSDK(t *testing.T) {
+	sdk := t.TempDir()
+	t.Setenv("ANDROID_HOME", sdk)
+	t.Setenv("ANDROID_SDK_ROOT", "")
+	values, err := androidEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "ANDROID_HOME=" + sdk
+	if values[0] != want {
+		t.Fatalf("ANDROID_HOME = %q, want %q", values[0], want)
+	}
+}
+
+func TestNPMCommandMatchesHost(t *testing.T) {
+	want := "npm"
+	if runtime.GOOS == "windows" {
+		want = "npm.cmd"
+	}
+	if got := npmCommand(); got != want {
+		t.Fatalf("npm command = %q, want %q", got, want)
+	}
+}

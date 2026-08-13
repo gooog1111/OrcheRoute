@@ -32,10 +32,18 @@ android {
     androidResources {
         ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
+
+    def generatedWebAssets = providers.gradleProperty("orcherouteWebAssets")
+    if (generatedWebAssets.isPresent()) {
+        sourceSets.main.assets.setSrcDirs([generatedWebAssets.get()])
+    }
 }
 
+def mobileCoreAar = providers.gradleProperty("orcherouteMobileCoreAar")
+        .orElse(layout.projectDirectory.file("libs/mobilecore.aar").asFile.absolutePath)
+
 dependencies {
-    implementation files("libs/mobilecore.aar")
+    implementation files(mobileCoreAar.get())
     implementation "androidx.activity:activity:1.13.0"
     implementation "androidx.core:core:1.17.0"
     implementation "androidx.webkit:webkit:1.16.0"
