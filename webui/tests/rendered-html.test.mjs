@@ -139,6 +139,17 @@ test("android subscription import uses the system document picker", async () => 
   assert.doesNotMatch(settings, /Поле не скрыто/);
 });
 
+test("android keeps focused settings fields above the software keyboard", async () => {
+  const manifest = await readFile(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+  const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  assert.match(manifest, /android:windowSoftInputMode="adjustResize"/);
+  assert.match(activity, /WindowInsetsCompat\.Type\.ime\(\)/);
+  assert.match(activity, /Math\.max\(safe\.bottom, keyboard\.bottom\)/);
+  assert.match(settings, /addEventListener\("focusin", revealFocusedField\)/);
+  assert.match(settings, /scrollIntoView\(\{ block: "center"/);
+});
+
 test("subscription parser is automatic and zero available nodes is a completed test", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");

@@ -109,7 +109,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .settings-nav button:hover { color: var(--text); background: rgba(255,255,255,.035); }
 .settings-nav button.active { color: #021612; background: var(--accent); font-weight: 600; }
 .settings-nav svg { width: 14px; stroke: currentColor; stroke-width: 1.8; }
-.settings-content { min-width: 0; overflow: auto; padding: 30px 34px 38px; }
+.settings-content { min-width: 0; overflow: auto; padding: 30px 34px 38px; scroll-padding-block: 24px; }
 .settings-section { display: grid; gap: 24px; }
 .section-heading { display: grid; gap: 7px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
 .section-heading.with-action { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
@@ -464,7 +464,7 @@ button.node-row { cursor: pointer; }
   .settings-nav::-webkit-scrollbar { display: none; }
   .settings-nav button { width: auto; flex: 0 0 auto; min-height: 34px; padding: 0 12px; }
   .settings-nav svg { display: none; }
-  .settings-content { min-height: 0; padding: 22px max(16px, env(safe-area-inset-right)) 28px max(16px, env(safe-area-inset-left)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .settings-content { min-height: 0; padding: 22px max(16px, env(safe-area-inset-right)) 28px max(16px, env(safe-area-inset-left)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 24px; -webkit-overflow-scrolling: touch; }
   .settings-section { min-width: 0; gap: 20px; }
   .section-heading { padding-bottom: 16px; }
   .section-heading h3 { font-size: 21px; }

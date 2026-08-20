@@ -65,6 +65,7 @@ public final class MainActivity extends ComponentActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(Color.rgb(2, 7, 6));
         getWindow().setNavigationBarColor(Color.rgb(2, 7, 6));
@@ -92,7 +93,8 @@ public final class MainActivity extends ComponentActivity {
             Insets safe = windowInsets.getInsets(
                     WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
             );
-            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            Insets keyboard = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
+            view.setPadding(safe.left, safe.top, safe.right, Math.max(safe.bottom, keyboard.bottom));
             return WindowInsetsCompat.CONSUMED;
         });
         setContentView(root);

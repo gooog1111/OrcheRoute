@@ -204,6 +204,26 @@ export function SettingsModal({
     return () => window.removeEventListener("keydown", blockEscape, true);
   }, [busy]);
 
+  useEffect(() => {
+    if (!isAndroidRuntime()) return;
+    let revealTimer: number | null = null;
+    const revealFocusedField = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !target.matches("input, textarea, [contenteditable='true']")) return;
+      if (revealTimer !== null) window.clearTimeout(revealTimer);
+      // Wait until Android finishes the IME animation and reports the resized viewport.
+      revealTimer = window.setTimeout(() => {
+        target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+        revealTimer = null;
+      }, 280);
+    };
+    document.addEventListener("focusin", revealFocusedField);
+    return () => {
+      document.removeEventListener("focusin", revealFocusedField);
+      if (revealTimer !== null) window.clearTimeout(revealTimer);
+    };
+  }, []);
+
   const run: Runner = async (operation, success, options = {}) => {
     const steps =
       options.waitFor === "subscriptions"
