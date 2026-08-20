@@ -2,6 +2,7 @@ package online.gooog1111.orcheroute;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.AtomicFile;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -9,6 +10,11 @@ import org.json.JSONObject;
 
 import mobilecore.Mobilecore;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /** Small private JSON registry. Subscription secrets and proxy credentials
@@ -16,21 +22,123 @@ import java.util.UUID;
 final class MobileRepository {
     private static final String PREFS = "orcheroute_mobile_state";
     private static final String STATE = "registry_v1";
+    private static final String STATE_BACKUP = "registry_v1_backup";
+    private static final String STATE_CORRUPT = "registry_v1_corrupt";
     private final SharedPreferences preferences;
+    private final AtomicFile snapshot;
+    private final AtomicFile previousSnapshot;
+    private final File initializedMarker;
     private JSONObject root;
 
     MobileRepository(Context context) {
         preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        try {
-            root = new JSONObject(preferences.getString(STATE, "{}"));
-        } catch (JSONException ignored) {
-            root = new JSONObject();
+        File stateDirectory = new File(context.getNoBackupFilesDir(), "state");
+        if (!stateDirectory.isDirectory() && !stateDirectory.mkdirs()) {
+            throw new IllegalStateException("Не удалось создать защищённое хранилище настроек");
         }
+        snapshot = new AtomicFile(new File(stateDirectory, STATE + ".json"));
+        previousSnapshot = new AtomicFile(new File(stateDirectory, STATE + ".previous.json"));
+        initializedMarker = new File(stateDirectory, ".initialized");
+        root = loadState();
         ensure();
         migrateQualificationPolicy();
         migrateDetectedParsers();
         migrateDisplayNames();
         seedDefaults();
+    }
+
+    private JSONObject loadState() {
+        String stored = preferenceString(STATE);
+        JSONObject primary = parseObject(stored);
+        if (primary != null) {
+            ensureRecoveryFiles(stored);
+            return primary;
+        }
+        for (String recovery : new String[]{
+                preferenceString(STATE_BACKUP),
+                readAtomic(snapshot),
+                readAtomic(previousSnapshot)
+        }) {
+            JSONObject recovered = parseObject(recovery);
+            if (recovered == null) continue;
+            restorePrimary(stored, recovered.toString());
+            return recovered;
+        }
+        if ((stored == null || stored.trim().isEmpty()) && !initializedMarker.exists()) return new JSONObject();
+        // Never seed and persist factory defaults over an unreadable or unexpectedly
+        // missing registry. The independent snapshots remain available for support.
+        throw new IllegalStateException("Хранилище настроек повреждено; заводской сброс отменён");
+    }
+
+    private void ensureRecoveryFiles(String serialized) {
+        if (parseObject(readAtomic(snapshot)) == null) writeAtomic(snapshot, serialized);
+        ensureInitializedMarker();
+    }
+
+    private String preferenceString(String key) {
+        try {
+            return preferences.getString(key, null);
+        } catch (ClassCastException ignored) {
+            return null;
+        }
+    }
+
+    private void restorePrimary(String corrupt, String recovered) {
+        SharedPreferences.Editor editor = preferences.edit().putString(STATE, recovered);
+        if (corrupt != null && !corrupt.trim().isEmpty()) editor.putString(STATE_CORRUPT, corrupt);
+        if (!editor.commit()) throw new IllegalStateException("Не удалось восстановить резервную копию настроек");
+        writeAtomic(snapshot, recovered);
+        ensureInitializedMarker();
+    }
+
+    private void ensureInitializedMarker() {
+        if (initializedMarker.exists()) return;
+        try {
+            if (!initializedMarker.createNewFile() && !initializedMarker.exists()) {
+                throw new IOException("marker_not_created");
+            }
+        } catch (IOException error) {
+            throw new IllegalStateException("Не удалось зафиксировать состояние хранилища", error);
+        }
+    }
+
+    private static JSONObject parseObject(String value) {
+        if (value == null || value.trim().isEmpty()) return null;
+        try {
+            return new JSONObject(value);
+        } catch (JSONException ignored) {
+            return null;
+        }
+    }
+
+    private static String readAtomic(AtomicFile file) {
+        try (FileInputStream input = file.openRead()) {
+            long length = file.getBaseFile().length();
+            if (length <= 0 || length > 64L * 1024L * 1024L) return null;
+            byte[] bytes = new byte[(int) length];
+            int offset = 0;
+            while (offset < bytes.length) {
+                int count = input.read(bytes, offset, bytes.length - offset);
+                if (count < 0) break;
+                offset += count;
+            }
+            return new String(bytes, 0, offset, StandardCharsets.UTF_8);
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    private static void writeAtomic(AtomicFile file, String value) {
+        FileOutputStream output = null;
+        try {
+            output = file.startWrite();
+            output.write(value.getBytes(StandardCharsets.UTF_8));
+            output.getFD().sync();
+            file.finishWrite(output);
+        } catch (IOException error) {
+            if (output != null) file.failWrite(output);
+            throw new IllegalStateException("Не удалось записать резервную копию настроек", error);
+        }
     }
 
     private void migrateDetectedParsers() {
@@ -833,7 +941,27 @@ final class MobileRepository {
         }
     }
 
-    private void save() { preferences.edit().putString(STATE, root.toString()).apply(); }
+    private void save() {
+        String serialized = root.toString();
+        String previous = preferenceString(STATE);
+        if (serialized.equals(previous)) return;
+        if (isJSONObject(previous)) writeAtomic(previousSnapshot, previous);
+        writeAtomic(snapshot, serialized);
+        SharedPreferences.Editor editor = preferences.edit().putString(STATE, serialized);
+        if (isJSONObject(previous)) editor.putString(STATE_BACKUP, previous);
+        if (!editor.commit()) throw new IllegalStateException("Не удалось сохранить настройки");
+        ensureInitializedMarker();
+    }
+
+    private static boolean isJSONObject(String value) {
+        if (value == null || value.trim().isEmpty()) return false;
+        try {
+            new JSONObject(value);
+            return true;
+        } catch (JSONException ignored) {
+            return false;
+        }
+    }
     private static boolean looksLikeBlackTemple(String secret) {
         String normalizedSecret = secret == null ? "" : secret.trim().toLowerCase(java.util.Locale.ROOT);
         return normalizedSecret.startsWith("blacktemple://")

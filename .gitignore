@@ -36,6 +36,7 @@ local.properties
 __pycache__/
 *.py[cod]
 .cache/
+.recovery/
 *.test
 *.out
 
