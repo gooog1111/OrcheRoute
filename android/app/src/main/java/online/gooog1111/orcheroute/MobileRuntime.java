@@ -481,7 +481,9 @@ final class MobileRuntime {
                         JSONObject fetched = new JSONObject(Mobilecore.fetchSubscription(
                                 item.optString("parser", "standard"), item.optString("secret"), new java.io.File(context.getFilesDir(), "subscriptions").getAbsolutePath()));
                         if (!fetched.optBoolean("ok")) throw new IllegalStateException(coreError(fetched));
-                        links = fetched.getJSONObject("result").getJSONArray("links");
+                        JSONObject fetchResult = fetched.getJSONObject("result");
+                        links = fetchResult.getJSONArray("links");
+                        repository.updateDetectedParser(id, fetchResult.optString("parser", item.optString("parser", "standard")));
                         repository.cacheRefreshSucceeded(id, links);
                         success++;
                         continue;
@@ -710,7 +712,9 @@ final class MobileRuntime {
                         item.optString("secret"), new java.io.File(context.getFilesDir(), "subscriptions").getAbsolutePath()));
                 if (!fetched.optBoolean("ok")) throw new IllegalStateException(coreError(fetched));
                 ensureRefreshContinues(true);
-                JSONArray links = fetched.getJSONObject("result").getJSONArray("links");
+                JSONObject fetchResult = fetched.getJSONObject("result");
+                JSONArray links = fetchResult.getJSONArray("links");
+                repository.updateDetectedParser(id, fetchResult.optString("parser", item.optString("parser", "standard")));
                 JSONArray previous = item.optJSONArray("cached_links");
                 if (previous == null || !previous.toString().equals(links.toString())) {
                     repository.cacheRefreshSucceeded(id, links);

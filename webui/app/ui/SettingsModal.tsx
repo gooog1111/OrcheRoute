@@ -2770,7 +2770,9 @@ function SubscriptionsForm({
                   ? "готовые серверы"
                   : subscription.parser === "wireguard"
                     ? "WireGuard / AmneziaWG"
-                    : subscription.parser}{" "}
+                    : subscription.parser === "blacktemple"
+                      ? "автоматически · BlackTemple"
+                      : "автоматически"}{" "}
                 · {subscription.last_links} ссылок · каждые{" "}
                 {Math.round(subscription.interval_seconds / 60)} мин
               </small>

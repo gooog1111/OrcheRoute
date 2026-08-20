@@ -277,6 +277,14 @@ final class MobileRepository {
         save();
     }
 
+    synchronized void updateDetectedParser(String id, String parser) throws JSONException {
+        if (!"standard".equals(parser) && !"blacktemple".equals(parser)) return;
+        JSONObject subscription = findSubscription(id);
+        if (subscription == null || parser.equals(subscription.optString("parser"))) return;
+        subscription.put("parser", parser).put("updated_at", now());
+        save();
+    }
+
     synchronized void refreshUnavailable(String id, JSONArray links, String result, int tested) throws JSONException {
         JSONObject subscription = findSubscription(id);
         if (subscription == null) return;

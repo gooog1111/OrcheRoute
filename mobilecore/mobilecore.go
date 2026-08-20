@@ -123,7 +123,13 @@ func FetchSubscription(parser, secret, stateDir string) string {
 		if parsed, err := url.ParseRequestURI(secret); err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_subscription_url"}})
 		}
-		fetcher = subscriptions.HTTPFetcher{UserAgent: "OrcheRoute Mobile/0.2"}
+		standard := subscriptions.HTTPFetcher{UserAgent: "OrcheRoute Mobile/0.2"}
+		blackTemple := subscriptions.BlackTempleFetcher{CredentialsPath: filepath.Join(stateDir, "blacktemple_credentials.json")}
+		result, err := subscriptions.DetectAndFetch(ctx, subscription, standard, blackTemple)
+		if err != nil {
+			return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+		}
+		return encode(map[string]any{"ok": true, "result": map[string]any{"links": result.Links, "parser": result.Parser}})
 	case subscriptions.BlackTemple:
 		fetcher = subscriptions.BlackTempleFetcher{CredentialsPath: filepath.Join(stateDir, "blacktemple_credentials.json")}
 	case subscriptions.Inline:
@@ -137,7 +143,7 @@ func FetchSubscription(parser, secret, stateDir string) string {
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
-	return encode(map[string]any{"ok": true, "result": map[string]any{"links": links}})
+	return encode(map[string]any{"ok": true, "result": map[string]any{"links": links, "parser": subscription.Parser}})
 }
 
 // BuildMobileProxyConfig creates a self-contained Mihomo configuration for a

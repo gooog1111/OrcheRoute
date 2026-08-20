@@ -2,9 +2,30 @@ package mobilecore
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestLiveBlackTempleAutoDetection(t *testing.T) {
+	link := os.Getenv("ORCHEROUTE_TEST_BLACKTEMPLE_URL")
+	if link == "" {
+		t.Skip("live BlackTemple URL is not configured")
+	}
+	var payload struct {
+		OK     bool `json:"ok"`
+		Result struct {
+			Parser string   `json:"parser"`
+			Links  []string `json:"links"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(FetchSubscription("standard", link, t.TempDir())), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !payload.OK || payload.Result.Parser != "blacktemple" || len(payload.Result.Links) < 2 {
+		t.Fatalf("auto detection failed: ok=%v parser=%q links=%d", payload.OK, payload.Result.Parser, len(payload.Result.Links))
+	}
+}
 
 func TestCapabilitiesAreMobileSafe(t *testing.T) {
 	var payload map[string]any
