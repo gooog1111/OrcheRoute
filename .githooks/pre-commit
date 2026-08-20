@@ -2,7 +2,7 @@
 set -eu
 
 changed="$(git diff --cached --name-only --diff-filter=ACMR)"
-if ! printf '%s\n' "$changed" | grep -Eq '^(go\.mod|go\.sum|cmd/|internal/|mobilecore/|webui/|desktop/|android/app/|android/build\.gradle|android/settings\.gradle|scripts/build-all\.(ps1|sh)|\.github/workflows/cross-platform\.yml)$'; then
+if ! printf '%s\n' "$changed" | grep -Eq '^(go\.mod$|go\.sum$|cmd/|internal/|mobilecore/|webui/|desktop/|android/app/|android/build\.gradle$|android/settings\.gradle$|scripts/build-all\.(ps1|sh)$|\.github/workflows/cross-platform\.yml$)'; then
   exit 0
 fi
 
