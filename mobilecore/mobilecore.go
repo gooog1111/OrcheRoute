@@ -6,18 +6,19 @@ package mobilecore
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/mihomo"
+	mobileconstructor "github.com/gooog1111/orcheroute/internal/mobile/constructor"
+	mobilemapper "github.com/gooog1111/orcheroute/internal/mobile/mapper"
+	mobileparser "github.com/gooog1111/orcheroute/internal/mobile/parser"
+	mobilerouting "github.com/gooog1111/orcheroute/internal/mobile/routing"
+	mobilevalidator "github.com/gooog1111/orcheroute/internal/mobile/validator"
 	"github.com/gooog1111/orcheroute/internal/network"
-	"github.com/gooog1111/orcheroute/internal/nodes"
 	"github.com/gooog1111/orcheroute/internal/orchestrator"
-	"github.com/gooog1111/orcheroute/internal/qualification"
-	"github.com/gooog1111/orcheroute/internal/routes"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"github.com/gooog1111/orcheroute/internal/whitelist"
 )
@@ -25,7 +26,7 @@ import (
 func Capabilities() string {
 	return encode(map[string]any{"ok": true, "result": map[string]any{
 		"runtime_engine":         "mihomo",
-		"embedded_engine":        embeddedEngineAvailable(),
+		"embedded_engine":        activeTransport.Available(),
 		"external_tunnel_fd":     true,
 		"route_rules":            true,
 		"mihomo_config":          true,
@@ -43,7 +44,7 @@ func ValidateQualificationPolicy(policyJSON string) string {
 	if json.Unmarshal([]byte(policyJSON), &policy) != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_request"}})
 	}
-	result, err := qualification.Validate(policy)
+	result, err := mobilevalidator.QualificationPolicy(policy)
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
@@ -55,7 +56,7 @@ func EffectiveQualificationPolicy(policyJSON, pool string) string {
 	if json.Unmarshal([]byte(policyJSON), &policy) != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_request"}})
 	}
-	result, err := qualification.Effective(policy, pool)
+	result, err := mobilevalidator.EffectiveQualificationPolicy(policy, pool)
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
@@ -66,7 +67,7 @@ func EffectiveQualificationPolicy(policyJSON, pool string) string {
 // subscription body. Fetching remains a platform adapter so mobile clients can
 // use their native HTTP and credential storage stacks.
 func DecodeSubscriptionBody(body string) string {
-	return encode(map[string]any{"ok": true, "result": subscriptions.Decode([]byte(body))})
+	return encode(map[string]any{"ok": true, "result": mobileparser.DecodeSubscriptionBody(body)})
 }
 
 // FetchSubscription is the portable network adapter used by mobile and
@@ -78,7 +79,7 @@ func FetchSubscription(parser, secret, stateDir string) string {
 	if secret == "" {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_secret"}})
 	}
-	if parser == string(subscriptions.Standard) && isShareLink(secret) {
+	if parser == string(subscriptions.Standard) && mobileparser.IsShareLink(secret) {
 		return encode(map[string]any{"ok": true, "result": map[string]any{"links": []string{secret}}})
 	}
 
@@ -108,16 +109,6 @@ func FetchSubscription(parser, secret, stateDir string) string {
 	return encode(map[string]any{"ok": true, "result": map[string]any{"links": links}})
 }
 
-func isShareLink(value string) bool {
-	lower := strings.ToLower(value)
-	for _, prefix := range []string{"vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "hy2://"} {
-		if strings.HasPrefix(lower, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 // BuildMobileProxyConfig creates a self-contained Mihomo configuration for a
 // selected parsed node. The result can be loaded directly by EngineLoadConfig.
 func BuildMobileProxyConfig(proxyJSON string) string {
@@ -141,80 +132,27 @@ func buildMobileProxyConfig(proxyJSON, routesJSON, dnsJSON string) string {
 	if json.Unmarshal([]byte(proxyJSON), &proxy) != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_proxy"}})
 	}
-	name, _ := proxy["name"].(string)
-	if strings.TrimSpace(name) == "" {
-		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "proxy_name_required"}})
-	}
-	var routeInput struct {
-		Default string              `json:"default"`
-		Lists   map[string][]string `json:"lists"`
-	}
+	var routeInput mobilerouting.Input
 	if json.Unmarshal([]byte(routesJSON), &routeInput) != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_routes"}})
 	}
-	if routeInput.Default != "proxy" && routeInput.Default != "direct" && routeInput.Default != "block" {
-		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_route_default"}})
-	}
-	var dnsInput struct {
-		Direct      []string `json:"direct"`
-		Proxy       []string `json:"proxy"`
-		VPNUnderlay []string `json:"vpn_underlay"`
-		Bootstrap   []string `json:"bootstrap"`
-		Cache       string   `json:"cache_algorithm"`
-		PreferH3    bool     `json:"prefer_h3"`
-		UseHosts    bool     `json:"use_hosts"`
-		IPv6        bool     `json:"ipv6"`
-	}
-	if json.Unmarshal([]byte(dnsJSON), &dnsInput) != nil || len(dnsInput.Direct) == 0 || len(dnsInput.Proxy) == 0 || len(dnsInput.VPNUnderlay) == 0 || len(dnsInput.Bootstrap) == 0 {
-		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_dns_profile"}})
-	}
-	if dnsInput.Cache != "arc" && dnsInput.Cache != "lru" {
-		dnsInput.Cache = "arc"
-	}
-	compiled, err := routes.CompileLists(routeInput.Lists)
+	plan, err := mobilerouting.Compile(routeInput)
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
-	actions := map[string]string{"proxy": "ACTIVE", "direct": "DIRECT", "block": "REJECT"}
-	ruleList := []string{}
-	for _, listName := range []string{"block", "direct", "proxy"} {
-		for _, rule := range compiled.Compiled[listName] {
-			ruleList = append(ruleList, rule+","+actions[listName])
-		}
+	var dnsInput mobileconstructor.DNSProfile
+	if json.Unmarshal([]byte(dnsJSON), &dnsInput) != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_dns_profile"}})
 	}
-	ruleList = append(ruleList, "MATCH,"+actions[routeInput.Default])
-	config := map[string]any{
-		"mode": "rule", "log-level": "info", "ipv6": dnsInput.IPv6, "find-process-mode": "off", "unified-delay": true, "tcp-concurrent": true,
-		"geodata-mode": true, "geodata-loader": "standard", "geo-auto-update": false,
-		"geox-url": map[string]any{"geoip": geoIPURL, "geosite": geoSiteURL},
-		"sniffer": map[string]any{
-			"enable": true, "force-dns-mapping": true, "parse-pure-ip": true, "override-destination": true,
-			"sniff": map[string]any{
-				"HTTP": map[string]any{"ports": []any{80, "8080-8880"}, "override-destination": true},
-				"TLS":  map[string]any{"ports": []any{443, 8443}},
-				"QUIC": map[string]any{"ports": []any{443, 8443}},
-			},
-		},
-		"dns": map[string]any{
-			"enable": true, "ipv6": dnsInput.IPv6, "enhanced-mode": "fake-ip", "fake-ip-range": "198.18.0.1/16",
-			"respect-rules":           true,
-			"default-nameserver":      dnsInput.Bootstrap,
-			"proxy-server-nameserver": dnsInput.VPNUnderlay,
-			"nameserver":              dnsInput.Proxy,
-			"direct-nameserver":       dnsInput.Direct,
-			"cache-algorithm":         dnsInput.Cache,
-			"prefer-h3":               dnsInput.PreferH3,
-			"use-hosts":               dnsInput.UseHosts,
-		},
-		"proxies":      []any{proxy},
-		"proxy-groups": []any{map[string]any{"name": "ACTIVE", "type": "select", "proxies": []string{name}}},
-		"rules":        ruleList,
+	result, err := mobileconstructor.Build(mobileconstructor.Request{Proxy: proxy, Routing: plan, DNS: dnsInput})
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
-	payload, err := json.Marshal(config)
+	payload, err := json.Marshal(result.Config)
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "config_encoding_failed"}})
 	}
-	return encode(map[string]any{"ok": true, "result": map[string]any{"config": string(payload), "node": name}})
+	return encode(map[string]any{"ok": true, "result": map[string]any{"config": string(payload), "node": result.Node}})
 }
 
 func ValidateSubscription(payloadJSON string, partial bool) string {
@@ -222,7 +160,7 @@ func ValidateSubscription(payloadJSON string, partial bool) string {
 	if json.Unmarshal([]byte(payloadJSON), &payload) != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_request"}})
 	}
-	result, err := subscriptions.ValidateFields(payload, partial)
+	result, err := mobilevalidator.Subscription(payload, partial)
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
@@ -234,7 +172,7 @@ func AggregateSubscriptions(sourcesJSON string) string {
 	if json.Unmarshal([]byte(sourcesJSON), &sources) != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_request"}})
 	}
-	return encode(map[string]any{"ok": true, "result": subscriptions.Aggregate(sources)})
+	return encode(map[string]any{"ok": true, "result": mobilemapper.Subscriptions(sources)})
 }
 
 // WhitelistTransition applies the shared derived-pool state machine. Native
@@ -274,9 +212,9 @@ func PreviewNetworkProfile(profileJSON, topologyJSON string) string {
 	if json.Unmarshal([]byte(profileJSON), &profile) != nil || json.Unmarshal([]byte(topologyJSON), &topology) != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_request"}})
 	}
-	preview, err := network.PreviewProfile(profile, topology)
+	preview, err := mobilevalidator.NetworkProfile(profile, topology)
 	if err != nil {
-		return encode(map[string]any{"ok": false, "error": networkError(err)})
+		return encode(map[string]any{"ok": false, "error": mobilevalidator.NetworkError(err)})
 	}
 	return encode(map[string]any{"ok": true, "result": preview})
 }
@@ -286,19 +224,11 @@ func PreviewDNS(dnsJSON string) string {
 	if json.Unmarshal([]byte(dnsJSON), &input) != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_request"}})
 	}
-	config, err := network.ValidateDNS(&input)
+	preview, err := mobilevalidator.DNS(input)
 	if err != nil {
-		return encode(map[string]any{"ok": false, "error": networkError(err)})
+		return encode(map[string]any{"ok": false, "error": mobilevalidator.NetworkError(err)})
 	}
-	return encode(map[string]any{"ok": true, "result": network.PreviewDNS(config)})
-}
-
-func networkError(err error) any {
-	var validation *network.ValidationError
-	if errors.As(err, &validation) {
-		return validation
-	}
-	return map[string]string{"error": err.Error()}
+	return encode(map[string]any{"ok": true, "result": preview})
 }
 
 // GenerateMihomoConfig accepts a resolved, platform-neutral network profile.
@@ -316,7 +246,7 @@ func GenerateMihomoConfig(inputJSON string) string {
 }
 
 func ParseLink(link, source string, index int) string {
-	result, err := nodes.ParseLink(link, source, index)
+	result, err := mobileparser.ParseLink(link, source, index)
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
@@ -330,7 +260,11 @@ func ParseSubscription(linksJSON, source string) string {
 	if json.Unmarshal([]byte(linksJSON), &links) != nil || source == "" {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_request"}})
 	}
-	return encode(map[string]any{"ok": true, "result": nodes.ConvertLinks(links, source)})
+	result, err := mobileparser.ParseSubscription(links, source)
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	return encode(map[string]any{"ok": true, "result": result})
 }
 
 // CompileRoutes accepts direct/proxy/block arrays in the same shape used by
@@ -340,7 +274,7 @@ func CompileRoutes(listsJSON string) string {
 	if json.Unmarshal([]byte(listsJSON), &lists) != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_request"}})
 	}
-	result, err := routes.CompileLists(lists)
+	result, err := mobilerouting.CompileLists(lists)
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
