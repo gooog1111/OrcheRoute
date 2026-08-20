@@ -8,6 +8,7 @@
 
 ```text
 Android input
+  -> connectivity (independent physical-network state)
   -> parser
   -> validator
   -> subscription mapper
@@ -61,3 +62,12 @@ HTTP-запросы, не сохраняет данные, не проверяе
 не импортируют Android или transport. Constructor не управляет transport.
 Transport не импортирует parser, mapper или routing. Android вызывает фасад и
 transport, но не дублирует бизнес-правила.
+
+### Connectivity
+
+Независимо от состояния Mihomo и Android TUN параллельно проверяет физическую
+сеть и возвращает ровно одно состояние: `normal`, `allowlist` или `offline`.
+Платформенный адаптер только привязывает HTTP-сокеты к физической сети либо
+исключает их из VPN; набор проб и классификация находятся в общем Go-слое.
+Наличие подключённого Wi-Fi или мобильного интерфейса само по себе не считается
+доказательством белых списков.

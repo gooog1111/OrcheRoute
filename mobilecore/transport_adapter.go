@@ -43,9 +43,6 @@ func (embeddedTransport) FilterCountries(proxiesJSON, excludedJSON string, timeo
 func (embeddedTransport) SpeedAvailable(testURL string, timeoutMs int) string {
 	return engineSpeedAvailable(testURL, timeoutMs)
 }
-func (embeddedTransport) ProbeConnectivity(allowlistURL, openInternetURL string, timeoutMs int) string {
-	return engineProbeConnectivity(allowlistURL, openInternetURL, timeoutMs)
-}
 func (embeddedTransport) TestSpeed(proxiesJSON, testURL string, timeoutMs, concurrency int, minimumMbps, stabilityRatio float64) string {
 	return engineTestSpeed(proxiesJSON, testURL, timeoutMs, concurrency, minimumMbps, stabilityRatio)
 }

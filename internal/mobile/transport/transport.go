@@ -19,7 +19,6 @@ type Engine interface {
 	TestProxiesMulti(proxiesJSON, testURLsJSON string, timeoutMs, concurrency int) string
 	FilterCountries(proxiesJSON, excludedJSON string, timeoutMs, concurrency int) string
 	SpeedAvailable(testURL string, timeoutMs int) string
-	ProbeConnectivity(allowlistURL, openInternetURL string, timeoutMs int) string
 	TestSpeed(proxiesJSON, testURL string, timeoutMs, concurrency int, minimumMbps, stabilityRatio float64) string
 	TestSpeedAdaptive(proxiesJSON, testURL string, timeoutMs, concurrency int, minimumMbps, stabilityRatio float64, sampleBytes int64) string
 }

@@ -56,10 +56,16 @@ func EngineSpeedAvailable(testURL string, timeoutMs int) string {
 	return activeTransport.SpeedAvailable(testURL, timeoutMs)
 }
 
-// EngineProbeConnectivity distinguishes a missing underlay, an allowlist-only
-// network, and ordinary Internet access using user-configurable known targets.
+// EngineProbeConnectivity is kept for gomobile API compatibility. Connectivity
+// diagnosis is a separate layer and does not depend on Mihomo or TUN state.
 func EngineProbeConnectivity(allowlistURL, openInternetURL string, timeoutMs int) string {
-	return activeTransport.ProbeConnectivity(allowlistURL, openInternetURL, timeoutMs)
+	return ProbeConnectivity(allowlistURL, openInternetURL, timeoutMs)
+}
+
+// ProbeConnectivity distinguishes a missing underlay, an allowlist-only
+// network, and ordinary Internet access using physical-network probes.
+func ProbeConnectivity(allowlistURL, openInternetURL string, timeoutMs int) string {
+	return platformProbeConnectivity(allowlistURL, openInternetURL, timeoutMs)
 }
 
 // EngineTestSpeed performs two downloads per proxy and applies the requested

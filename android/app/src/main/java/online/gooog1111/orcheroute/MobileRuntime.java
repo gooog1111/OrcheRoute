@@ -831,7 +831,7 @@ final class MobileRuntime {
     synchronized String probeUnderlyingConnectivity() {
         try {
             JSONObject defaults = repository.qualificationPolicy().getJSONObject("defaults");
-            JSONObject payload = new JSONObject(Mobilecore.engineProbeConnectivity(
+            JSONObject payload = new JSONObject(Mobilecore.probeConnectivity(
                     defaults.optString("allowlist_probe_url", "https://ya.ru/"),
                     defaults.optString("open_internet_probe_url", "https://www.cloudflare.com/cdn-cgi/trace"),
                     3500));
@@ -839,12 +839,6 @@ final class MobileRuntime {
             JSONObject result = payload.optJSONObject("result");
             detectedInternetMode = payload.optBoolean("ok") && result != null
                     ? result.optString("state", "offline") : "offline";
-            // If every ordinary protected-socket probe fails while a physical
-            // non-VPN underlay is still connected, scan the dedicated restricted
-            // network pool. A real radio/link outage has no such underlay.
-            if ("offline".equals(detectedInternetMode) && hasConnectedUnderlyingNetwork()) {
-                detectedInternetMode = "allowlist";
-            }
             Log.i("OrcheRouteNet", "classified=" + detectedInternetMode
                     + " underlay_connected=" + hasConnectedUnderlyingNetwork());
         } catch (Throwable ignored) {

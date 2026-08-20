@@ -15,7 +15,7 @@ func engineTestTCP(string, int, int) string                             { return
 func engineTestProxiesMulti(string, string, int, int) string            { return engineUnavailable() }
 func engineFilterCountries(string, string, int, int) string             { return engineUnavailable() }
 func engineSpeedAvailable(string, int) string                           { return engineUnavailable() }
-func engineProbeConnectivity(string, string, int) string                { return engineUnavailable() }
+func platformProbeConnectivity(string, string, int) string              { return engineUnavailable() }
 func engineTestSpeed(string, string, int, int, float64, float64) string { return engineUnavailable() }
 func engineTestSpeedAdaptive(string, string, int, int, float64, float64, int64) string {
 	return engineUnavailable()

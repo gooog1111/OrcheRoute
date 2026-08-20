@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	mobileconnectivity "github.com/gooog1111/orcheroute/internal/mobile/connectivity"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/component/dialer"
@@ -383,91 +384,45 @@ func engineSpeedAvailable(testURL string, timeoutMs int) string {
 	return encode(map[string]any{"ok": true, "result": map[string]any{"available": true, "baseline_mbps": math.Round(mbps*100) / 100, "recommended_bytes": recommended}})
 }
 
-func engineProbeConnectivity(allowlistURL, openInternetURL string, timeoutMs int) string {
+func platformProbeConnectivity(allowlistURL, openInternetURL string, timeoutMs int) string {
 	if timeoutMs < 1000 || timeoutMs > 15000 {
 		timeoutMs = 5000
 	}
-	// Android connectivity-check endpoints are often explicitly reachable while
-	// an operator allowlist blocks normal traffic. Treating them as proof of the
-	// open Internet produces a false "normal" state and prevents whitelist
-	// failover. Keep old installations safe even before their setting migrates.
-	lowerOpenURL := strings.ToLower(strings.TrimSpace(openInternetURL))
-	if strings.Contains(lowerOpenURL, "gstatic.com/generate_204") ||
-		strings.Contains(lowerOpenURL, "connectivitycheck.gstatic.com") ||
-		strings.Contains(lowerOpenURL, "clients3.google.com/generate_204") {
-		openInternetURL = "https://www.cloudflare.com/cdn-cgi/trace"
-	}
-	type probe struct {
-		name string
-		url  string
-		ok   bool
-	}
-	// A single host may itself be present in an operator allowlist (Cloudflare
-	// included). Confirm open Internet access with independent ordinary sites.
-	// All probes run concurrently, so this does not add serial latency.
-	targets := map[string]string{
-		"allowlist":           allowlistURL,
-		"open_internet":       openInternetURL,
-		"open_anchor_github":  "https://api.github.com/zen",
-		"open_anchor_mozilla": "https://www.mozilla.org/robots.txt",
-	}
-	results := make(chan probe, len(targets))
-	for name, target := range targets {
-		go func(name, target string) {
-			client := &http.Client{
-				Timeout:   time.Duration(timeoutMs) * time.Millisecond,
-				Transport: &http.Transport{DialContext: (&net.Dialer{Timeout: time.Duration(timeoutMs) * time.Millisecond, Control: protectedSocketControl}).DialContext},
+	result, err := mobileconnectivity.Diagnose(context.Background(), mobileconnectivity.Config{
+		AllowlistURL: allowlistURL, OpenInternetURL: openInternetURL,
+	}, func(ctx context.Context, target mobileconnectivity.Target) bool {
+		client := &http.Client{
+			Timeout:   time.Duration(timeoutMs) * time.Millisecond,
+			Transport: &http.Transport{DialContext: (&net.Dialer{Timeout: time.Duration(timeoutMs) * time.Millisecond, Control: protectedSocketControl}).DialContext},
+		}
+		if target.OpenInternet {
+			client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, target.URL, nil)
+		if err != nil {
+			return false
+		}
+		request.Header.Set("Cache-Control", "no-cache, no-store")
+		request.Header.Set("Pragma", "no-cache")
+		response, err := client.Do(request)
+		ok := false
+		if err == nil && response != nil {
+			if target.ExpectNoContent {
+				ok = response.StatusCode == http.StatusNoContent
+			} else {
+				ok = response.StatusCode >= 200 && response.StatusCode < 300
 			}
-			// An operator/captive page must not turn a failed open-Internet probe
-			// into a successful one merely by redirecting the request.
-			if strings.HasPrefix(name, "open_") {
-				client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-			}
-			request, err := http.NewRequest(http.MethodGet, target, nil)
-			if err != nil {
-				results <- probe{name: name, url: target}
-				return
-			}
-			request.Header.Set("Cache-Control", "no-cache, no-store")
-			request.Header.Set("Pragma", "no-cache")
-			response, err := client.Do(request)
-			ok := false
-			if err == nil && response != nil {
-				if strings.HasPrefix(name, "open_") && strings.Contains(strings.ToLower(request.URL.Path), "generate_204") {
-					ok = response.StatusCode == http.StatusNoContent
-				} else {
-					ok = response.StatusCode >= 200 && response.StatusCode < 300
-				}
-			}
-			if response != nil {
-				_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1024))
-				_ = response.Body.Close()
-			}
-			results <- probe{name: name, url: target, ok: ok}
-		}(name, target)
+		}
+		if response != nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1024))
+			_ = response.Body.Close()
+		}
+		return ok
+	})
+	if err != nil {
+		return engineError(err.Error())
 	}
-	available := map[string]bool{}
-	for index := 0; index < len(targets); index++ {
-		result := <-results
-		available[result.name] = result.ok
-	}
-	openInternetAvailable := available["open_internet"] &&
-		available["open_anchor_github"] && available["open_anchor_mozilla"]
-	state := "offline"
-	if openInternetAvailable {
-		state = "normal"
-	} else if available["allowlist"] {
-		state = "allowlist"
-	}
-	return encode(map[string]any{"ok": true, "result": map[string]any{
-		"state":                         state,
-		"allowlist_available":           available["allowlist"],
-		"open_internet_available":       openInternetAvailable,
-		"configured_open_available":     available["open_internet"],
-		"open_anchor_available":         available["open_anchor_github"] && available["open_anchor_mozilla"],
-		"open_anchor_github_available":  available["open_anchor_github"],
-		"open_anchor_mozilla_available": available["open_anchor_mozilla"],
-	}})
+	return encode(map[string]any{"ok": true, "result": result})
 }
 
 func engineTestSpeed(proxiesJSON, testURL string, timeoutMs, concurrency int, minimumMbps, stabilityRatio float64) string {

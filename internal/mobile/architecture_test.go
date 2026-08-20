@@ -15,7 +15,7 @@ import (
 func TestMicroLayerDependencyDirections(t *testing.T) {
 	allowed := map[string]map[string]bool{
 		"parser": {}, "validator": {}, "mapper": {}, "routing": {},
-		"constructor": {"routing": true}, "transport": {},
+		"constructor": {"routing": true}, "transport": {}, "connectivity": {},
 	}
 	for layer, layerAllowed := range allowed {
 		files, err := filepath.Glob(filepath.Join(layer, "*.go"))

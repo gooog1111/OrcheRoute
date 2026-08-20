@@ -19,7 +19,6 @@ func (transportContractCheck) TestProxiesMulti(string, string, int, int) string 
 }
 func (transportContractCheck) FilterCountries(string, string, int, int) string { return "geo" }
 func (transportContractCheck) SpeedAvailable(string, int) string               { return "speed-available" }
-func (transportContractCheck) ProbeConnectivity(string, string, int) string    { return "connectivity" }
 func (transportContractCheck) TestSpeed(string, string, int, int, float64, float64) string {
 	return "speed"
 }
