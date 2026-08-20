@@ -168,6 +168,7 @@ export function SettingsModal({
   const [operationView, setOperationView] = useState<OperationView | null>(
     null,
   );
+  const [operationCancellable, setOperationCancellable] = useState(false);
   const desktopMode = isEmbeddedRuntime();
   const touchStart = useRef<{ x: number; y: number; interactive: boolean } | null>(null);
   const tabs = useMemo<SettingsTab[]>(
@@ -218,6 +219,7 @@ export function SettingsModal({
               ]
             : ["Сохраняем изменения", "Проверяем ответ", "Обновляем интерфейс"];
     setBusy(true);
+    setOperationCancellable(isAndroidRuntime() && (options.waitFor === "subscriptions" || options.waitFor === "servers"));
     setMessage(null);
     setError(null);
     setOperationView({
@@ -259,7 +261,7 @@ export function SettingsModal({
               activityKey = nextActivityKey;
               inactiveSeconds = 0;
             }
-            if (["queued", "running"].includes(update.status)) {
+            if (["queued", "running", "cancelling"].includes(update.status)) {
               setOperationView(
                 (current) =>
                   current && {
@@ -273,6 +275,11 @@ export function SettingsModal({
                         : undefined,
                   },
               );
+            } else if (update.status === "cancelled") {
+              await onReload();
+              setMessage(update.message ?? "Операция остановлена");
+              setOperationView((current) => current && ({ ...current, state: "success", detail: update.message ?? "Операция остановлена", progress: undefined }));
+              return true;
             } else if (update.status === "success") {
               setOperationView(
                 (current) =>
@@ -398,6 +405,16 @@ export function SettingsModal({
       return false;
     } finally {
       setBusy(false);
+      setOperationCancellable(false);
+    }
+  };
+
+  const cancelSubscriptionOperation = async () => {
+    setOperationView((current) => current && ({ ...current, detail: "Останавливаем после завершения текущей группы тестов…" }));
+    try {
+      await actions.cancelSubscriptionUpdate();
+    } catch (reason) {
+      setError(errorText(reason));
     }
   };
 
@@ -571,7 +588,12 @@ export function SettingsModal({
           operation={displayedOperation}
           onDismiss={operationView ? () => setOperationView(null) : undefined}
           action={
-            networkPending
+            operationCancellable && operationView?.state === "running"
+              ? {
+                  label: "Остановить",
+                  onClick: () => void cancelSubscriptionOperation(),
+                }
+              : networkPending
               ? {
                   label: "Применить изменения",
                   onClick: applyNetwork,

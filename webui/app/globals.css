@@ -406,7 +406,7 @@ button.node-row { cursor: pointer; }
 .operation-progress-wrap { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
 .operation-progress-wrap > small { color: var(--muted); font: 600 10px/1 var(--mono); min-width: 58px; text-align: right; }
 .operation-actions { padding-top: 2px; display: grid; border-top: 1px solid var(--line); }
-.operation-actions .primary-button { width: 100%; margin-top: 10px; }
+.operation-actions .primary-button, .operation-actions .secondary-button { width: 100%; margin-top: 10px; }
 
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes modal-in { from { opacity: 0; transform: translateY(10px) scale(.99); } }

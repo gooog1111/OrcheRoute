@@ -31,6 +31,6 @@ export function OperationPanel({ operation, onDismiss, action }: { operation: Op
       <small>{progressValue(operation.progress.current, operation.progress.total)} / {progressValue(operation.progress.total, operation.progress.total)}</small>
     </div>}
     {operation.steps.length > 0 && <ol>{operation.steps.map((label, index) => <li key={label} className={index < operation.step || operation.state === "success" ? "done" : index === operation.step && operation.state === "running" ? "active" : index === operation.step && operation.state === "error" ? "failed" : ""}><span>{index < operation.step || operation.state === "success" ? "✓" : index === operation.step && operation.state === "error" ? "!" : index + 1}</span>{label}</li>)}</ol>}
-    {action && operation.state !== "running" && <div className="operation-actions"><button className="primary-button" type="button" disabled={action.disabled} onClick={action.onClick}>{action.label}</button></div>}
+    {action && <div className="operation-actions"><button className={operation.state === "running" ? "secondary-button" : "primary-button"} type="button" disabled={action.disabled} onClick={action.onClick}>{action.label}</button></div>}
   </aside>;
 }

@@ -40,6 +40,7 @@ final class MobileRuntime {
     private String message = "OrcheRoute выключен";
     private boolean desiredEnabled;
     private boolean refreshActive;
+    private volatile boolean refreshCancelRequested;
     private String refreshStatus = "idle";
     private String refreshPhase = "idle";
     private String refreshMessage = "";
@@ -79,6 +80,7 @@ final class MobileRuntime {
         // A process killed during a scan cannot have a live worker after the
         // restart. Clear only the stale activity marker; keep the working pool.
         try { repository.completeWhitelistScan(); } catch (JSONException ignored) { }
+        allowlistWorkingFound = repository.whitelistCount() > 0;
         try {
             JSONObject settings = repository.componentSettings();
             GeoUpdateScheduler.apply(this.context, settings.optBoolean("geo_auto_update", true), settings.optInt("geo_interval_hours", 24));
@@ -181,6 +183,9 @@ final class MobileRuntime {
             if ("GET".equals(verb) && "/v1/nodes".equals(path)) return response(200, new JSONObject().put("nodes", repository.nodes()));
             if ("GET".equals(verb) && "/v1/subscriptions".equals(path)) return response(200, new JSONObject().put("subscriptions", repository.subscriptions()));
             if ("GET".equals(verb) && "/v1/operations".equals(path)) return response(200, operations());
+            if ("POST".equals(verb) && "/v1/operations/subscription-update/cancel".equals(path)) {
+                return response(202, cancelRefresh());
+            }
             if ("GET".equals(verb) && "/v1/qualification".equals(path)) return response(200, qualification());
             if ("GET".equals(verb) && "/v1/routes".equals(path)) return response(200, repository.routes());
             if ("GET".equals(verb) && "/v1/network/profile".equals(path)) return response(200, repository.networkState());
@@ -420,6 +425,7 @@ final class MobileRuntime {
         JSONArray items = repository.enabledSubscriptions(onlyId, onlyGroup);
         if (onlyId != null && items.length() == 0) return new JSONObject().put("accepted", false).put("missing_or_disabled", true);
         refreshActive = true; refreshStatus = "queued"; refreshPhase = "queued";
+        refreshCancelRequested = false;
         refreshMessage = checkOnly ? "Проверка серверов поставлена в очередь" : "Обновление подписок поставлено в очередь"; refreshError = "";
         refreshCurrent = 0; refreshTotal = items.length(); refreshUpdatedAt = now();
         if (allowlistScan && resetWhitelistPool) repository.beginWhitelistScan();
@@ -444,7 +450,7 @@ final class MobileRuntime {
             updateRefresh("running", "connectivity", "allowlist".equals(connectivityState)
                     ? "Обнаружен режим белых списков" : "Доступен обычный интернет", 0, items.length(), "");
             for (int i = 0; i < items.length(); i++) {
-                if (allowlistScan && !isAllowlistModeActive()) break;
+                ensureRefreshContinues(allowlistScan);
                 JSONObject item = items.getJSONObject(i);
                 String id = item.getString("id");
                 boolean restrictedScan = allowlistScan && "allowlist".equals(connectivityState);
@@ -479,12 +485,14 @@ final class MobileRuntime {
                         for (int index = offset; index < end; index++) batch.put(proxies.getJSONObject(index));
                         JSONObject tested = new JSONObject(Mobilecore.engineTestTCP(batch.toString(), 2000, 128));
                         if (!tested.optBoolean("ok")) throw new IllegalStateException(coreError(tested));
+                        ensureRefreshContinues(allowlistScan);
                         JSONArray nodes = tested.getJSONObject("result").getJSONArray("nodes");
                         for (int index = 0; index < nodes.length(); index++) tcpTests.put(nodes.getJSONObject(index));
                         updateRefresh("running", "tcp", "TCP-проверка " + end + "/" + proxies.length() + " · «" + item.optString("name") + "»", end, proxies.length(), "");
                     }
                     JSONArray tcpAlive = filterAliveSorted(proxies, tcpTests, "delay_ms", true);
                     if (tcpAlive.length() == 0) {
+                        ensureRefreshContinues(allowlistScan);
                         if (restrictedScan) repository.replaceWhitelistSource(id, new JSONArray(), new JSONArray());
                         else repository.refreshUnavailable(id, links, "tcp_unavailable", proxies.length());
                         updateRefresh("running", "tcp", "Проверка завершена: доступных серверов нет (0/" + proxies.length() + ")", proxies.length(), proxies.length(), "");
@@ -521,21 +529,14 @@ final class MobileRuntime {
                         JSONArray batch = slice(urlSource, offset, end);
                         JSONObject tested = new JSONObject(Mobilecore.engineTestProxiesMulti(batch.toString(), testURLs.toString(), 3000, 80));
                         if (!tested.optBoolean("ok")) throw new IllegalStateException(coreError(tested));
+                        ensureRefreshContinues(allowlistScan);
                         JSONArray batchTests = tested.getJSONObject("result").getJSONArray("nodes");
                         append(urlTests, batchTests);
-                        if (allowlistScan && "allowlist".equals(connectivityState) && isAllowlistModeActive()) {
-                            JSONArray batchWorking = filterAliveSorted(batch, batchTests, "delay_ms", true);
-                            if (batchWorking.length() > 0) {
-                                JSONArray workingTests = aliveTests(batchWorking, batchTests);
-                                repository.addWhitelistWorking(id, batchWorking, workingTests);
-                                updateRefresh("running", "connect", "Найден доступный сервер " + end + "/" + urlSource.length() + ", подключаемся · «" + item.optString("name") + "»", end, urlSource.length(), "");
-                                if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
-                            }
-                        }
                         updateRefresh("running", "url_test", "URL-test " + end + "/" + urlSource.length() + " · «" + item.optString("name") + "»", end, urlSource.length(), "");
                     }
                     JSONArray urlAlive = filterAliveSorted(urlSource, urlTests, "delay_ms", true);
                     if (urlAlive.length() == 0) {
+                        ensureRefreshContinues(allowlistScan);
                         if (restrictedScan) repository.replaceWhitelistSource(id, new JSONArray(), new JSONArray());
                         else repository.refreshUnavailable(id, links, "url_unavailable", urlSource.length());
                         updateRefresh("running", "url_test", "URL-test завершён: доступных серверов нет (0/" + urlSource.length() + ")", urlSource.length(), urlSource.length(), "");
@@ -586,6 +587,7 @@ final class MobileRuntime {
                             JSONArray batch = slice(speedSource, offset, end);
                             JSONObject tested = new JSONObject(Mobilecore.engineTestSpeedAdaptive(batch.toString(), speedURL, 15000, 6, minimumMbps, stabilityRatio, sampleBytes));
                             if (!tested.optBoolean("ok")) throw new IllegalStateException(coreError(tested));
+                            ensureRefreshContinues(allowlistScan);
                             append(speedTests, tested.getJSONObject("result").getJSONArray("nodes"));
                             updateRefresh("running", "speed_test", "Speed-test " + end + "/" + speedSource.length() + " · «" + item.optString("name") + "»", end, speedSource.length(), "");
                         }
@@ -605,6 +607,7 @@ final class MobileRuntime {
                                 : "Speed-test пропущен: тестовый файл недоступен";
                         updateRefresh("running", "speed_skipped", reason, 1, 1, "");
                     }
+                    ensureRefreshContinues(allowlistScan);
                     if (restrictedScan) repository.replaceWhitelistSource(id, qualified, finalTests);
                     else repository.refreshSucceeded(id, qualified, finalTests, links, proxies.length());
                     success++;
@@ -613,10 +616,12 @@ final class MobileRuntime {
                         if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
                     }
                 } catch (Throwable error) {
+                    if (error instanceof RefreshStopped) throw (RefreshStopped) error;
                     lastError = readable(error);
                     repository.refreshFailed(id, lastError);
                 }
             }
+            ensureRefreshContinues(allowlistScan);
             String text = success + " из " + items.length() + (checkOnly ? " источников проверено" : " подписок обновлено")
                     + (unavailable > 0 ? " · без доступных серверов: " + unavailable : "")
                     + ("allowlist".equals(connectivityState) ? " · сеть: белые списки" : " · сеть: обычный интернет");
@@ -636,6 +641,7 @@ final class MobileRuntime {
                 updateRefresh("running", "whitelist_pool", "Пул белых списков сформирован: " + working + " серверов", items.length(), items.length(), "");
                 if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
                 boolean connectionConfirmed = awaitWhitelistConnection(30_000);
+                ensureRefreshContinues(true);
                 if (!connectionConfirmed && repository.whitelistCount() == 0) {
                     onWhitelistPoolEmpty(); OrcheRouteVpnService.stopWithError(context); return;
                 }
@@ -648,6 +654,8 @@ final class MobileRuntime {
                 }
                 updateRefresh("success", "complete", "Пул белых списков готов: " + repository.whitelistCount() + " серверов", items.length(), items.length(), "");
             } else if (checkOnly && success > 0) restartIfEnabled();
+        } catch (RefreshStopped stopped) {
+            updateRefresh("cancelled", "cancelled", stopped.getMessage(), refreshCurrent, refreshTotal, "");
         } catch (Throwable error) {
             updateRefresh("error", "failed", "Обновление завершилось с ошибкой", refreshCurrent, refreshTotal, readable(error));
         } finally {
@@ -656,6 +664,7 @@ final class MobileRuntime {
                     try { repository.completeWhitelistScan(); } catch (JSONException ignored) { }
                 }
                 refreshActive = false; refreshUpdatedAt = now();
+                refreshCancelRequested = false;
                 if (allowlistScan && allowlistRouteOverride) {
                     allowlistWorkingFound = repository.whitelistCount() > 0;
                     allowlistLastScanAt = now();
@@ -667,15 +676,17 @@ final class MobileRuntime {
     private boolean awaitWhitelistConnection(long timeoutMs) throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline && isAllowlistModeActive()) {
+            if (refreshCancelRequested) return false;
             synchronized (this) { if ("connected".equals(state)) return true; }
             Thread.sleep(500);
         }
         return false;
     }
 
-    private JSONArray refreshChangedWhitelistSubscriptions(JSONArray items) throws JSONException {
+    private JSONArray refreshChangedWhitelistSubscriptions(JSONArray items) throws Exception {
         JSONArray changed = new JSONArray();
         for (int i = 0; i < items.length() && isAllowlistModeActive(); i++) {
+            ensureRefreshContinues(true);
             JSONObject item = items.getJSONObject(i);
             String id = item.getString("id");
             updateRefresh("running", "whitelist_subscriptions", "Обновляем подписку " + (i + 1) + "/" + items.length() + " · «" + item.optString("name") + "»", i, items.length(), "");
@@ -683,6 +694,7 @@ final class MobileRuntime {
                 JSONObject fetched = new JSONObject(Mobilecore.fetchSubscription(item.optString("parser", "standard"),
                         item.optString("secret"), new java.io.File(context.getFilesDir(), "subscriptions").getAbsolutePath()));
                 if (!fetched.optBoolean("ok")) throw new IllegalStateException(coreError(fetched));
+                ensureRefreshContinues(true);
                 JSONArray links = fetched.getJSONObject("result").getJSONArray("links");
                 JSONArray previous = item.optJSONArray("cached_links");
                 if (previous == null || !previous.toString().equals(links.toString())) {
@@ -694,6 +706,32 @@ final class MobileRuntime {
             }
         }
         return changed;
+    }
+
+    private synchronized JSONObject cancelRefresh() throws JSONException {
+        if (!refreshActive) return new JSONObject().put("accepted", false).put("active", false);
+        refreshCancelRequested = true;
+        refreshStatus = "cancelling";
+        refreshPhase = "cancelling";
+        refreshMessage = "Останавливаем после завершения текущей группы тестов";
+        refreshUpdatedAt = now();
+        return new JSONObject().put("accepted", true).put("active", true);
+    }
+
+    private void ensureRefreshContinues(boolean allowlistScan) throws RefreshStopped {
+        if (refreshCancelRequested) throw new RefreshStopped("Операция остановлена пользователем. Завершённые результаты сохранены.");
+        if (!allowlistScan) return;
+        String current = connectivityState();
+        if (!"allowlist".equals(current) || !isAllowlistModeActive()) {
+            String message = "normal".equals(current)
+                    ? "Обычный интернет восстановлен. Формирование пула белых списков остановлено."
+                    : "Состояние ограниченной сети изменилось. Формирование пула остановлено.";
+            throw new RefreshStopped(message);
+        }
+    }
+
+    private static final class RefreshStopped extends Exception {
+        RefreshStopped(String message) { super(message); }
     }
 
     private synchronized void updateRefresh(String status, String phase, String message, int current, int total, String error) {
@@ -790,7 +828,7 @@ final class MobileRuntime {
         allowlistRouteOverride = true;
         message = "Обнаружены белые списки. Ищем доступный сервер без региональных ограничений";
         if (changed) {
-            allowlistWorkingFound = false;
+            allowlistWorkingFound = repository.whitelistCount() > 0;
             allowlistLastScanAt = 0;
         }
         if (!refreshActive && !allowlistWorkingFound) {
@@ -826,7 +864,7 @@ final class MobileRuntime {
     synchronized boolean leaveAllowlistMode() {
         boolean changed = allowlistRouteOverride;
         allowlistRouteOverride = false;
-        allowlistWorkingFound = false;
+        allowlistWorkingFound = repository.whitelistCount() > 0;
         allowlistLastScanAt = 0;
         try { repository.deactivateWhitelist(); } catch (JSONException ignored) { }
         if (changed) message = "Обычный интернет восстановлен. Возвращаем пользовательскую маршрутизацию";
@@ -848,7 +886,14 @@ final class MobileRuntime {
             return;
         }
         if ("allowlist".equals(current.state)) {
-            enterAllowlistMode();
+            boolean changed = enterAllowlistMode();
+            if (changed && allowlistWorkingFound) {
+                try {
+                    if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
+                } catch (JSONException error) {
+                    refreshError = readable(error);
+                }
+            }
             return;
         }
         if ("normal".equals(current.state) && leaveAllowlistMode()) restartIfEnabled();

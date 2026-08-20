@@ -226,7 +226,7 @@ export type DashboardData = {
 
 export type OperationSnapshot = {
   subscription_update: {
-    status: "idle" | "queued" | "running" | "success" | "warning" | "error";
+    status: "idle" | "queued" | "running" | "cancelling" | "cancelled" | "success" | "warning" | "error";
     phase: string;
     message?: string;
     current?: number;
@@ -419,6 +419,9 @@ export const actions = {
   },
   checkServers() {
     return request<AcceptedOperation>("/v1/subscriptions/check", { method: "POST", body: "{}" }).then(requireAccepted);
+  },
+  cancelSubscriptionUpdate() {
+    return request<{ accepted: boolean; active: boolean }>("/v1/operations/subscription-update/cancel", { method: "POST", body: "{}" });
   },
   refreshSubscription(id: string) {
     return request<AcceptedOperation>(`/v1/subscriptions/${encodeURIComponent(id)}/refresh`, { method: "POST", body: "{}" }).then(requireAccepted);

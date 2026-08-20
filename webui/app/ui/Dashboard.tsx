@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { actions, loadDashboard, type DashboardData, type Node } from "../lib/api";
+import { actions, isAndroidRuntime, loadDashboard, type DashboardData, type Node } from "../lib/api";
 import { ChevronIcon, CloseIcon, GlobeIcon, PowerIcon, RefreshIcon, RouteIcon, ServerIcon, SettingsIcon } from "./Icons";
 import { SettingsModal as EditableSettingsModal, type SettingsTab } from "./SettingsModal";
 import { OperationPanel, type OperationView } from "./OperationPanel";
@@ -117,6 +117,14 @@ export function Dashboard() {
             : undefined,
       }
     : null;
+  const stopWhitelistScan = async () => {
+    try {
+      await actions.cancelSubscriptionUpdate();
+      await refresh(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось остановить проверку");
+    }
+  };
   const stateLabel = enabled ? (statusText[data?.status.connectivity ?? "starting"] ?? "Проверка") : "Готов к запуску";
 
   const toggle = async () => {
@@ -229,7 +237,11 @@ export function Dashboard() {
       </section>
 
       {error && <div className="toast" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)}>Закрыть</button></div>}
-      <OperationPanel operation={operationView ?? whitelistOperation} onDismiss={operationView ? () => setOperationView(null) : undefined} />
+      <OperationPanel
+        operation={operationView ?? whitelistOperation}
+        onDismiss={operationView ? () => setOperationView(null) : undefined}
+        action={isAndroidRuntime() && whitelistOperation && !operationView ? { label: "Остановить", onClick: () => void stopWhitelistScan() } : undefined}
+      />
       {settingsOpen && (
         <EditableSettingsModal
           data={data}
