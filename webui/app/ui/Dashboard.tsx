@@ -47,6 +47,7 @@ export function Dashboard() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tab, setTab] = useState<SettingsTab>("general");
   const [operationView, setOperationView] = useState<OperationView | null>(null);
+  const [stoppingWhitelist, setStoppingWhitelist] = useState(false);
 
   const refresh = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -106,7 +107,9 @@ export function Dashboard() {
     ? {
         state: "running",
         title: "Формируем пул белых списков",
-        detail: whitelistUpdate?.message ?? "Перепроверяем сохранённые серверы в ограниченной сети…",
+        detail: stoppingWhitelist
+          ? "Останавливаем после завершения текущей группы тестов…"
+          : whitelistUpdate?.message ?? "Перепроверяем сохранённые серверы в ограниченной сети…",
         step: 1,
         steps: ["Определяем режим сети", "Проверяем все серверы", "Формируем устойчивый пул"],
         progress:
@@ -118,10 +121,21 @@ export function Dashboard() {
       }
     : null;
   const stopWhitelistScan = async () => {
+    if (stoppingWhitelist) return;
+    setStoppingWhitelist(true);
     try {
       await actions.cancelSubscriptionUpdate();
-      await refresh(true);
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        const next = await loadDashboard();
+        setData(next);
+        if (!next.operations?.subscription_update.active) {
+          setStoppingWhitelist(false);
+          break;
+        }
+      }
     } catch (reason) {
+      setStoppingWhitelist(false);
       setError(reason instanceof Error ? reason.message : "Не удалось остановить проверку");
     }
   };
@@ -244,10 +258,10 @@ export function Dashboard() {
               <button
                 className="whitelist-action"
                 type="button"
-                disabled={busy}
+                disabled={busy || stoppingWhitelist}
                 onClick={() => void (whitelistScanning ? stopWhitelistScan() : startWhitelistScan())}
               >
-                {whitelistScanning ? "Остановить" : "Сформировать"}
+                {whitelistScanning ? (stoppingWhitelist ? "Останавливаем" : "Остановить") : "Сформировать"}
               </button>
             )}
           </div>
@@ -258,7 +272,11 @@ export function Dashboard() {
       <OperationPanel
         operation={operationView ?? whitelistOperation}
         onDismiss={operationView ? () => setOperationView(null) : undefined}
-        action={isAndroidRuntime() && whitelistOperation && !operationView ? { label: "Остановить", onClick: () => void stopWhitelistScan() } : undefined}
+        action={isAndroidRuntime() && whitelistOperation && !operationView ? {
+          label: stoppingWhitelist ? "Останавливаем" : "Остановить",
+          onClick: () => void stopWhitelistScan(),
+          disabled: stoppingWhitelist,
+        } : undefined}
       />
       {settingsOpen && (
         <EditableSettingsModal

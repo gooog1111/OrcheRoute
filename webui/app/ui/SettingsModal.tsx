@@ -170,6 +170,7 @@ export function SettingsModal({
     null,
   );
   const [operationCancellable, setOperationCancellable] = useState(false);
+  const [operationCancelling, setOperationCancelling] = useState(false);
   const desktopMode = isEmbeddedRuntime();
   const touchStart = useRef<{ x: number; y: number; interactive: boolean } | null>(null);
   const tabs = useMemo<SettingsTab[]>(
@@ -220,6 +221,7 @@ export function SettingsModal({
               ]
             : ["Сохраняем изменения", "Проверяем ответ", "Обновляем интерфейс"];
     setBusy(true);
+    setOperationCancelling(false);
     setOperationCancellable(isAndroidRuntime() && (options.waitFor === "subscriptions" || options.waitFor === "servers"));
     setMessage(null);
     setError(null);
@@ -407,14 +409,18 @@ export function SettingsModal({
     } finally {
       setBusy(false);
       setOperationCancellable(false);
+      setOperationCancelling(false);
     }
   };
 
   const cancelSubscriptionOperation = async () => {
+    if (operationCancelling) return;
+    setOperationCancelling(true);
     setOperationView((current) => current && ({ ...current, detail: "Останавливаем после завершения текущей группы тестов…" }));
     try {
       await actions.cancelSubscriptionUpdate();
     } catch (reason) {
+      setOperationCancelling(false);
       setError(errorText(reason));
     }
   };
@@ -591,8 +597,9 @@ export function SettingsModal({
           action={
             operationCancellable && operationView?.state === "running"
               ? {
-                  label: "Остановить",
+                  label: operationCancelling ? "Останавливаем" : "Остановить",
                   onClick: () => void cancelSubscriptionOperation(),
+                  disabled: operationCancelling,
                 }
               : networkPending
               ? {
