@@ -126,6 +126,17 @@ test("android updater exposes an explicit prerelease channel with a warning", as
   assert.match(activity, /installBetaAppUpdate/);
 });
 
+test("android prerelease builds use the red interface accent without changing stable colors", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const rain = await readFile(new URL("../app/ui/MatrixRain.tsx", import.meta.url), "utf8");
+  const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
+  assert.match(css, /html\.prerelease-theme[\s\S]*--accent: #ff5b61/);
+  assert.match(css, /:root[\s\S]*--accent: #45f3c2/);
+  assert.match(rain, /prerelease-theme/);
+  assert.match(activity, /BuildConfig\.VERSION_NAME\.contains\("-"\)/);
+  assert.match(activity, /class=\\"prerelease-theme\\"/);
+});
+
 test("qualification UI exposes connectivity anchors and emergency per-source top", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(settings, /Доступно при белых списках/);

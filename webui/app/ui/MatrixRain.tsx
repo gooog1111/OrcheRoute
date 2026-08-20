@@ -19,6 +19,9 @@ export function MatrixRain() {
     let columns = 0;
     let drops: number[] = [];
     const fontSize = window.innerWidth < 640 ? 14 : 17;
+    const prerelease = document.documentElement.classList.contains("prerelease-theme");
+    const rain = prerelease ? "255, 70, 78" : "24, 224, 158";
+    const highlight = prerelease ? "255, 190, 194" : "178, 255, 232";
 
     const resize = () => {
       const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -38,7 +41,7 @@ export function MatrixRain() {
       for (let index = 0; index < columns; index += 1) {
         for (let row = index % 7; row < window.innerHeight / fontSize; row += 7 + (index % 4)) {
           const glyph = GLYPHS[(index * 11 + row * 3) % GLYPHS.length];
-          context.fillStyle = `rgba(24, 224, 158, ${0.1 + ((index + row) % 4) * 0.025})`;
+          context.fillStyle = `rgba(${rain}, ${0.1 + ((index + row) % 4) * 0.025})`;
           context.fillText(glyph, index * fontSize + fontSize / 2, row * fontSize);
         }
       }
@@ -56,7 +59,7 @@ export function MatrixRain() {
       for (let index = 0; index < columns; index += 1) {
         const glyph = GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
         const y = drops[index] * fontSize;
-        context.fillStyle = Math.random() > 0.965 ? "rgba(178, 255, 232, .82)" : "rgba(24, 224, 158, .46)";
+        context.fillStyle = Math.random() > 0.965 ? `rgba(${highlight}, .82)` : `rgba(${rain}, .46)`;
         context.fillText(glyph, index * fontSize + fontSize / 2, y);
         if (y > window.innerHeight + fontSize && Math.random() > 0.972) drops[index] = -Math.random() * 24;
         drops[index] += 0.72 + (index % 5) * 0.055;
