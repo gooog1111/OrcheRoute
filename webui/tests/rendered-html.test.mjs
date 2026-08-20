@@ -151,6 +151,26 @@ test("android prerelease branding adds a beta header and red launcher icon", asy
   assert.match(icon, /@color\/launcher_accent/);
 });
 
+test("android locks portrait mode and settings save only changed drafts", async () => {
+  const manifest = await readFile(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  assert.match(manifest, /android:screenOrientation="portrait"/);
+  assert.match(settings, /disabled=\{busy \|\| !policy \|\| !policyChanged\}/);
+  assert.match(settings, /disabled=\{busy \|\| !transportChanged\}/);
+  assert.match(settings, /disabled=\{busy \|\| !dnsChanged\}/);
+  assert.match(settings, /disabled=\{busy \|\| !profileChanged\}/);
+  assert.match(settings, /disabled=\{busy \|\| !routes \|\| !routesChanged\}/);
+});
+
+test("mobile dashboard centers power controls and places switch time on its own line", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(dashboard, /Переключение<time>\{formatTime/);
+  assert.match(css, /\.metric-card small time \{ display: block/);
+  assert.match(css, /grid-template-rows: auto minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.power-stage \{ align-self: center; justify-self: center/);
+});
+
 test("qualification UI exposes connectivity anchors and emergency per-source top", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(settings, /Доступно при белых списках/);

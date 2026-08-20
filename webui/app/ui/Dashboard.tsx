@@ -247,7 +247,7 @@ export function Dashboard() {
           <Metric icon={<GlobeIcon />} label="Интернет" value={data?.status.wan.mode === "allowlist" ? "Белые списки" : data?.status.wan.available === true ? "Доступен" : data?.status.wan.available === false ? "Недоступен" : "Проверка"} detail={data?.status.wan.interface ?? "—"} tone={data?.status.wan.mode === "allowlist" ? "neutral" : data?.status.wan.available === true ? "good" : "neutral"} />
           <Metric icon={<ServerIcon />} label="Серверы" value={`${aliveNodes} из ${totalNodes}`} detail={activePool?.id === "primary" ? "Основной пул" : activePool?.id === "emergency" ? "Аварийный пул" : activePool?.id === "whitelist" ? "Пул белых списков" : "Все пулы"} tone={aliveNodes > 0 ? "good" : "neutral"} />
           <Metric icon={<RouteIcon />} label="Маршруты" value={String(routeCount(data))} detail="direct · proxy · block" tone="neutral" />
-          <Metric icon={<SettingsIcon />} label="Управление" value={data?.status.proxy.mode === "manual" ? "Ручное" : data?.status.proxy.mode === "emergency" ? "Только аварийный" : "Автоматически"} detail={`Переключение ${formatTime(data?.status.proxy.last_switch ?? 0)}`} tone="neutral" />
+          <Metric icon={<SettingsIcon />} label="Управление" value={data?.status.proxy.mode === "manual" ? "Ручное" : data?.status.proxy.mode === "emergency" ? "Только аварийный" : "Автоматически"} detail={<>Переключение<time>{formatTime(data?.status.proxy.last_switch ?? 0)}</time></>} tone="neutral" />
         </div>
         {(data?.status.wan.mode === "allowlist" || whitelistScanning || (whitelistPool?.total ?? 0) > 0) && (
           <div className={`whitelist-strip ${whitelistScanning ? "is-scanning" : ""}`}>
@@ -297,7 +297,7 @@ export function Dashboard() {
   );
 }
 
-function Metric({ icon, label, value, detail, tone }: { icon: React.ReactNode; label: string; value: string; detail: string; tone: "good" | "neutral" }) {
+function Metric({ icon, label, value, detail, tone }: { icon: React.ReactNode; label: string; value: string; detail: React.ReactNode; tone: "good" | "neutral" }) {
   return <article className="metric-card"><div className={`metric-icon ${tone}`}>{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{detail}</small></div></article>;
 }
 

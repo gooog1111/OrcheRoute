@@ -62,6 +62,22 @@ const lines = (value: string) =>
     .split(/\r?\n/)
     .map((item) => item.trim())
     .filter(Boolean);
+const canonicalConfig = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalConfig);
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((result, key) => {
+        result[key] = canonicalConfig(
+          (value as Record<string, unknown>)[key],
+        );
+        return result;
+      }, {});
+  }
+  return value;
+};
+const sameConfig = (left: unknown, right: unknown) =>
+  JSON.stringify(canonicalConfig(left)) === JSON.stringify(canonicalConfig(right));
 const COUNTRY_CODES =
   "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW".split(
     " ",
@@ -684,6 +700,28 @@ function GeneralForm({
     setEmergencyTop(String(policy.pools.emergency.speed_candidates_per_source ?? 100));
   }, [policy]);
 
+  const policyDraft = policy
+    ? {
+        defaults: {
+          excluded_countries: countries,
+          min_speed_mbps: Number(speed),
+          stability_ratio: Number(stability) / 100,
+          allowlist_probe_url: allowlistProbeURL.trim(),
+          open_internet_probe_url: openInternetProbeURL.trim(),
+        },
+        emergency_top: Number(emergencyTop),
+      }
+    : null;
+  const savedPolicy = policy
+    ? {
+        defaults: policy.defaults,
+        emergency_top: policy.pools.emergency.speed_candidates_per_source ?? 100,
+      }
+    : null;
+  const policyChanged = Boolean(
+    policyDraft && savedPolicy && !sameConfig(policyDraft, savedPolicy),
+  );
+
   const savePolicy = () =>
     run(
       () =>
@@ -849,7 +887,7 @@ function GeneralForm({
         <button
           className="primary-button"
           type="button"
-          disabled={busy || !policy}
+          disabled={busy || !policy || !policyChanged}
           onClick={() => void savePolicy()}
         >
           Сохранить
@@ -1086,6 +1124,18 @@ function AndroidNetworkForm({
   }, [desired, activeDns]);
   if (!desired || !dns || !data?.network)
     return <p className="empty-state">Транспортный профиль недоступен.</p>;
+  const transportChanged =
+    desired.capture.mode !== "system" ||
+    desired.roles.direct.interface !== transport ||
+    desired.roles.vpn_underlay.interface !== transport;
+  const dnsDraft = {
+    ...dns,
+    direct: lines(dnsText.direct),
+    proxy: lines(dnsText.proxy),
+    vpn_underlay: lines(dnsText.vpn_underlay),
+    bootstrap: lines(dnsText.bootstrap),
+  };
+  const dnsChanged = !sameConfig(dnsDraft, desired.dns ?? activeDns);
   const transports = data.interfaces.filter((item) =>
     ["auto", "wifi", "cellular", "ethernet"].includes(item.name),
   );
@@ -1100,16 +1150,9 @@ function AndroidNetworkForm({
     }, "Транспорт сохранён. Нажмите «Применить изменения».");
   };
   const saveDns = () => {
-    const next = {
-      ...dns,
-      direct: lines(dnsText.direct),
-      proxy: lines(dnsText.proxy),
-      vpn_underlay: lines(dnsText.vpn_underlay),
-      bootstrap: lines(dnsText.bootstrap),
-    };
     void run(async () => {
-      await actions.validateDns(next);
-      await actions.saveDns(desired.revision, next);
+      await actions.validateDns(dnsDraft);
+      await actions.saveDns(desired.revision, dnsDraft);
     }, "DNS-профиль сохранён. Нажмите «Применить изменения».");
   };
   return (
@@ -1146,7 +1189,7 @@ function AndroidNetworkForm({
         <button
           className="secondary-button"
           type="button"
-          disabled={busy || transport === desired.roles.vpn_underlay.interface}
+          disabled={busy || !transportChanged}
           onClick={saveTransport}
         >
           Сохранить транспорт
@@ -1272,7 +1315,7 @@ function AndroidNetworkForm({
         <button
           className="secondary-button"
           type="button"
-          disabled={busy}
+          disabled={busy || !dnsChanged}
           onClick={saveDns}
         >
           Сохранить DNS
@@ -1318,6 +1361,18 @@ function NetworkForm({
 
   if (!profile || !dns || !data?.network)
     return <p className="empty-state">Сетевой профиль недоступен.</p>;
+  const profileChanged = !sameConfig(profile, data.network.desired);
+  const dnsDraft = {
+    ...dns,
+    direct: lines(dnsText.direct),
+    proxy: lines(dnsText.proxy),
+    vpn_underlay: lines(dnsText.vpn_underlay),
+    bootstrap: lines(dnsText.bootstrap),
+  };
+  const dnsChanged = !sameConfig(
+    dnsDraft,
+    data.network.desired.dns ?? data.dns?.active,
+  );
   const interfaces = data.interfaces.filter((item) => !item.loopback);
   const patchRole = (
     role: "direct" | "vpn_underlay",
@@ -1355,15 +1410,8 @@ function NetworkForm({
   const saveDns = () =>
     run(
       async () => {
-        const nextDns = {
-          ...dns,
-          direct: lines(dnsText.direct),
-          proxy: lines(dnsText.proxy),
-          vpn_underlay: lines(dnsText.vpn_underlay),
-          bootstrap: lines(dnsText.bootstrap),
-        };
-        await actions.validateDns(nextDns);
-        await actions.saveDns(data.network!.desired.revision, nextDns);
+        await actions.validateDns(dnsDraft);
+        await actions.saveDns(data.network!.desired.revision, dnsDraft);
       },
       "DNS проверен и сохранён. Нажмите «Применить», чтобы активировать изменения.",
       { title: "Применяем настройки" },
@@ -1499,7 +1547,7 @@ function NetworkForm({
         <button
           className="secondary-button"
           type="button"
-          disabled={busy}
+          disabled={busy || !profileChanged}
           onClick={() => void saveProfile()}
         >
           Сохранить
@@ -1591,7 +1639,7 @@ function NetworkForm({
         <button
           className="secondary-button"
           type="button"
-          disabled={busy}
+          disabled={busy || !dnsChanged}
           onClick={() => void saveDns()}
         >
           Сохранить
@@ -2406,6 +2454,10 @@ function RoutesForm({
       setDrafts(structuredClone(routes.lists));
     }
   }, [routes]);
+  const routesChanged = Boolean(
+    routes &&
+      (defaultAction !== routes.default || !sameConfig(drafts, routes.lists)),
+  );
   const updateActiveDraft = useCallback(
     (values: string[]) =>
       setDrafts((current) => ({ ...current, [activeTarget]: values })),
@@ -2500,7 +2552,7 @@ function RoutesForm({
         <button
           className="primary-button"
           type="button"
-          disabled={busy || !routes}
+          disabled={busy || !routes || !routesChanged}
           onClick={() => void save()}
         >
           Сохранить
