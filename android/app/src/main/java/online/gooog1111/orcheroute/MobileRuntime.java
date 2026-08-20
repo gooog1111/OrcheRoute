@@ -34,6 +34,7 @@ final class MobileRuntime {
     private static volatile MobileRuntime instance;
     private final Context context;
     private final MobileRepository repository;
+    private final ConnectivityMonitor connectivityMonitor;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private String state = "disabled";
     private String message = "OrcheRoute выключен";
@@ -69,6 +70,12 @@ final class MobileRuntime {
     private MobileRuntime(Context context) {
         this.context = context.getApplicationContext();
         this.repository = new MobileRepository(this.context);
+        this.connectivityMonitor = new ConnectivityMonitor(this.context, () -> {
+            JSONObject defaults = repository.qualificationPolicy().getJSONObject("defaults");
+            return new ConnectivityMonitor.Settings(
+                    defaults.optString("allowlist_probe_url", "https://ya.ru/"),
+                    defaults.optString("open_internet_probe_url", "https://www.cloudflare.com/cdn-cgi/trace"));
+        }, this::onConnectivityChanged);
         // A process killed during a scan cannot have a live worker after the
         // restart. Clear only the stale activity marker; keep the working pool.
         try { repository.completeWhitelistScan(); } catch (JSONException ignored) { }
@@ -76,6 +83,7 @@ final class MobileRuntime {
             JSONObject settings = repository.componentSettings();
             GeoUpdateScheduler.apply(this.context, settings.optBoolean("geo_auto_update", true), settings.optInt("geo_interval_hours", 24));
         } catch (JSONException ignored) { }
+        this.connectivityMonitor.start();
     }
 
     static MobileRuntime get(Context context) {
@@ -428,7 +436,7 @@ final class MobileRuntime {
             // Use exactly the same physical-underlay classifier as the VPN
             // service. The previous duplicate probe converted an already
             // detected restricted network back to "offline" and aborted scans.
-            String connectivityState = probeUnderlyingConnectivity();
+            String connectivityState = connectivityState();
             if ("offline".equals(connectivityState)) {
                 updateRefresh("success", "offline", "Интернет недоступен. Статусы серверов не изменены.", 0, items.length(), "");
                 return;
@@ -780,7 +788,6 @@ final class MobileRuntime {
     synchronized boolean enterAllowlistMode() {
         boolean changed = !allowlistRouteOverride;
         allowlistRouteOverride = true;
-        detectedInternetMode = "allowlist";
         message = "Обнаружены белые списки. Ищем доступный сервер без региональных ограничений";
         if (changed) {
             allowlistWorkingFound = false;
@@ -822,38 +829,36 @@ final class MobileRuntime {
         allowlistWorkingFound = false;
         allowlistLastScanAt = 0;
         try { repository.deactivateWhitelist(); } catch (JSONException ignored) { }
-        detectedInternetMode = "normal";
         if (changed) message = "Обычный интернет восстановлен. Возвращаем пользовательскую маршрутизацию";
         return changed;
     }
 
-    /** Performs a fresh protected-socket probe outside Android's VPN. */
-    synchronized String probeUnderlyingConnectivity() {
-        try {
-            JSONObject defaults = repository.qualificationPolicy().getJSONObject("defaults");
-            JSONObject payload = new JSONObject(Mobilecore.probeConnectivity(
-                    defaults.optString("allowlist_probe_url", "https://ya.ru/"),
-                    defaults.optString("open_internet_probe_url", "https://www.cloudflare.com/cdn-cgi/trace"),
-                    3500));
-            Log.i("OrcheRouteNet", "underlay_probe=" + payload);
-            JSONObject result = payload.optJSONObject("result");
-            detectedInternetMode = payload.optBoolean("ok") && result != null
-                    ? result.optString("state", "offline") : "offline";
-            Log.i("OrcheRouteNet", "classified=" + detectedInternetMode
-                    + " underlay_connected=" + hasConnectedUnderlyingNetwork());
-        } catch (Throwable ignored) {
-            detectedInternetMode = "offline";
+    /** Returns the monitor's last confirmed state without starting network I/O. */
+    synchronized String connectivityState() { return connectivityMonitor.snapshot().state; }
+
+    private synchronized void onConnectivityChanged(ConnectivityMonitor.Snapshot previous, ConnectivityMonitor.Snapshot current) {
+        detectedInternetMode = current.state;
+        Log.i("OrcheRouteNet", "state " + previous.state + " -> " + current.state);
+        if (!desiredEnabled) {
+            if ("normal".equals(current.state) && allowlistRouteOverride) leaveAllowlistMode();
+            return;
         }
-        return detectedInternetMode;
+        if ("offline".equals(current.state)) {
+            onUnderlyingOfflineDetected();
+            return;
+        }
+        if ("allowlist".equals(current.state)) {
+            enterAllowlistMode();
+            return;
+        }
+        if ("normal".equals(current.state) && leaveAllowlistMode()) restartIfEnabled();
     }
 
     synchronized void onRestrictedNetworkDetected() {
-        detectedInternetMode = "allowlist";
         message = "Обнаружены белые списки. Проверяем все сохранённые серверы";
     }
 
     synchronized void onUnderlyingOfflineDetected() {
-        detectedInternetMode = "offline";
         message = "Нет доступа в интернет. Текущий сервер сохранён, переключение приостановлено";
     }
 
@@ -864,18 +869,6 @@ final class MobileRuntime {
         whitelistConnectPending = false;
         message = "В текущей сети с белыми списками не найдено ни одного доступного VPN-сервера";
         refreshError = message;
-    }
-
-    synchronized boolean underlyingInternetAvailable() {
-        ConnectivityManager manager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (manager == null) return false;
-        for (Network network : manager.getAllNetworks()) {
-            NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
-            if (capabilities == null || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue;
-            if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return true;
-        }
-        return false;
     }
 
     synchronized String failoverActiveNode() throws JSONException {
@@ -1081,9 +1074,8 @@ final class MobileRuntime {
     private JSONObject status() throws JSONException {
         long now = System.currentTimeMillis() / 1000L;
         boolean permissionGranted = VpnService.prepare(context) == null;
-        boolean internet = "allowlist".equals(detectedInternetMode)
-                ? hasConnectedUnderlyingNetwork()
-                : hasInternet();
+        ConnectivityMonitor.Snapshot connectivitySnapshot = connectivityMonitor.snapshot();
+        boolean internet = "normal".equals(connectivitySnapshot.state) || "allowlist".equals(connectivitySnapshot.state);
         String connectivity;
         if ("error".equals(state)) connectivity = "controller_error";
         else if ("connected".equals(state)) connectivity = "proxy_ok";
@@ -1116,34 +1108,11 @@ final class MobileRuntime {
                 .put("connectivity", connectivity)
                 .put("service", new JSONObject().put("enabled", desiredEnabled))
                 .put("wan", new JSONObject().put("interface", "android").put("available", internet)
-                        .put("mode", detectedInternetMode))
+                        .put("mode", connectivitySnapshot.state)
+                        .put("diagnostics", connectivitySnapshot.json()))
                 .put("network", network)
                 .put("proxy", proxy)
                 .put("mobile", mobile);
-    }
-
-    private boolean hasInternet() {
-        ConnectivityManager manager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (manager == null) return false;
-        Network network = manager.getActiveNetwork();
-        NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
-        return capabilities != null
-                && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
-    }
-
-    private boolean hasConnectedUnderlyingNetwork() {
-        ConnectivityManager manager = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (manager == null) return false;
-        for (Network network : manager.getAllNetworks()) {
-            NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
-            if (capabilities != null
-                    && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    && capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static String response(int status, JSONObject body) throws JSONException {

@@ -137,7 +137,7 @@ public final class OrcheRouteVpnService extends VpnService {
             if (underlying != null && underlying.length == 0) throw new IllegalStateException("Выбранный транспорт сейчас недоступен");
 			// NET_CAPABILITY_VALIDATED is not sufficient: mobile operators may
 			// report a validated network while only an allowlist is reachable.
-			String initialNetworkMode = runtime.probeUnderlyingConnectivity();
+			String initialNetworkMode = runtime.connectivityState();
 			if ("allowlist".equals(initialNetworkMode)) runtime.enterAllowlistMode();
 			else if ("normal".equals(initialNetworkMode)) runtime.leaveAllowlistMode();
             MobileRuntime.EngineProfile profile = runtime.engineProfile();
@@ -315,7 +315,7 @@ public final class OrcheRouteVpnService extends VpnService {
         }
         HttpURLConnection connection = null;
         try {
-			String networkMode = runtime.probeUnderlyingConnectivity();
+			String networkMode = runtime.connectivityState();
 			boolean restrictedNetwork = "allowlist".equals(networkMode);
 			if (restrictedNetwork) {
 				boolean changed = runtime.enterAllowlistMode();
@@ -338,7 +338,7 @@ public final class OrcheRouteVpnService extends VpnService {
             }
             throw new IllegalStateException("HTTP " + status);
         } catch (Throwable ignored) {
-			String networkMode = runtime.probeUnderlyingConnectivity();
+			String networkMode = runtime.connectivityState();
 			if ("offline".equals(networkMode)) {
 				runtime.onUnderlyingOfflineDetected();
                 healthFailureStreak = 0;
