@@ -18,6 +18,17 @@ test("dashboard server count belongs to the pool named below it", async () => {
   assert.match(dashboard, /: "Все пулы"/);
 });
 
+test("android persists a successful node switch and displays its date and time", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
+  const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
+  assert.match(runtime, /repository\.confirmConnectedNode\(connectedNodeID, allowlistRouteOverride\)/);
+  assert.match(runtime, /put\("last_switch", repository\.lastSwitch\(\)\)/);
+  assert.match(repository, /put\("connected_node_key", connectionKey\)\.put\("last_switch", now\(\)\)/);
+  assert.match(dashboard, /year: "numeric"/);
+  assert.match(dashboard, /minute: "2-digit"/);
+});
+
 test("keeps API credentials out of the client bundle", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   assert.match(api, /\/api\$\{path\}/);

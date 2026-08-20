@@ -31,7 +31,13 @@ const captureText: Record<string, string> = {
 
 function formatTime(timestamp: number) {
   if (!timestamp) return "—";
-  return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(timestamp * 1000);
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(timestamp * 1000);
 }
 
 function routeCount(data: DashboardData | null) {

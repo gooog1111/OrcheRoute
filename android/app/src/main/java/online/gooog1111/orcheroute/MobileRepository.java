@@ -484,6 +484,16 @@ final class MobileRepository {
         return whitelistTransitionLocked(new JSONObject().put("operation", "active"));
     }
 
+    synchronized void confirmConnectedNode(String nodeId, boolean whitelistMode) throws JSONException {
+        if (nodeId == null || nodeId.isEmpty()) return;
+        String connectionKey = (whitelistMode ? "whitelist:" : "normal:") + nodeId;
+        if (connectionKey.equals(root.optString("connected_node_key", ""))) return;
+        root.put("connected_node_key", connectionKey).put("last_switch", now());
+        save();
+    }
+
+    synchronized long lastSwitch() { return root.optLong("last_switch", 0); }
+
     synchronized JSONObject requestWhitelistNode() throws JSONException {
         return whitelistTransitionLocked(new JSONObject().put("operation", "request"));
     }

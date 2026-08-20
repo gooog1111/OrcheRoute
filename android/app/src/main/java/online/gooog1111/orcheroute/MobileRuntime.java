@@ -154,6 +154,8 @@ final class MobileRuntime {
         if (allowlistRouteOverride) {
             try { repository.confirmWhitelistNode(connectedNodeID); } catch (JSONException error) { refreshError = readable(error); }
         }
+        try { repository.confirmConnectedNode(connectedNodeID, allowlistRouteOverride); }
+        catch (JSONException error) { refreshError = readable(error); }
         message = "Подключено через " + nodeName;
         finishNetworkApply();
     }
@@ -1194,7 +1196,7 @@ final class MobileRuntime {
                 .put("active_node", active == null ? JSONObject.NULL : active.optString("display_name"))
                 .put("active_pool", active == null ? JSONObject.NULL : active.optString("pool"))
                 .put("failure_streak", 0)
-                .put("last_switch", 0)
+                .put("last_switch", repository.lastSwitch())
                 .put("manual_until", 0);
         return new JSONObject()
                 .put("version", 1)
