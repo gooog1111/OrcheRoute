@@ -150,12 +150,13 @@ func engineTestProxies(proxiesJSON, testURL string, timeoutMs, concurrency int) 
 }
 
 type mobileProbeResult struct {
-	Name      string  `json:"name"`
-	Alive     bool    `json:"alive"`
-	DelayMS   int     `json:"delay_ms,omitempty"`
-	SpeedMbps float64 `json:"speed_mbps,omitempty"`
-	Country   string  `json:"country,omitempty"`
-	Error     string  `json:"error,omitempty"`
+	Name           string  `json:"name"`
+	Alive          bool    `json:"alive"`
+	DelayMS        int     `json:"delay_ms,omitempty"`
+	SpeedMbps      float64 `json:"speed_mbps,omitempty"`
+	StabilityRatio float64 `json:"stability_ratio,omitempty"`
+	Country        string  `json:"country,omitempty"`
+	Error          string  `json:"error,omitempty"`
 }
 
 func engineTestTCP(proxiesJSON string, timeoutMs, concurrency int) string {
@@ -469,6 +470,9 @@ func engineTestSpeedAdaptive(proxiesJSON, testURL string, timeoutMs, concurrency
 		if err == nil && len(speeds) == 2 {
 			slowest, fastest := math.Min(speeds[0], speeds[1]), math.Max(speeds[0], speeds[1])
 			current.SpeedMbps = math.Round(slowest*100) / 100
+			if fastest > 0 {
+				current.StabilityRatio = math.Round((slowest/fastest)*1000) / 1000
+			}
 			switch {
 			case slowest < minimumMbps:
 				current.Error = "speed_below_threshold"

@@ -32,3 +32,27 @@ func TestEmptyCompletedScanStopsCleanly(t *testing.T) {
 		t.Fatalf("unexpected: %#v", result)
 	}
 }
+
+func TestNetworkDecisionMatrix(t *testing.T) {
+	tests := []struct {
+		name string
+		in   DecisionInput
+		want string
+	}{
+		{"offline pauses but keeps intent", DecisionInput{NetworkMode: Offline, DesiredEnabled: true, Connected: true}, "pause_offline"},
+		{"normal resumes", DecisionInput{NetworkMode: Normal, DesiredEnabled: true}, "start_normal"},
+		{"normal stays", DecisionInput{NetworkMode: Normal, DesiredEnabled: true, Connected: true}, "none"},
+		{"whitelist uses pool", DecisionInput{NetworkMode: Allowlist, DesiredEnabled: true, WhitelistCount: 2}, "connect_whitelist"},
+		{"whitelist scans when due", DecisionInput{NetworkMode: Allowlist, DesiredEnabled: true, WhitelistRetryDue: true}, "scan_whitelist"},
+		{"whitelist waits five minutes", DecisionInput{NetworkMode: Allowlist, DesiredEnabled: true}, "wait_whitelist_retry"},
+		{"disabled never resumes", DecisionInput{NetworkMode: Normal}, "none"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := DecideNetwork(test.in)
+			if err != nil || got.Action != test.want {
+				t.Fatalf("got=%#v err=%v want=%s", got, err, test.want)
+			}
+		})
+	}
+}

@@ -9,21 +9,28 @@ import (
 	"errors"
 	"sort"
 	"strings"
+
+	"github.com/gooog1111/orcheroute/internal/noderank"
 )
 
 const Pool = "whitelist"
 
 type Node struct {
-	ID          string         `json:"id"`
-	DisplayName string         `json:"display_name"`
-	Pool        string         `json:"pool"`
-	OriginPool  string         `json:"origin_pool,omitempty"`
-	Priority    int            `json:"priority"`
-	Alive       bool           `json:"alive"`
-	DelayMS     int            `json:"delay_ms,omitempty"`
-	SourceID    string         `json:"source_id"`
-	SourceName  string         `json:"source_name,omitempty"`
-	Proxy       map[string]any `json:"proxy"`
+	ID              string         `json:"id"`
+	DisplayName     string         `json:"display_name"`
+	Pool            string         `json:"pool"`
+	OriginPool      string         `json:"origin_pool,omitempty"`
+	Priority        int            `json:"priority"`
+	Alive           bool           `json:"alive"`
+	DelayMS         int            `json:"delay_ms,omitempty"`
+	SpeedMbps       float64        `json:"speed_mbps,omitempty"`
+	StabilityRatio  float64        `json:"stability_ratio,omitempty"`
+	HealthSuccesses int            `json:"health_successes,omitempty"`
+	HealthFailures  int            `json:"health_failures,omitempty"`
+	Score           float64        `json:"score,omitempty"`
+	SourceID        string         `json:"source_id"`
+	SourceName      string         `json:"source_name,omitempty"`
+	Proxy           map[string]any `json:"proxy"`
 }
 
 type State struct {
@@ -221,11 +228,19 @@ func removeNode(state *State, nodeID string) {
 	validateSelection(state)
 }
 func reindex(state *State) {
+	for index := range state.Nodes {
+		state.Nodes[index].Score = noderank.Score(noderank.Node{
+			ID: state.Nodes[index].ID, Pool: Pool, Alive: state.Nodes[index].Alive,
+			DelayMS: state.Nodes[index].DelayMS, SpeedMbps: state.Nodes[index].SpeedMbps,
+			StabilityRatio:  state.Nodes[index].StabilityRatio,
+			HealthSuccesses: state.Nodes[index].HealthSuccesses, HealthFailures: state.Nodes[index].HealthFailures,
+		})
+	}
 	sort.SliceStable(state.Nodes, func(i, j int) bool {
-		if state.Nodes[i].Priority == state.Nodes[j].Priority {
+		if state.Nodes[i].Score == state.Nodes[j].Score {
 			return state.Nodes[i].ID < state.Nodes[j].ID
 		}
-		return state.Nodes[i].Priority < state.Nodes[j].Priority
+		return state.Nodes[i].Score > state.Nodes[j].Score
 	})
 	for index := range state.Nodes {
 		state.Nodes[index].Priority = index + 1

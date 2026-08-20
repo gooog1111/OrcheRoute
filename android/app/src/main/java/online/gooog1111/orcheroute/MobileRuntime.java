@@ -55,6 +55,10 @@ final class MobileRuntime {
     private long allowlistLastScanAt;
     private boolean whitelistConnectPending;
     private String connectedNodeID = "";
+	private int stableHealthChecks;
+	private long lastPrimaryRecoveryAt;
+	private long primaryRecoveryStartedAt;
+	private boolean primaryRecoveryActive;
     private boolean componentActive;
     private String componentStatus = "idle";
     private String componentPhase = "idle";
@@ -72,6 +76,7 @@ final class MobileRuntime {
     private MobileRuntime(Context context) {
         this.context = context.getApplicationContext();
         this.repository = new MobileRepository(this.context);
+		this.desiredEnabled = repository.serviceDesired();
         this.connectivityMonitor = new ConnectivityMonitor(this.context, () -> {
             JSONObject defaults = repository.qualificationPolicy().getJSONObject("defaults");
             return new ConnectivityMonitor.Settings(
@@ -102,25 +107,25 @@ final class MobileRuntime {
     }
 
     synchronized void onPermissionRequired() {
-        desiredEnabled = true;
+		setDesiredEnabled(true);
         state = "permission_required";
         message = "Подтвердите системное разрешение Android на создание VPN";
     }
 
     synchronized void onPermissionGranted() {
-        desiredEnabled = true;
+		setDesiredEnabled(true);
         state = "starting";
         message = "Разрешение получено, запускается VPN-служба";
     }
 
     synchronized void onPermissionDenied() {
-        desiredEnabled = false;
+		setDesiredEnabled(false);
         state = "error";
         message = "Разрешение Android на создание VPN не предоставлено";
     }
 
     synchronized void onEngineUnavailable() {
-        desiredEnabled = false;
+		setDesiredEnabled(false);
         state = "error";
         message = "Нативное ядро Mihomo ещё не встроено в эту сборку";
     }
@@ -129,7 +134,7 @@ final class MobileRuntime {
         // A node may fail exactly while an allowlist rescan is looking for a
         // replacement. Keep the user's ON intent so the first verified node
         // can restart the service without another tap.
-        desiredEnabled = allowlistRouteOverride && refreshActive;
+		setDesiredEnabled(allowlistRouteOverride && refreshActive);
         state = "error";
         whitelistConnectPending = false;
         connectedNodeID = "";
@@ -140,17 +145,18 @@ final class MobileRuntime {
     }
 
     synchronized void onDirectTestConnected() {
-        desiredEnabled = true;
+		setDesiredEnabled(true);
         state = "direct_test";
         message = "Mihomo подключён к Android TUN в диагностическом режиме DIRECT";
         finishNetworkApply();
     }
 
     synchronized void onProxyConnected(String nodeName, String nodeID) {
-        desiredEnabled = true;
+		setDesiredEnabled(true);
         state = "connected";
         whitelistConnectPending = false;
         connectedNodeID = nodeID == null ? "" : nodeID;
+		stableHealthChecks = 0;
         if (allowlistRouteOverride) {
             try { repository.confirmWhitelistNode(connectedNodeID); } catch (JSONException error) { refreshError = readable(error); }
         }
@@ -166,7 +172,7 @@ final class MobileRuntime {
     }
 
     synchronized void onDisabled() {
-        desiredEnabled = false;
+		setDesiredEnabled(false);
         state = "disabled";
         whitelistConnectPending = false;
         connectedNodeID = "";
@@ -174,7 +180,7 @@ final class MobileRuntime {
     }
 
     synchronized void onStopping() {
-        desiredEnabled = true;
+			setDesiredEnabled(true);
         state = "stopping";
         message = "Закрывается Android TUN и останавливается Mihomo";
     }
@@ -386,7 +392,7 @@ final class MobileRuntime {
                 return response(200, new JSONObject().put("deleted", repository.delete(subscriptionId)));
             }
             if ("POST".equals(verb) && "/v1/service/enable".equals(path)) {
-                desiredEnabled = true;
+				setDesiredEnabled(true);
                 state = "permission_required";
                 message = "Ожидается системное разрешение Android";
                 permissionRequester.request();
@@ -487,8 +493,10 @@ final class MobileRuntime {
                         links = fetchResult.getJSONArray("links");
                         repository.updateDetectedParser(id, fetchResult.optString("parser", item.optString("parser", "standard")));
                         repository.cacheRefreshSucceeded(id, links);
-                        success++;
-                        continue;
+						if (!primaryRecoveryActive) {
+							success++;
+							continue;
+						}
                     }
                     JSONObject parsed = new JSONObject(Mobilecore.parseSubscription(links.toString(), sourceKey(id)));
                     if (!parsed.optBoolean("ok")) throw new IllegalStateException(coreError(parsed));
@@ -651,10 +659,9 @@ final class MobileRuntime {
             updateRefresh(success == items.length() ? "success" : "warning", "complete", finalMessage, items.length(), items.length(), finalError);
             if (allowlistScan) {
                 int working = repository.whitelistCount();
-                if (working == 0) {
-                    onWhitelistPoolEmpty();
-                    OrcheRouteVpnService.stopWithError(context);
-                    return;
+				if (working == 0) {
+					onWhitelistPoolEmpty();
+					return;
                 }
                 allowlistWorkingFound = true;
                 updateRefresh("running", "whitelist_pool", "Пул белых списков сформирован: " + working + " серверов", items.length(), items.length(), "");
@@ -662,7 +669,7 @@ final class MobileRuntime {
                 boolean connectionConfirmed = awaitWhitelistConnection(30_000);
                 ensureRefreshContinues(true);
                 if (!connectionConfirmed && repository.whitelistCount() == 0) {
-                    onWhitelistPoolEmpty(); OrcheRouteVpnService.stopWithError(context); return;
+					onWhitelistPoolEmpty(); return;
                 }
                 if (refreshSubscriptionsAfter && isAllowlistModeActive() && connectionConfirmed) {
                     JSONArray changed = refreshChangedWhitelistSubscriptions(items);
@@ -672,7 +679,11 @@ final class MobileRuntime {
                     }
                 }
                 updateRefresh("success", "complete", "Пул белых списков готов: " + repository.whitelistCount() + " серверов", items.length(), items.length(), "");
-            } else if (checkOnly && success > 0) restartIfEnabled();
+			} else if (primaryRecoveryActive && success > 0) {
+				if (repository.preferPrimaryIfAvailable(primaryRecoveryStartedAt)) restartIfEnabled();
+			} else if (checkOnly && success > 0) {
+				restartIfEnabled();
+			}
         } catch (RefreshStopped stopped) {
             updateRefresh("cancelled", "cancelled", stopped.getMessage(), refreshCurrent, refreshTotal, "");
         } catch (Throwable error) {
@@ -683,6 +694,7 @@ final class MobileRuntime {
                     try { repository.completeWhitelistScan(); } catch (JSONException ignored) { }
                 }
                 refreshActive = false; refreshAllowlistScan = false; refreshUpdatedAt = now();
+				primaryRecoveryActive = false;
                 refreshCancelRequested = false;
                 if (allowlistScan && allowlistRouteOverride) {
                     allowlistWorkingFound = repository.whitelistCount() > 0;
@@ -853,13 +865,30 @@ final class MobileRuntime {
             allowlistWorkingFound = repository.whitelistCount() > 0;
             allowlistLastScanAt = 0;
         }
-        if (!refreshActive && !allowlistWorkingFound) {
-            try { scheduleRefresh(null, true, null, true); } catch (JSONException error) { refreshError = readable(error); }
-        }
         return changed;
     }
 
     synchronized boolean isAllowlistModeActive() { return allowlistRouteOverride; }
+
+	synchronized void onAwaitingNetworkDiagnosis() {
+		setDesiredEnabled(true);
+		state = "waiting_network";
+		message = "Определяем состояние физической сети";
+	}
+
+	synchronized boolean prepareAllowlistAtStart() {
+		enterAllowlistMode();
+		if (repository.whitelistCount() > 0) return false;
+		state = "waiting_network";
+		message = allowlistLastScanAt > 0 && now() - allowlistLastScanAt < 300
+				? "В белых списках нет доступных серверов. Повтор через 5 минут"
+				: "Формируем пул серверов для белых списков";
+		if (!refreshActive && (allowlistLastScanAt == 0 || now() - allowlistLastScanAt >= 300)) {
+			try { scheduleRefresh(null, true, null, true); }
+			catch (JSONException error) { refreshError = readable(error); }
+		}
+		return true;
+	}
 
     synchronized boolean isWhitelistPoolBuilding() {
         return allowlistRouteOverride && refreshActive && repository.whitelistCount() == 0;
@@ -871,16 +900,10 @@ final class MobileRuntime {
         if (candidate == null) return false;
         if ("connected".equals(state) && connectedNodeID.equals(candidate.optString("id"))) return false;
         whitelistConnectPending = true;
-        desiredEnabled = true;
+		setDesiredEnabled(true);
         state = "starting";
         message = "Подключаемся через " + candidate.optString("display_name") + " из пула белых списков";
         return true;
-    }
-
-    synchronized void requestAllowlistRescan() {
-        if (!allowlistRouteOverride || refreshActive || now() - allowlistLastScanAt < 10) return;
-        allowlistWorkingFound = false;
-        try { scheduleRefresh(null, true, null, true); } catch (JSONException error) { refreshError = readable(error); }
     }
 
     synchronized boolean leaveAllowlistMode() {
@@ -903,22 +926,43 @@ final class MobileRuntime {
             if ("normal".equals(current.state) && allowlistRouteOverride) leaveAllowlistMode();
             return;
         }
-        if ("offline".equals(current.state)) {
-            onUnderlyingOfflineDetected();
-            return;
-        }
-        if ("allowlist".equals(current.state)) {
-            boolean changed = enterAllowlistMode();
-            if (changed && allowlistWorkingFound) {
-                try {
-                    if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
-                } catch (JSONException error) {
-                    refreshError = readable(error);
-                }
-            }
-            return;
-        }
-        if ("normal".equals(current.state) && leaveAllowlistMode()) restartIfEnabled();
+		try {
+			JSONObject input = new JSONObject()
+					.put("network_mode", current.state).put("desired_enabled", true)
+					.put("connected", "connected".equals(state)).put("whitelist_active", allowlistRouteOverride)
+					.put("whitelist_count", repository.whitelistCount()).put("whitelist_scan_active", refreshActive && refreshAllowlistScan)
+					.put("whitelist_retry_due", allowlistLastScanAt == 0 || now() - allowlistLastScanAt >= 300);
+			JSONObject envelope = new JSONObject(Mobilecore.networkDecision(input.toString()));
+			if (!envelope.optBoolean("ok")) throw new JSONException(coreError(envelope));
+			String action = envelope.getJSONObject("result").optString("action", "none");
+			switch (action) {
+				case "pause_offline" -> onUnderlyingOfflineDetected();
+				case "start_normal" -> { leaveAllowlistMode(); restartIfEnabled(); }
+				case "connect_whitelist" -> {
+					enterAllowlistMode();
+					if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
+				}
+				case "scan_whitelist" -> {
+					enterAllowlistMode();
+					scheduleRefresh(null, true, null, true);
+					state = "waiting_network";
+					message = "Формируем пул серверов для белых списков";
+					OrcheRouteVpnService.pauseForNetwork(context);
+				}
+				case "wait_whitelist_scan", "wait_whitelist_retry" -> {
+					enterAllowlistMode();
+					boolean alreadyWaiting = "waiting_network".equals(state);
+					state = "waiting_network";
+					message = "wait_whitelist_retry".equals(action)
+							? "В белых списках нет доступных серверов. Повтор через 5 минут"
+							: "Продолжаем формирование пула белых списков";
+					if (!alreadyWaiting) OrcheRouteVpnService.pauseForNetwork(context);
+				}
+				default -> { }
+			}
+		} catch (JSONException error) {
+			refreshError = readable(error);
+		}
     }
 
     synchronized void onRestrictedNetworkDetected() {
@@ -926,19 +970,27 @@ final class MobileRuntime {
     }
 
     synchronized void onUnderlyingOfflineDetected() {
-        message = "Нет доступа в интернет. Текущий сервер сохранён, переключение приостановлено";
+		if (!desiredEnabled) return;
+		if ("waiting_network".equals(state) && message.startsWith("Нет доступа в интернет")) return;
+		state = "waiting_network";
+		connectedNodeID = "";
+		message = "Нет доступа в интернет. VPN приостановлен до восстановления сети";
+		OrcheRouteVpnService.pauseForNetwork(context);
     }
 
     synchronized void onWhitelistPoolEmpty() {
-        desiredEnabled = false;
-        state = "error";
+		setDesiredEnabled(true);
+		state = "waiting_network";
         allowlistWorkingFound = false;
         whitelistConnectPending = false;
-        message = "В текущей сети с белыми списками не найдено ни одного доступного VPN-сервера";
+		message = "В белых списках нет доступных серверов. Повторная проверка через 5 минут";
         refreshError = message;
+		allowlistLastScanAt = now();
+		OrcheRouteVpnService.pauseForNetwork(context);
     }
 
     synchronized String failoverActiveNode() throws JSONException {
+		stableHealthChecks = 0;
         JSONObject next = repository.failoverActiveNode();
         if (next != null) return next.optString("display_name");
         scheduleRefresh(null, true, "emergency".equals(repository.mode()) ? "emergency" : null);
@@ -946,17 +998,24 @@ final class MobileRuntime {
     }
 
     synchronized String failoverWhitelistNode() throws JSONException {
+		stableHealthChecks = 0;
         whitelistConnectPending = false;
         JSONObject next = repository.failoverWhitelistNode();
         if (next != null) {
             whitelistConnectPending = true;
-            desiredEnabled = true;
+			setDesiredEnabled(true);
             state = "starting";
             message = "Переключаемся на следующий сервер из пула белых списков";
             return next.optString("display_name");
         }
         allowlistWorkingFound = false;
-        requestAllowlistRescan();
+		if (refreshActive) {
+			state = "waiting_network";
+			message = "Текущий сервер белых списков недоступен. Продолжаем формирование пула";
+			OrcheRouteVpnService.pauseForNetwork(context);
+		} else {
+			onWhitelistPoolEmpty();
+		}
         return "";
     }
 
@@ -1123,6 +1182,39 @@ final class MobileRuntime {
     }
 
     private void restartIfEnabled() { if (desiredEnabled) OrcheRouteVpnService.reload(context); }
+
+	synchronized void onProxyHealth(boolean successful) {
+		String activePool = "";
+		try {
+			repository.recordHealth(connectedNodeID, allowlistRouteOverride, successful);
+			activePool = repository.activePool();
+		}
+		catch (JSONException error) { refreshError = readable(error); }
+		if (!successful) {
+			stableHealthChecks = 0;
+			return;
+		}
+		stableHealthChecks++;
+		if (allowlistRouteOverride || stableHealthChecks < 8 || refreshActive
+				|| !"normal".equals(connectivityState()) || !"auto".equals(repository.mode())
+				|| !"emergency".equals(activePool) || now() - lastPrimaryRecoveryAt < 300) return;
+		lastPrimaryRecoveryAt = now();
+		primaryRecoveryStartedAt = lastPrimaryRecoveryAt;
+		primaryRecoveryActive = true;
+		try {
+			JSONObject scheduled = scheduleRefresh(null, false, "primary");
+			if (!scheduled.optBoolean("accepted", false)) primaryRecoveryActive = false;
+		} catch (JSONException error) {
+			primaryRecoveryActive = false;
+			refreshError = readable(error);
+		}
+	}
+
+	private void setDesiredEnabled(boolean enabled) {
+		desiredEnabled = enabled;
+		try { repository.setServiceDesired(enabled); }
+		catch (JSONException error) { refreshError = readable(error); }
+	}
 
     private static String subscriptionId(String path, String suffix) {
         String prefix = "/v1/subscriptions/";

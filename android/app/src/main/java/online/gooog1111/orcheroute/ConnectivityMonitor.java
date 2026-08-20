@@ -153,7 +153,10 @@ final class ConnectivityMonitor {
             Snapshot current = new Snapshot(state, attemptedAt, attemptedAt, "");
             snapshot = current;
             Log.i("OrcheRouteNet", "monitor=" + state + " underlay=" + underlay + " probes=" + observation);
-            if (!previous.state.equals(current.state) || !previous.confirmed()) listener.onChanged(previous, current);
+			// The listener also receives unchanged confirmed snapshots. This is
+			// the scheduler tick for deferred recovery (for example, a whitelist
+			// pool retry every five minutes); consumers still never start probes.
+			listener.onChanged(previous, current);
         } catch (Throwable error) {
             Snapshot current = new Snapshot(previous.state, previous.confirmedAt, attemptedAt, readable(error));
             snapshot = current;

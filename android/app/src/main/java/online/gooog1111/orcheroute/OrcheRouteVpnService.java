@@ -35,6 +35,7 @@ public final class OrcheRouteVpnService extends VpnService {
     static final String ACTION_STOP = "online.gooog1111.orcheroute.STOP";
     static final String ACTION_RELOAD = "online.gooog1111.orcheroute.RELOAD";
     static final String ACTION_STOP_ERROR = "online.gooog1111.orcheroute.STOP_ERROR";
+	static final String ACTION_PAUSE_NETWORK = "online.gooog1111.orcheroute.PAUSE_NETWORK";
     private static final String CHANNEL_ID = "orcheroute_vpn";
     private static final int NOTIFICATION_ID = 1042;
     private static final String DIRECT_TEST_CONFIG = """
@@ -87,6 +88,12 @@ public final class OrcheRouteVpnService extends VpnService {
         else context.startService(intent);
     }
 
+	static void pauseForNetwork(Context context) {
+		Intent intent = new Intent(context, OrcheRouteVpnService.class).setAction(ACTION_PAUSE_NETWORK);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent);
+		else context.startService(intent);
+	}
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? ACTION_START : intent.getAction();
@@ -102,6 +109,17 @@ public final class OrcheRouteVpnService extends VpnService {
             stopping = true; stopTunnel(); stopForeground(true); stopSelfResult(startId);
             return START_NOT_STICKY;
         }
+		if (ACTION_PAUSE_NETWORK.equals(action)) {
+			createChannel();
+			startForeground(NOTIFICATION_ID, notification("Ожидаем доступную сеть…"));
+			stopping = true;
+			worker.execute(() -> {
+				stopTunnel();
+				starting = false;
+				stopping = false;
+			});
+			return START_STICKY;
+		}
 
         createChannel();
         startForeground(NOTIFICATION_ID, notification("Запускаем VPN…"));
@@ -138,8 +156,21 @@ public final class OrcheRouteVpnService extends VpnService {
 			// NET_CAPABILITY_VALIDATED is not sufficient: mobile operators may
 			// report a validated network while only an allowlist is reachable.
 			String initialNetworkMode = runtime.connectivityState();
-			if ("allowlist".equals(initialNetworkMode)) runtime.enterAllowlistMode();
-			else if ("normal".equals(initialNetworkMode)) runtime.leaveAllowlistMode();
+			if ("unknown".equals(initialNetworkMode)) {
+				runtime.onAwaitingNetworkDiagnosis();
+				showWaiting("Определяем состояние сети…");
+				return;
+			}
+			if ("offline".equals(initialNetworkMode)) {
+				runtime.onUnderlyingOfflineDetected();
+				showWaiting("Нет интернета · ожидаем сеть");
+				return;
+			}
+			if ("allowlist".equals(initialNetworkMode) && runtime.prepareAllowlistAtStart()) {
+				showWaiting("Белые списки · ищем доступный сервер");
+				return;
+			}
+			if ("normal".equals(initialNetworkMode)) runtime.leaveAllowlistMode();
             MobileRuntime.EngineProfile profile = runtime.engineProfile();
             Log.i("OrcheRouteEngine", "profile selected proxy=" + profile.proxy() + " node=" + profile.nodeName);
             requireOk(Mobilecore.engineInit(home.getAbsolutePath(), fd -> protect((int) fd)));
@@ -230,6 +261,11 @@ public final class OrcheRouteVpnService extends VpnService {
         JSONObject error = payload.optJSONObject("error");
         throw new IllegalStateException(error == null ? "Ошибка Mihomo" : error.optString("error", "Ошибка Mihomo"));
     }
+
+	private void showWaiting(String text) {
+		NotificationManager manager = getSystemService(NotificationManager.class);
+		manager.notify(NOTIFICATION_ID, notification(text));
+	}
 
     @Override
     public void onRevoke() {
@@ -333,6 +369,7 @@ public final class OrcheRouteVpnService extends VpnService {
             connection.setInstanceFollowRedirects(false);
             int status = connection.getResponseCode();
             if (status == 204 || (status >= 200 && status < 400)) {
+				runtime.onProxyHealth(true);
                 healthFailureStreak = 0;
                 return;
             }
@@ -345,6 +382,7 @@ public final class OrcheRouteVpnService extends VpnService {
 				return;
 			}
 			if ("allowlist".equals(networkMode)) {
+				runtime.onProxyHealth(false);
 				runtime.onRestrictedNetworkDetected();
 				try {
 					String next = runtime.failoverWhitelistNode();
@@ -355,7 +393,8 @@ public final class OrcheRouteVpnService extends VpnService {
 				healthFailureStreak = 0;
 				return;
 			}
-            if (++healthFailureStreak < 2) return;
+			runtime.onProxyHealth(false);
+			if (++healthFailureStreak < 2) return;
             healthFailureStreak = 0;
             try {
                 String next = runtime.failoverActiveNode();

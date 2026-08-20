@@ -164,6 +164,7 @@ final class MobileRepository {
             if (!root.has("nodes")) root.put("nodes", new JSONArray());
             if (!root.has("whitelist_nodes")) root.put("whitelist_nodes", new JSONArray());
             if (!root.has("mode")) root.put("mode", "auto");
+			if (!root.has("service_desired")) root.put("service_desired", false);
             if (!root.has("qualification_policy")) root.put("qualification_policy", defaultQualificationPolicy());
             if (!root.has("routes")) root.put("routes", new JSONObject()
                     .put("revision", 1).put("default", "proxy")
@@ -346,6 +347,7 @@ final class MobileRepository {
     synchronized void refreshSucceeded(String id, JSONArray proxies, JSONArray tests, JSONArray links, int testedCount) throws JSONException {
         JSONObject subscription = findSubscription(id);
         if (subscription == null) return;
+		JSONObject history = nodeHistoryForSourceLocked(id);
         int aliveCount = 0;
         for (int i = 0; i < tests.length(); i++) if (tests.optJSONObject(i) != null && tests.optJSONObject(i).optBoolean("alive", false)) aliveCount++;
         subscription.put("cached_links", copyArray(links))
@@ -357,17 +359,25 @@ final class MobileRepository {
             JSONObject test = i < tests.length() ? tests.getJSONObject(i) : new JSONObject();
             boolean alive = test.optBoolean("alive", false);
             String name = proxy.optString("name", "Сервер " + (i + 1));
-            nodes.put(new JSONObject()
+			JSONObject node = new JSONObject()
                     .put("id", name)
                     .put("display_name", displayName(proxy, i + 1))
                     .put("pool", subscription.optString("group", "primary"))
                     .put("priority", i + 1)
                     .put("alive", alive)
-                    .put("delay_ms", alive ? test.optInt("delay_ms") : JSONObject.NULL)
+					.put("delay_ms", alive ? test.optInt("delay_ms") : JSONObject.NULL)
+					.put("speed_mbps", alive && test.has("speed_mbps") ? test.optDouble("speed_mbps") : JSONObject.NULL)
+					.put("stability_ratio", alive && test.has("stability_ratio") ? test.optDouble("stability_ratio") : JSONObject.NULL)
                     .put("source_id", id)
                     .put("source_name", subscription.optString("name"))
-                    .put("proxy", proxy));
+					.put("last_tested_at", now())
+                    .put("proxy", proxy);
+			JSONObject previous = history.optJSONObject(name);
+			if (previous != null) node.put("health_successes", previous.optInt("health_successes", 0))
+					.put("health_failures", previous.optInt("health_failures", 0));
+			nodes.put(node);
         }
+		rankNodesLocked("nodes");
         subscription.put("last_status", "success").put("last_error", JSONObject.NULL)
                 .put("last_result", aliveCount == 0 ? "no_available_servers" : "available_servers")
                 .put("last_available", aliveCount).put("last_tested", testedCount).put("last_success", now());
@@ -408,6 +418,7 @@ final class MobileRepository {
                 node.put("alive", false).put("delay_ms", JSONObject.NULL).put("last_test_result", result);
             }
         }
+		rankNodesLocked("nodes");
         clearMissingSelectionLocked();
         save();
     }
@@ -432,6 +443,9 @@ final class MobileRepository {
                     .put("priority", source.optInt("priority", i + 1))
                     .put("alive", source.optBoolean("alive", true))
                     .put("delay_ms", source.opt("delay_ms"))
+					.put("speed_mbps", source.opt("speed_mbps"))
+					.put("stability_ratio", source.opt("stability_ratio"))
+					.put("score", source.optDouble("score", 0))
                     .put("selected", selected.equals(source.getString("id")))
                     .put("source_id", source.optString("source_id"))
                     .put("source_name", source.optString("source_name")));
@@ -494,6 +508,53 @@ final class MobileRepository {
 
     synchronized long lastSwitch() { return root.optLong("last_switch", 0); }
 
+	synchronized void recordHealth(String nodeId, boolean whitelistMode, boolean success) throws JSONException {
+		if (nodeId == null || nodeId.isEmpty()) return;
+		String key = whitelistMode ? "whitelist_nodes" : "nodes";
+		JSONArray nodes = root.getJSONArray(key);
+		for (int i = 0; i < nodes.length(); i++) {
+			JSONObject node = nodes.getJSONObject(i);
+			if (!nodeId.equals(node.optString("id"))) continue;
+			String counter = success ? "health_successes" : "health_failures";
+			node.put(counter, node.optInt(counter, 0) + 1);
+			int successes = node.optInt("health_successes", 0), failures = node.optInt("health_failures", 0);
+			if (successes + failures > 200) {
+				node.put("health_successes", successes / 2).put("health_failures", failures / 2);
+			}
+			rankNodesLocked(key);
+			// Health probes run every 15 seconds. Keep every sample in memory,
+			// but persist successful streaks once per minute to avoid thousands
+			// of SharedPreferences writes per day. Failures are always durable.
+			if (!success || (successes + failures) % 4 == 0) save();
+			return;
+		}
+	}
+
+	synchronized boolean preferPrimaryIfAvailable(long testedAfter) throws JSONException {
+		if (!"auto".equals(mode())) return false;
+		JSONObject current = findNode(root.optString("selected_node", ""));
+		if (current != null && "primary".equals(current.optString("pool")) && current.optBoolean("alive", false)) return false;
+		rankNodesLocked("nodes");
+		JSONArray nodes = root.getJSONArray("nodes");
+		for (int i = 0; i < nodes.length(); i++) {
+			JSONObject node = nodes.getJSONObject(i);
+			if (node.optBoolean("alive", false) && "primary".equals(node.optString("pool"))
+					&& node.optLong("last_tested_at", 0) >= testedAfter) {
+				root.put("selected_node", node.getString("id"));
+				save();
+				return true;
+			}
+		}
+		return false;
+	}
+
+	synchronized boolean serviceDesired() { return root.optBoolean("service_desired", false); }
+
+	synchronized void setServiceDesired(boolean desired) throws JSONException {
+		root.put("service_desired", desired);
+		save();
+	}
+
     synchronized JSONObject requestWhitelistNode() throws JSONException {
         return whitelistTransitionLocked(new JSONObject().put("operation", "request"));
     }
@@ -520,10 +581,13 @@ final class MobileRepository {
             JSONObject test = i < tests.length() ? tests.optJSONObject(i) : null;
             if (test == null || !test.optBoolean("alive", false)) continue;
             JSONObject proxy = proxies.getJSONObject(i);
-            nodes.put(new JSONObject().put("display_name", displayName(proxy, i + 1))
+			nodes.put(new JSONObject().put("display_name", displayName(proxy, i + 1))
                     .put("pool", "whitelist").put("origin_pool", subscription.optString("group", "primary"))
                     .put("priority", nodes.length() + 1).put("alive", true)
-                    .put("delay_ms", test.optInt("delay_ms", 0)).put("source_id", sourceId)
+					.put("delay_ms", test.optInt("delay_ms", 0))
+					.put("speed_mbps", test.has("speed_mbps") ? test.optDouble("speed_mbps") : JSONObject.NULL)
+					.put("stability_ratio", test.has("stability_ratio") ? test.optDouble("stability_ratio") : JSONObject.NULL)
+					.put("source_id", sourceId)
                     .put("source_name", subscription.optString("name")).put("proxy", new JSONObject(proxy.toString())));
         }
         whitelistTransitionLocked(new JSONObject().put("operation", "add_source").put("source_id", sourceId).put("nodes", nodes));
@@ -531,15 +595,23 @@ final class MobileRepository {
 
     synchronized void replaceWhitelistSource(String sourceId, JSONArray proxies, JSONArray tests) throws JSONException {
         JSONObject subscription = findSubscription(sourceId);
+		JSONObject history = whitelistHistoryForSourceLocked(sourceId);
         JSONArray nodes = new JSONArray();
         if (subscription != null) for (int i = 0; i < proxies.length(); i++) {
             JSONObject test = i < tests.length() ? tests.optJSONObject(i) : null;
             if (test == null || !test.optBoolean("alive", false)) continue;
             JSONObject proxy = proxies.getJSONObject(i);
-            nodes.put(new JSONObject().put("display_name", displayName(proxy, i + 1))
+			JSONObject node = new JSONObject().put("display_name", displayName(proxy, i + 1))
                     .put("origin_pool", subscription.optString("group", "primary")).put("priority", nodes.length() + 1)
-                    .put("alive", true).put("delay_ms", test.optInt("delay_ms", 0)).put("source_id", sourceId)
-                    .put("source_name", subscription.optString("name")).put("proxy", new JSONObject(proxy.toString())));
+					.put("alive", true).put("delay_ms", test.optInt("delay_ms", 0))
+					.put("speed_mbps", test.has("speed_mbps") ? test.optDouble("speed_mbps") : JSONObject.NULL)
+					.put("stability_ratio", test.has("stability_ratio") ? test.optDouble("stability_ratio") : JSONObject.NULL)
+					.put("source_id", sourceId)
+					.put("source_name", subscription.optString("name")).put("proxy", new JSONObject(proxy.toString()));
+			JSONObject previous = history.optJSONObject(proxy.optString("name"));
+			if (previous != null) node.put("health_successes", previous.optInt("health_successes", 0))
+					.put("health_failures", previous.optInt("health_failures", 0));
+			nodes.put(node);
         }
         whitelistTransitionLocked(new JSONObject().put("operation", "replace_source").put("source_id", sourceId).put("nodes", nodes));
     }
@@ -610,11 +682,17 @@ final class MobileRepository {
 
     synchronized String mode() { return root.optString("mode", "auto"); }
 
+	synchronized String activePool() throws JSONException {
+		JSONObject node = findNode(root.optString("selected_node", ""));
+		return node == null ? "" : node.optString("pool", "");
+	}
+
     synchronized JSONObject failoverActiveNode() throws JSONException {
         if ("manual".equals(mode())) return null;
         JSONObject active = findNode(root.optString("selected_node", ""));
-        if (active != null) active.put("alive", false).put("delay_ms", JSONObject.NULL);
+		if (active != null) active.put("alive", false).put("delay_ms", JSONObject.NULL);
         root.remove("selected_node");
+		rankNodesLocked("nodes");
         JSONObject next = selectBestLocked();
         save();
         return next == null ? null : new JSONObject(next.toString());
@@ -803,16 +881,69 @@ final class MobileRepository {
 
     private JSONObject selectBestLocked() throws JSONException {
         JSONArray nodes = root.getJSONArray("nodes");
-        JSONObject emergency = null;
-        for (int i = 0; i < nodes.length(); i++) {
-            JSONObject node = nodes.getJSONObject(i);
-            if (!node.optBoolean("alive", true)) continue;
-            if (!"emergency".equals(mode()) && "primary".equals(node.optString("pool"))) { root.put("selected_node", node.getString("id")); return node; }
-            if (emergency == null) emergency = node;
-        }
-        if (emergency != null) root.put("selected_node", emergency.getString("id"));
-        return emergency;
+		rankNodesLocked("nodes");
+		JSONObject envelope = new JSONObject(Mobilecore.selectNode(root.getJSONArray("nodes").toString(), mode()));
+		if (!envelope.optBoolean("ok")) throw new JSONException("node_selection_failed");
+		JSONObject selected = envelope.getJSONObject("result").optJSONObject("node");
+		if (selected == null) return null;
+		JSONObject original = findNodeBySource(selected.optString("id"), selected.optString("source_id"));
+		if (original != null) root.put("selected_node", original.getString("id"));
+		return original;
     }
+
+	private JSONObject nodeHistoryForSourceLocked(String sourceId) throws JSONException {
+		JSONObject history = new JSONObject();
+		JSONArray nodes = root.getJSONArray("nodes");
+		for (int i = 0; i < nodes.length(); i++) {
+			JSONObject node = nodes.getJSONObject(i);
+			if (sourceId.equals(node.optString("source_id"))) history.put(node.optString("id"), new JSONObject(node.toString()));
+		}
+		return history;
+	}
+
+	private JSONObject whitelistHistoryForSourceLocked(String sourceId) throws JSONException {
+		JSONObject history = new JSONObject();
+		JSONArray nodes = root.getJSONArray("whitelist_nodes");
+		for (int i = 0; i < nodes.length(); i++) {
+			JSONObject node = nodes.getJSONObject(i);
+			if (!sourceId.equals(node.optString("source_id"))) continue;
+			JSONObject proxy = node.optJSONObject("proxy");
+			if (proxy != null) history.put(proxy.optString("name"), new JSONObject(node.toString()));
+		}
+		return history;
+	}
+
+	private JSONObject findNodeBySource(String id, String sourceId) throws JSONException {
+		JSONArray nodes = root.getJSONArray("nodes");
+		for (int i = 0; i < nodes.length(); i++) {
+			JSONObject node = nodes.getJSONObject(i);
+			if (id.equals(node.optString("id")) && sourceId.equals(node.optString("source_id"))) return node;
+		}
+		return null;
+	}
+
+	private void rankNodesLocked(String key) throws JSONException {
+		JSONArray original = root.optJSONArray(key);
+		if (original == null || original.length() < 1) return;
+		JSONObject envelope = new JSONObject(Mobilecore.rankNodes(original.toString()));
+		if (!envelope.optBoolean("ok")) throw new JSONException("node_ranking_failed");
+		JSONArray ranked = envelope.getJSONObject("result").getJSONArray("nodes");
+		JSONArray reordered = new JSONArray();
+		boolean[] used = new boolean[original.length()];
+		for (int i = 0; i < ranked.length(); i++) {
+			JSONObject rank = ranked.getJSONObject(i), found = null;
+			for (int j = 0; j < original.length(); j++) {
+				if (used[j]) continue;
+				JSONObject candidate = original.getJSONObject(j);
+				if (rank.optString("id").equals(candidate.optString("id"))
+						&& rank.optString("source_id").equals(candidate.optString("source_id"))) {
+					found = candidate; used[j] = true; break;
+				}
+			}
+			if (found != null) reordered.put(found.put("score", rank.optDouble("score", 0)).put("priority", i + 1));
+		}
+		root.put(key, reordered);
+	}
 
     private static JSONArray mergeArrays(JSONArray fresh, JSONArray cached) {
         JSONArray result = new JSONArray();

@@ -19,6 +19,7 @@ import (
 	mobilerouting "github.com/gooog1111/orcheroute/internal/mobile/routing"
 	mobilevalidator "github.com/gooog1111/orcheroute/internal/mobile/validator"
 	"github.com/gooog1111/orcheroute/internal/network"
+	"github.com/gooog1111/orcheroute/internal/noderank"
 	"github.com/gooog1111/orcheroute/internal/orchestrator"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"github.com/gooog1111/orcheroute/internal/whitelist"
@@ -241,6 +242,39 @@ func OrchestratorTransition(stateJSON, eventJSON string) string {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
 	return encode(map[string]any{"ok": true, "result": result})
+}
+
+// NetworkDecision maps an independently confirmed physical-network state to
+// one platform action.
+func NetworkDecision(inputJSON string) string {
+	var input orchestrator.DecisionInput
+	if json.Unmarshal([]byte(inputJSON), &input) != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_network_decision"}})
+	}
+	result, err := orchestrator.DecideNetwork(input)
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	return encode(map[string]any{"ok": true, "result": result})
+}
+
+// RankNodes orders available nodes by shared latency, throughput and
+// historical health evidence.
+func RankNodes(nodesJSON string) string {
+	var nodes []noderank.Node
+	if json.Unmarshal([]byte(nodesJSON), &nodes) != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_nodes"}})
+	}
+	return encode(map[string]any{"ok": true, "result": map[string]any{"nodes": noderank.Rank(nodes)}})
+}
+
+// SelectNode applies the shared strict pool policy to ranked nodes.
+func SelectNode(nodesJSON, mode string) string {
+	var nodes []noderank.Node
+	if json.Unmarshal([]byte(nodesJSON), &nodes) != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_nodes"}})
+	}
+	return encode(map[string]any{"ok": true, "result": map[string]any{"node": noderank.Select(nodes, mode)}})
 }
 
 func PreviewNetworkProfile(profileJSON, topologyJSON string) string {

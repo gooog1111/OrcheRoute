@@ -45,6 +45,53 @@ type Result struct {
 	Action Action `json:"action"`
 }
 
+type DecisionInput struct {
+	NetworkMode       string `json:"network_mode"`
+	DesiredEnabled    bool   `json:"desired_enabled"`
+	Connected         bool   `json:"connected"`
+	WhitelistActive   bool   `json:"whitelist_active"`
+	WhitelistCount    int    `json:"whitelist_count"`
+	WhitelistScan     bool   `json:"whitelist_scan_active"`
+	WhitelistRetryDue bool   `json:"whitelist_retry_due"`
+}
+
+type Decision struct {
+	Action string `json:"action"`
+}
+
+// DecideNetwork is the portable policy queried from each confirmed physical
+// network snapshot. It never probes or mutates platform state.
+func DecideNetwork(input DecisionInput) (Decision, error) {
+	if !input.DesiredEnabled {
+		return Decision{Action: "none"}, nil
+	}
+	switch input.NetworkMode {
+	case Offline:
+		return Decision{Action: "pause_offline"}, nil
+	case Normal:
+		if input.WhitelistActive || !input.Connected {
+			return Decision{Action: "start_normal"}, nil
+		}
+		return Decision{Action: "none"}, nil
+	case Allowlist:
+		if input.WhitelistCount > 0 {
+			if !input.WhitelistActive || !input.Connected {
+				return Decision{Action: "connect_whitelist"}, nil
+			}
+			return Decision{Action: "none"}, nil
+		}
+		if input.WhitelistScan {
+			return Decision{Action: "wait_whitelist_scan"}, nil
+		}
+		if input.WhitelistRetryDue {
+			return Decision{Action: "scan_whitelist"}, nil
+		}
+		return Decision{Action: "wait_whitelist_retry"}, nil
+	default:
+		return Decision{}, errors.New("invalid_connectivity_mode")
+	}
+}
+
 func Transition(input State, event Event) (Result, error) {
 	state := input
 	if state.Mode == "" {
