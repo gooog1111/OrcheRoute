@@ -415,6 +415,11 @@ public final class MainActivity extends ComponentActivity {
         public boolean installAppUpdate() {
             return appUpdater.downloadAndInstall();
         }
+
+		@JavascriptInterface
+		public boolean installBetaAppUpdate() {
+			return appUpdater.downloadAndInstallBeta();
+		}
     }
 
     private static WebResourceResponse json(int status, String value) {

@@ -18,6 +18,7 @@ import {
   checkAndroidAppUpdate,
   getAndroidAppUpdateStatus,
   installAndroidAppUpdate,
+	installAndroidBetaUpdate,
   isEmbeddedRuntime,
   isAndroidRuntime,
   loadOperations,
@@ -2943,6 +2944,7 @@ function ComponentsForm({
   const [appUpdate, setAppUpdate] = useState(() =>
     embedded ? getAndroidAppUpdateStatus() : null,
   );
+	const [betaWarning, setBetaWarning] = useState(false);
   useEffect(() => {
     if (!embedded) return;
     const refresh = () => setAppUpdate(getAndroidAppUpdateStatus());
@@ -3096,9 +3098,50 @@ function ComponentsForm({
             >
               Скачать и установить
             </button>
+			<button
+				className="secondary-button"
+				type="button"
+				disabled={Boolean(appUpdate?.active)}
+				onClick={() => setBetaWarning(true)}
+			>
+				Обновиться до Beta
+			</button>
           </ActionBar>
         </div>
       )}
+	  {embedded && betaWarning && (
+		<div className="picker-dialog-backdrop" onClick={() => setBetaWarning(false)}>
+		  <div
+			className="picker-dialog subscription-delete-dialog"
+			role="alertdialog"
+			aria-modal="true"
+			aria-labelledby="beta-update-title"
+			onClick={(event) => event.stopPropagation()}
+		  >
+			<strong id="beta-update-title">Установить Beta-версию?</strong>
+			<p className="route-help">
+			  Это тестовая сборка с непроверенными изменениями VPN-автоматики. Возможны
+			  обрывы соединения и ошибки переключения сети. Перед установкой рекомендуется
+			  сохранить важные подписки и маршруты.
+			</p>
+			<ActionBar>
+			  <button className="secondary-button" type="button" onClick={() => setBetaWarning(false)}>
+				Отмена
+			  </button>
+			  <button
+				className="danger"
+				type="button"
+				onClick={() => {
+				  setBetaWarning(false);
+				  installAndroidBetaUpdate();
+				}}
+			  >
+				Понимаю риск, установить Beta
+			  </button>
+			</ActionBar>
+		  </div>
+		</div>
+	  )}
       <div className="editor-card">
         <strong>Источник GeoIP и GeoSite</strong>
         <p className="route-help">

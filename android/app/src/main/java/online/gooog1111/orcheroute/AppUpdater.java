@@ -30,7 +30,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class AppUpdater {
-    private static final String LATEST_RELEASE_URL = "https://api.github.com/repos/gooog1111/OrcheRoute/releases/latest";
+	private static final String STABLE_MANIFEST_URL = "https://github.com/gooog1111/OrcheRoute/releases/latest/download/android-update.json";
+	private static final String BETA_MANIFEST_URL = "https://github.com/gooog1111/OrcheRoute/releases/download/android-beta/android-update.json";
     private static final Pattern VERSION_CODE_PATTERN = Pattern.compile("(?:code|vc)([0-9]+)", Pattern.CASE_INSENSITIVE);
     private static final long MAX_APK_BYTES = 256L * 1024L * 1024L;
     private final MainActivity activity;
@@ -39,6 +40,7 @@ final class AppUpdater {
     private final long currentVersionCode;
     private String state = "idle", message = "Обновление приложения ещё не проверялось", error = "";
     private String latestVersion = "", downloadURL = "", expectedSHA256 = "";
+	private String channel = "stable";
     private int latestVersionCode;
     private long current, total;
     private boolean active;
@@ -61,6 +63,7 @@ final class AppUpdater {
                     .put("state", state).put("message", message).put("active", active)
                     .put("current_version", currentVersion)
                     .put("current_version_code", currentVersionCode)
+					.put("channel", channel)
                     .put("current", current).put("total", total);
             if (!latestVersion.isEmpty()) result.put("latest_version", latestVersion).put("latest_version_code", latestVersionCode);
             if (!error.isEmpty()) result.put("error", error);
@@ -72,18 +75,27 @@ final class AppUpdater {
         if (active) return false;
         set("checking", "Проверяем доступную версию OrcheRoute", "", true, 0, 0);
         worker.execute(() -> {
-            try { loadManifest(); }
+			try { loadManifest(false); }
             catch (Throwable failure) { fail(failure); }
         });
         return true;
     }
 
     synchronized boolean downloadAndInstall() {
+		return downloadAndInstall(false);
+	}
+
+	synchronized boolean downloadAndInstallBeta() {
+		return downloadAndInstall(true);
+	}
+
+	private synchronized boolean downloadAndInstall(boolean beta) {
         if (active) return false;
-        set("checking", "Проверяем обновление перед загрузкой", "", true, 0, 0);
+		channel = beta ? "beta" : "stable";
+		set("checking", beta ? "Проверяем доступную Beta-версию" : "Проверяем обновление перед загрузкой", "", true, 0, 0);
         worker.execute(() -> {
             try {
-                loadManifest();
+				loadManifest(beta);
                 synchronized (this) {
                     if (latestVersionCode <= currentVersionCode) return;
                     set("downloading", "Загружаем APK", "", true, 0, total);
@@ -110,8 +122,15 @@ final class AppUpdater {
         requestInstall(apk);
     }
 
-    private void loadManifest() throws Exception {
-        JSONObject release = readJSON(LATEST_RELEASE_URL);
+	private void loadManifest(boolean beta) throws Exception {
+		JSONObject manifest = readJSON(beta ? BETA_MANIFEST_URL : STABLE_MANIFEST_URL);
+		if (manifest.optBoolean("prerelease", false) != beta) throw new SecurityException("Канал manifest не совпадает с выбранным каналом обновления");
+		JSONObject release = new JSONObject().put("tag_name", manifest.getString("tag_name"))
+				.put("assets", new JSONArray().put(new JSONObject()
+						.put("name", manifest.getString("asset_name"))
+						.put("browser_download_url", manifest.getString("download_url"))
+						.put("digest", "sha256:" + manifest.getString("sha256"))
+						.put("size", manifest.getLong("size"))));
         JSONArray assets = release.getJSONArray("assets");
         JSONObject asset = null;
         for (int i = 0; i < assets.length(); i++) {
@@ -120,7 +139,7 @@ final class AppUpdater {
             if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".apk") &&
                     name.toLowerCase(java.util.Locale.ROOT).contains("arm64")) { asset = candidate; break; }
         }
-        if (asset == null) throw new Exception("В latest release нет Android arm64 APK");
+		if (asset == null) throw new Exception(beta ? "В Beta release нет Android arm64 APK" : "В latest release нет Android arm64 APK");
         Matcher code = VERSION_CODE_PATTERN.matcher(asset.getString("name"));
         if (!code.find()) throw new Exception("Имя APK не содержит code<versionCode>");
         int versionCode = Integer.parseInt(code.group(1));
@@ -134,7 +153,7 @@ final class AppUpdater {
         long size = asset.getLong("size");
         if (size <= 0 || size > MAX_APK_BYTES) throw new SecurityException("Некорректный размер обновления");
         synchronized (this) {
-            latestVersion = release.getString("tag_name"); latestVersionCode = versionCode;
+			latestVersion = release.getString("tag_name"); latestVersionCode = versionCode; channel = beta ? "beta" : "stable";
             downloadURL = url; expectedSHA256 = sha; total = size; current = 0;
             if (versionCode > currentVersionCode) set("available", "Доступна версия " + latestVersion, "", false, 0, size);
             else set("current", "Установлена актуальная версия", "", false, 0, size);
@@ -207,11 +226,14 @@ final class AppUpdater {
     }
 
     private static JSONObject readJSON(String value) throws Exception {
+		return new JSONObject(readText(value));
+	}
+	private static String readText(String value) throws Exception {
         HttpURLConnection connection = open(value);
         try (InputStream input = connection.getInputStream(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192]; int total = 0;
             for (int count; (count = input.read(buffer)) >= 0; ) { total += count; if (total > 64 * 1024) throw new SecurityException("Manifest обновления слишком большой"); output.write(buffer, 0, count); }
-            return new JSONObject(output.toString(StandardCharsets.UTF_8.name()));
+			return output.toString(StandardCharsets.UTF_8.name());
         } finally { connection.disconnect(); }
     }
     private static HttpURLConnection open(String value) throws Exception {

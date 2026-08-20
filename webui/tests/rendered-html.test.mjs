@@ -109,9 +109,21 @@ test("android settings expose a signed GitHub release updater without transport 
   assert.doesNotMatch(settings, />\s*Проверить версию\s*</);
   assert.doesNotMatch(settings, /Ядро обновляется с приложением/);
   assert.match(settings, /Обновление OrcheRoute/);
-  assert.match(updater, /api\.github\.com\/repos\/gooog1111\/OrcheRoute\/releases\/latest/);
+	assert.match(updater, /releases\/latest\/download\/android-update\.json/);
   assert.match(updater, /SHA-256 загруженного APK не совпадает/);
   assert.match(updater, /Сертификат подписи APK не совпадает/);
+});
+
+test("android updater exposes an explicit prerelease channel with a warning", async () => {
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const updater = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/AppUpdater.java", import.meta.url), "utf8");
+  const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
+  assert.match(settings, /Обновиться до Beta/);
+  assert.match(settings, /Это тестовая сборка с непроверенными изменениями VPN-автоматики/);
+  assert.match(settings, /Понимаю риск, установить Beta/);
+	assert.match(updater, /releases\/download\/android-beta\/android-update\.json/);
+	assert.match(updater, /Канал manifest не совпадает/);
+  assert.match(activity, /installBetaAppUpdate/);
 });
 
 test("qualification UI exposes connectivity anchors and emergency per-source top", async () => {
