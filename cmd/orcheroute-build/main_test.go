@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -71,5 +72,33 @@ func TestNPMCommandMatchesHost(t *testing.T) {
 	}
 	if got := npmCommand(); got != want {
 		t.Fatalf("npm command = %q, want %q", got, want)
+	}
+}
+
+func TestVerifyArchiveEntryRequiresEmbeddedAndroidIndex(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.apk")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := zip.NewWriter(file)
+	entry, err := archive.Create("assets/web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := entry.Write([]byte("ok")); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyArchiveEntry(path, "assets/web/index.html"); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyArchiveEntry(path, "assets/index.html"); err == nil {
+		t.Fatal("missing root asset was accepted")
 	}
 }

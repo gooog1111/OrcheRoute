@@ -35,7 +35,15 @@ android {
 
     def generatedWebAssets = providers.gradleProperty("orcherouteWebAssets")
     if (generatedWebAssets.isPresent()) {
-        sourceSets.main.assets.setSrcDirs([generatedWebAssets.get()])
+        def generatedAssetsRoot = layout.buildDirectory.dir("generated/orcherouteWebAssets").get().asFile
+        def stageWebAssets = tasks.register("stageOrcheRouteWebAssets", Sync) {
+            from(generatedWebAssets.get())
+            into(new File(generatedAssetsRoot, "web"))
+        }
+        sourceSets.main.assets.setSrcDirs([generatedAssetsRoot])
+        tasks.named("preBuild").configure {
+            dependsOn(stageWebAssets)
+        }
     }
 }
 

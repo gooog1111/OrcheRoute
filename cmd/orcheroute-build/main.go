@@ -4,6 +4,7 @@
 package main
 
 import (
+	"archive/zip"
 	"errors"
 	"flag"
 	"fmt"
@@ -251,8 +252,14 @@ func (b *builder) android() error {
 		}
 		androidDir := filepath.Join(b.root, "android")
 		webOut := filepath.Join(b.root, "webui", "out")
-		return b.command(androidDir, androidEnv, gradle, "--no-daemon", "clean", "assembleDebug",
-			"-PorcherouteMobileCoreAar="+aar, "-PorcherouteWebAssets="+webOut)
+		if err := b.command(androidDir, androidEnv, gradle, "--no-daemon", "clean", "assembleDebug",
+			"-PorcherouteMobileCoreAar="+aar, "-PorcherouteWebAssets="+webOut); err != nil {
+			return err
+		}
+		return verifyArchiveEntry(
+			filepath.Join(androidDir, "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
+			"assets/web/index.html",
+		)
 	})
 }
 
@@ -407,6 +414,20 @@ func copyFile(source, destination string) error {
 		return copyErr
 	}
 	return closeErr
+}
+
+func verifyArchiveEntry(path, required string) error {
+	archive, err := zip.OpenReader(path)
+	if err != nil {
+		return fmt.Errorf("open Android artifact %s: %w", path, err)
+	}
+	defer archive.Close()
+	for _, entry := range archive.File {
+		if entry.Name == required {
+			return nil
+		}
+	}
+	return fmt.Errorf("Android artifact %s does not contain required %s", path, required)
 }
 
 func shellQuote(value string) string {
