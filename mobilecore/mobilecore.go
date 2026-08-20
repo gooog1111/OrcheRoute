@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/mihomo"
+	mobileconnectivity "github.com/gooog1111/orcheroute/internal/mobile/connectivity"
 	mobileconstructor "github.com/gooog1111/orcheroute/internal/mobile/constructor"
 	mobilemapper "github.com/gooog1111/orcheroute/internal/mobile/mapper"
 	mobileparser "github.com/gooog1111/orcheroute/internal/mobile/parser"
@@ -37,6 +38,36 @@ func Capabilities() string {
 		"connectivity_automaton": true,
 		"share_protocols":        []string{"vless", "vmess", "trojan", "ss"},
 	}})
+}
+
+// ConnectivityTargets exposes the portable probe policy to native adapters.
+// Android performs DNS and HTTP through Network.openConnection so neither
+// operation can re-enter the app-owned VPN tunnel.
+func ConnectivityTargets(allowlistURL, openInternetURL string) string {
+	targets, err := mobileconnectivity.Targets(mobileconnectivity.Config{
+		AllowlistURL: allowlistURL, OpenInternetURL: openInternetURL,
+	})
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	result := make([]map[string]any, 0, len(targets))
+	for _, target := range targets {
+		result = append(result, map[string]any{
+			"name": target.Name, "url": target.URL, "open_internet": target.OpenInternet,
+			"expect_no_content": target.ExpectNoContent,
+		})
+	}
+	return encode(map[string]any{"ok": true, "result": map[string]any{"targets": result}})
+}
+
+// ClassifyConnectivity keeps policy in Go while the native platform owns
+// physical-network I/O and returns only observations.
+func ClassifyConnectivity(observationJSON string) string {
+	var observation mobileconnectivity.Observation
+	if json.Unmarshal([]byte(observationJSON), &observation) != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_connectivity_observation"}})
+	}
+	return encode(map[string]any{"ok": true, "result": mobileconnectivity.Classify(observation)})
 }
 
 func ValidateQualificationPolicy(policyJSON string) string {

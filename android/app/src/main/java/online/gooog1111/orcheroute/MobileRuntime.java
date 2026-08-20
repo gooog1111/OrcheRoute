@@ -76,7 +76,8 @@ final class MobileRuntime {
             JSONObject defaults = repository.qualificationPolicy().getJSONObject("defaults");
             return new ConnectivityMonitor.Settings(
                     defaults.optString("allowlist_probe_url", "https://ya.ru/"),
-                    defaults.optString("open_internet_probe_url", "https://www.cloudflare.com/cdn-cgi/trace"));
+                    defaults.optString("open_internet_probe_url", "https://www.cloudflare.com/cdn-cgi/trace"),
+                    repository.activeTransport());
         }, this::onConnectivityChanged);
         // A process killed during a scan cannot have a live worker after the
         // restart. Clear only the stale activity marker; keep the working pool.

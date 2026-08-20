@@ -76,11 +76,19 @@ test("android qualification checks the complete parsed set in ordered stages", a
   assert.match(runtime, /effectivePolicy\.optInt\("keep", 0\)/);
   assert.match(runtime, /engineSpeedAvailable/);
   assert.match(runtime, /engineTestSpeed/);
-  assert.match(runtime, /engineProbeConnectivity/);
   assert.match(runtime, /engineTestSpeedAdaptive/);
   assert.match(runtime, /baselineMbps \* 0\.10/);
   assert.match(runtime, /speed_candidates_per_source/);
   assert.match(runtime, /Speed-test пропущен/);
+});
+
+test("android connectivity monitor binds DNS and HTTP to a physical network", async () => {
+  const monitor = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/ConnectivityMonitor.java", import.meta.url), "utf8");
+  assert.match(monitor, /NET_CAPABILITY_NOT_VPN/);
+  assert.match(monitor, /network\.openConnection/);
+  assert.match(monitor, /Mobilecore\.connectivityTargets/);
+  assert.match(monitor, /Mobilecore\.classifyConnectivity/);
+  assert.doesNotMatch(monitor, /probeConnectivity/);
 });
 
 test("qualification UI exposes connectivity anchors and emergency per-source top", async () => {

@@ -19,6 +19,17 @@ func TestCapabilitiesAreMobileSafe(t *testing.T) {
 	}
 }
 
+func TestNativeConnectivityAdapterContract(t *testing.T) {
+	targets := ConnectivityTargets("https://allowed.example/", "https://open.example/")
+	if !strings.Contains(targets, `"name":"allowlist"`) || !strings.Contains(targets, `"name":"open_anchor_github"`) {
+		t.Fatalf("unexpected targets: %s", targets)
+	}
+	classified := ClassifyConnectivity(`{"allowlist_available":true}`)
+	if !strings.Contains(classified, `"state":"allowlist"`) {
+		t.Fatalf("unexpected classification: %s", classified)
+	}
+}
+
 func TestWhitelistTransitionBindingPreventsParallelSelection(t *testing.T) {
 	state := `{"nodes":[{"id":"one","source_id":"a","alive":true,"priority":1,"proxy":{"name":"one"}},{"id":"two","source_id":"a","alive":true,"priority":2,"proxy":{"name":"two"}}]}`
 	first := WhitelistTransition(state, `{"operation":"request"}`)

@@ -9,8 +9,15 @@ import android.util.Log;
 
 import org.json.JSONObject;
 import org.json.JSONException;
+import org.json.JSONArray;
 
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -27,10 +34,12 @@ final class ConnectivityMonitor {
     static final class Settings {
         final String allowlistURL;
         final String openInternetURL;
+        final String transport;
 
-        Settings(String allowlistURL, String openInternetURL) {
+        Settings(String allowlistURL, String openInternetURL, String transport) {
             this.allowlistURL = allowlistURL;
             this.openInternetURL = openInternetURL;
+            this.transport = transport;
         }
     }
 
@@ -65,6 +74,7 @@ final class ConnectivityMonitor {
     private final SettingsProvider settingsProvider;
     private final Listener listener;
     private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor();
+    private final ExecutorService probeWorkers = Executors.newFixedThreadPool(4);
     private final Object queueLock = new Object();
     private volatile Snapshot snapshot = new Snapshot("unknown", 0, 0, "");
     private boolean queued;
@@ -115,8 +125,25 @@ final class ConnectivityMonitor {
         Snapshot previous = snapshot;
         try {
             Settings settings = settingsProvider.load();
-            JSONObject payload = new JSONObject(Mobilecore.probeConnectivity(
-                    settings.allowlistURL, settings.openInternetURL, 3500));
+            JSONObject targetPayload = new JSONObject(Mobilecore.connectivityTargets(
+                    settings.allowlistURL, settings.openInternetURL));
+            if (!targetPayload.optBoolean("ok")) throw new IllegalStateException(coreError(targetPayload));
+            JSONArray targets = targetPayload.getJSONObject("result").getJSONArray("targets");
+            Network underlay = physicalNetwork(settings.transport);
+            JSONObject observation = emptyObservation();
+            if (underlay != null) {
+                List<Future<Boolean>> results = new ArrayList<>();
+                for (int i = 0; i < targets.length(); i++) {
+                    JSONObject target = new JSONObject(targets.getJSONObject(i).toString());
+                    results.add(probeWorkers.submit(() -> probeTarget(underlay, target, 3500)));
+                }
+                for (int i = 0; i < targets.length(); i++) {
+                    boolean available = false;
+                    try { available = results.get(i).get(); } catch (Throwable ignored) { }
+                    setObservation(observation, targets.getJSONObject(i).optString("name"), available);
+                }
+            }
+            JSONObject payload = new JSONObject(Mobilecore.classifyConnectivity(observation.toString()));
             JSONObject result = payload.optJSONObject("result");
             if (!payload.optBoolean("ok") || result == null) throw new IllegalStateException(coreError(payload));
             String state = result.optString("state", "offline");
@@ -125,13 +152,81 @@ final class ConnectivityMonitor {
             }
             Snapshot current = new Snapshot(state, attemptedAt, attemptedAt, "");
             snapshot = current;
-            Log.i("OrcheRouteNet", "monitor=" + state + " confirmed_at=" + attemptedAt);
+            Log.i("OrcheRouteNet", "monitor=" + state + " underlay=" + underlay + " probes=" + observation);
             if (!previous.state.equals(current.state) || !previous.confirmed()) listener.onChanged(previous, current);
         } catch (Throwable error) {
             Snapshot current = new Snapshot(previous.state, previous.confirmedAt, attemptedAt, readable(error));
             snapshot = current;
             Log.w("OrcheRouteNet", "monitor probe failed; preserving " + previous.state, error);
         }
+    }
+
+    private Network physicalNetwork(String transport) {
+        if (manager == null) return null;
+        Network selected = null;
+        int selectedScore = Integer.MIN_VALUE;
+        for (Network network : manager.getAllNetworks()) {
+            NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
+            if (capabilities == null
+                    || capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                    || !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    || !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                    || !matchesTransport(capabilities, transport)) continue;
+            int score = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) ? 100 : 0;
+            if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) score += 3;
+            else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) score += 2;
+            else if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) score += 1;
+            if (score > selectedScore) {
+                selected = network;
+                selectedScore = score;
+            }
+        }
+        return selected;
+    }
+
+    private static boolean matchesTransport(NetworkCapabilities capabilities, String transport) {
+        if (transport == null || transport.isEmpty() || "auto".equals(transport)) return true;
+        if ("wifi".equals(transport)) return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+        if ("cellular".equals(transport)) return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
+        if ("ethernet".equals(transport)) return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET);
+        return false;
+    }
+
+    private static boolean probeTarget(Network network, JSONObject target, int timeoutMs) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) network.openConnection(new URL(target.getString("url")));
+            connection.setConnectTimeout(timeoutMs);
+            connection.setReadTimeout(timeoutMs);
+            connection.setUseCaches(false);
+            connection.setInstanceFollowRedirects(!target.optBoolean("open_internet", false));
+            connection.setRequestProperty("Cache-Control", "no-cache, no-store");
+            connection.setRequestProperty("Pragma", "no-cache");
+            connection.setRequestProperty("User-Agent", "OrcheRoute Android connectivity monitor");
+            int status = connection.getResponseCode();
+            return target.optBoolean("expect_no_content", false)
+                    ? status == HttpURLConnection.HTTP_NO_CONTENT
+                    : status >= 200 && status < 300;
+        } catch (Throwable ignored) {
+            return false;
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private static JSONObject emptyObservation() throws JSONException {
+        return new JSONObject()
+                .put("allowlist_available", false)
+                .put("configured_open_available", false)
+                .put("open_anchor_github_available", false)
+                .put("open_anchor_mozilla_available", false);
+    }
+
+    private static void setObservation(JSONObject observation, String name, boolean available) throws JSONException {
+        if ("allowlist".equals(name)) observation.put("allowlist_available", available);
+        else if ("open_internet".equals(name)) observation.put("configured_open_available", available);
+        else if ("open_anchor_github".equals(name)) observation.put("open_anchor_github_available", available);
+        else if ("open_anchor_mozilla".equals(name)) observation.put("open_anchor_mozilla_available", available);
     }
 
     private static String coreError(JSONObject payload) {
