@@ -3205,29 +3205,11 @@ function ComponentsForm({
           className="secondary-button"
           type="button"
           disabled={busy}
-          onClick={() =>
-            update(
-              "check",
-              "Проверяем версию Mihomo",
-              "Версия Mihomo проверена.",
-            )
-          }
-        >
-          Проверить версию
-        </button>
-        <button
-          className="secondary-button"
-          type="button"
-          disabled={busy}
           onClick={() => update("geo", "Обновляем GeoIP и GeoSite")}
         >
           Обновить геобазы
         </button>
-        {embedded ? (
-          <button className="primary-button" type="button" disabled>
-            Ядро обновляется с приложением
-          </button>
-        ) : (
+        {!embedded && (
           <button
             className="primary-button"
             type="button"

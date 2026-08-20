@@ -95,6 +95,8 @@ test("android settings expose a signed GitHub release updater without transport 
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const updater = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/AppUpdater.java", import.meta.url), "utf8");
   assert.doesNotMatch(settings, /Один транспорт для исходящих соединений/);
+  assert.doesNotMatch(settings, />\s*Проверить версию\s*</);
+  assert.doesNotMatch(settings, /Ядро обновляется с приложением/);
   assert.match(settings, /Обновление OrcheRoute/);
   assert.match(updater, /api\.github\.com\/repos\/gooog1111\/OrcheRoute\/releases\/latest/);
   assert.match(updater, /SHA-256 загруженного APK не совпадает/);
