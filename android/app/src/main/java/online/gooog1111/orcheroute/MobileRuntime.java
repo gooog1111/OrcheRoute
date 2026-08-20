@@ -40,6 +40,7 @@ final class MobileRuntime {
     private String message = "OrcheRoute выключен";
     private boolean desiredEnabled;
     private boolean refreshActive;
+    private boolean refreshAllowlistScan;
     private volatile boolean refreshCancelRequested;
     private String refreshStatus = "idle";
     private String refreshPhase = "idle";
@@ -187,6 +188,17 @@ final class MobileRuntime {
             if ("GET".equals(verb) && "/v1/operations".equals(path)) return response(200, operations());
             if ("POST".equals(verb) && "/v1/operations/subscription-update/cancel".equals(path)) {
                 return response(202, cancelRefresh());
+            }
+            if ("POST".equals(verb) && "/v1/whitelist/scan".equals(path)) {
+                String networkState = connectivityState();
+                if (!desiredEnabled) return error(409, "vpn_not_enabled", "Сначала включите VPN");
+                if (!"allowlist".equals(networkState)) return error(409, "allowlist_not_detected",
+                        "Монитор сети не подтверждает режим белых списков");
+                allowlistRouteOverride = true;
+                allowlistWorkingFound = repository.whitelistCount() > 0;
+                allowlistLastScanAt = 0;
+                message = "Вручную формируем пул серверов для белых списков";
+                return response(202, scheduleRefresh(null, true, null, true, false, false));
             }
             if ("GET".equals(verb) && "/v1/qualification".equals(path)) return response(200, qualification());
             if ("GET".equals(verb) && "/v1/routes".equals(path)) return response(200, repository.routes());
@@ -426,7 +438,7 @@ final class MobileRuntime {
         if (refreshActive) return new JSONObject().put("accepted", false).put("already_running", true);
         JSONArray items = repository.enabledSubscriptions(onlyId, onlyGroup);
         if (onlyId != null && items.length() == 0) return new JSONObject().put("accepted", false).put("missing_or_disabled", true);
-        refreshActive = true; refreshStatus = "queued"; refreshPhase = "queued";
+        refreshActive = true; refreshAllowlistScan = allowlistScan; refreshStatus = "queued"; refreshPhase = "queued";
         refreshCancelRequested = false;
         refreshMessage = checkOnly ? "Проверка серверов поставлена в очередь" : "Обновление подписок поставлено в очередь"; refreshError = "";
         refreshCurrent = 0; refreshTotal = items.length(); refreshUpdatedAt = now();
@@ -665,7 +677,7 @@ final class MobileRuntime {
                 if (allowlistScan) {
                     try { repository.completeWhitelistScan(); } catch (JSONException ignored) { }
                 }
-                refreshActive = false; refreshUpdatedAt = now();
+                refreshActive = false; refreshAllowlistScan = false; refreshUpdatedAt = now();
                 refreshCancelRequested = false;
                 if (allowlistScan && allowlistRouteOverride) {
                     allowlistWorkingFound = repository.whitelistCount() > 0;
@@ -745,7 +757,8 @@ final class MobileRuntime {
     private synchronized JSONObject operations() throws JSONException {
         JSONObject subscription = new JSONObject().put("status", refreshStatus).put("phase", refreshPhase)
                 .put("message", refreshMessage).put("current", refreshCurrent).put("total", refreshTotal)
-                .put("updated_at", refreshUpdatedAt).put("active", refreshActive).put("connectivity", detectedInternetMode);
+                .put("updated_at", refreshUpdatedAt).put("active", refreshActive)
+                .put("allowlist_scan", refreshAllowlistScan).put("connectivity", detectedInternetMode);
         if (!refreshError.isEmpty()) subscription.put("error", refreshError);
         return new JSONObject().put("subscription_update", subscription)
                 .put("network_apply", networkOperation())

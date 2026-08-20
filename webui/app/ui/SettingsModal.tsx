@@ -867,6 +867,19 @@ function PoolNodes({
         <span className="field-label">
           {pool === "primary" ? "Основной пул" : pool === "emergency" ? "Аварийный пул" : "Пул белых списков"}
         </span>
+        {pool === "whitelist" && canEditPool && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void run(
+              () => actions.scanWhitelistPool(),
+              "Пул белых списков сформирован.",
+              { title: "Формируем пул белых списков", waitFor: "subscriptions" },
+            )}
+          >
+            Сформировать
+          </button>
+        )}
         {unavailable > 0 && (
           <button
             type="button"
@@ -3226,9 +3239,9 @@ function prepareSubscriptionImport(
     return {
       payloads: [
         {
-          name: base,
+          name: base || "BlackTemple",
           group,
-          parser,
+          parser: "blacktemple",
           secret: trimmed,
           interval_seconds,
           enabled,
@@ -3242,7 +3255,7 @@ function prepareSubscriptionImport(
     return {
       payloads: [
         {
-          name: base,
+          name: base || "WireGuard",
           group,
           parser: "wireguard",
           secret: trimmed,
@@ -3267,7 +3280,7 @@ function prepareSubscriptionImport(
       payloads: unique.length
         ? [
             {
-              name: base,
+              name: base || "Добавленные серверы",
               group,
               parser: "inline",
               secret: unique.join("\n"),
@@ -3305,11 +3318,9 @@ function prepareSubscriptionImport(
     } catch {
       /* keep sequence */
     }
+    const multiple = urls.length + (uniqueServers.length ? 1 : 0) > 1;
     return {
-      name:
-        urls.length + (uniqueServers.length ? 1 : 0) === 1
-          ? base
-          : `${base} · ${suffix}`,
+      name: base ? (multiple ? `${base} · ${suffix}` : base) : suffix,
       group,
       parser: "standard",
       secret: url,
@@ -3319,7 +3330,11 @@ function prepareSubscriptionImport(
   });
   if (uniqueServers.length)
     payloads.push({
-      name: urls.length ? `${base} · серверы` : base,
+      name: base
+        ? urls.length
+          ? `${base} · серверы`
+          : base
+        : "Добавленные серверы",
       group,
       parser: "inline",
       secret: uniqueServers.join("\n"),
@@ -3398,7 +3413,7 @@ function SubscriptionEditor({
   const preview = useMemo(
     () =>
       prepareSubscriptionImport(
-        name || "Источник",
+        name,
         group,
         "auto",
         secret,
@@ -3444,7 +3459,7 @@ function SubscriptionEditor({
         </header>
         <div className="subscription-editor-body">
           <div className="form-grid two">
-            <Field label="Название">
+            <Field label="Название" hint="Необязательно — определим автоматически">
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -3552,7 +3567,6 @@ function SubscriptionEditor({
             disabled={
               busy ||
               loadingSecret ||
-              !name.trim() ||
               !secret.trim() ||
               !preview.payloads.length
             }

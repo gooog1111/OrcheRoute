@@ -76,6 +76,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .whitelist-strip strong, .whitelist-strip small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .whitelist-strip strong { font-size: 12px; }
 .whitelist-strip small { color: var(--muted); font-size: 10px; }
+.whitelist-action { min-height: 34px; margin-left: auto; padding: 0 11px; flex: 0 0 auto; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-raised); color: var(--text); cursor: pointer; font-size: 10px; }
+.whitelist-action:hover:not(:disabled) { border-color: rgba(69,243,194,.38); }
+.whitelist-action:disabled { opacity: .5; cursor: not-allowed; }
 .metric-card { min-width: 0; padding: 20px; display: flex; align-items: flex-start; gap: 13px; border-right: 1px solid var(--line); }
 .metric-card:last-child { border-right: 0; }
 .metric-icon { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); }

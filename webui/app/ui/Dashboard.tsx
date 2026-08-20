@@ -100,7 +100,7 @@ export function Dashboard() {
   const whitelistPool = data?.pools.find((pool) => pool.id === "whitelist");
   const whitelistUpdate = data?.operations?.subscription_update;
   const whitelistScanning = Boolean(
-    whitelistUpdate?.active && whitelistUpdate.connectivity === "allowlist",
+    whitelistUpdate?.active && whitelistUpdate.allowlist_scan,
   );
   const whitelistOperation: OperationView | null = whitelistScanning
     ? {
@@ -123,6 +123,14 @@ export function Dashboard() {
       await refresh(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось остановить проверку");
+    }
+  };
+  const startWhitelistScan = async () => {
+    try {
+      await actions.scanWhitelistPool();
+      await refresh(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось запустить формирование пула");
     }
   };
   const stateLabel = enabled ? (statusText[data?.status.connectivity ?? "starting"] ?? "Проверка") : "Готов к запуску";
@@ -232,6 +240,16 @@ export function Dashboard() {
                   : `${whitelistPool?.alive ?? 0} доступных из ${whitelistPool?.total ?? 0}${whitelistPool?.selected ? " · используется сейчас" : ""}`}
               </small>
             </div>
+            {isAndroidRuntime() && (
+              <button
+                className="whitelist-action"
+                type="button"
+                disabled={busy}
+                onClick={() => void (whitelistScanning ? stopWhitelistScan() : startWhitelistScan())}
+              >
+                {whitelistScanning ? "Остановить" : "Сформировать"}
+              </button>
+            )}
           </div>
         )}
       </section>

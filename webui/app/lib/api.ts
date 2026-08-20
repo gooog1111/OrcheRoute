@@ -242,6 +242,7 @@ export type OperationSnapshot = {
     }>;
     updated_at: number;
     active: boolean;
+    allowlist_scan?: boolean;
     connectivity?: "normal" | "allowlist" | "offline" | "unknown";
   };
   network_apply: {
@@ -422,6 +423,9 @@ export const actions = {
   },
   cancelSubscriptionUpdate() {
     return request<{ accepted: boolean; active: boolean }>("/v1/operations/subscription-update/cancel", { method: "POST", body: "{}" });
+  },
+  scanWhitelistPool() {
+    return request<AcceptedOperation>("/v1/whitelist/scan", { method: "POST", body: "{}" }).then(requireAccepted);
   },
   refreshSubscription(id: string) {
     return request<AcceptedOperation>(`/v1/subscriptions/${encodeURIComponent(id)}/refresh`, { method: "POST", body: "{}" }).then(requireAccepted);

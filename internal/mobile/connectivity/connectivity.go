@@ -106,10 +106,12 @@ func Diagnose(ctx context.Context, config Config, probe Probe) (Result, error) {
 func Classify(observation Observation) Result {
 	anchors := observation.OpenAnchorGitHubAvailable && observation.OpenAnchorMozillaAvailable
 	open := observation.ConfiguredOpenAvailable && anchors
+	anyReachable := observation.AllowlistAvailable || observation.ConfiguredOpenAvailable ||
+		observation.OpenAnchorGitHubAvailable || observation.OpenAnchorMozillaAvailable
 	state := Offline
 	if open {
 		state = Normal
-	} else if observation.AllowlistAvailable {
+	} else if anyReachable {
 		state = Allowlist
 	}
 	return Result{

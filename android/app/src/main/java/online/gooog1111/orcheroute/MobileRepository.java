@@ -29,6 +29,7 @@ final class MobileRepository {
         ensure();
         migrateQualificationPolicy();
         migrateDetectedParsers();
+        migrateDisplayNames();
         seedDefaults();
     }
 
@@ -169,7 +170,7 @@ final class MobileRepository {
         long now = now();
         JSONObject item = new JSONObject()
                 .put("id", UUID.randomUUID().toString())
-                .put("name", required(payload, "name"))
+                .put("name", subscriptionName(payload))
                 .put("group", payload.optString("group", "primary"))
                 .put("parser", payload.optString("parser", "standard"))
                 .put("secret", required(payload, "secret"))
@@ -250,7 +251,7 @@ final class MobileRepository {
             String name = proxy.optString("name", "Сервер " + (i + 1));
             nodes.put(new JSONObject()
                     .put("id", name)
-                    .put("display_name", name)
+                    .put("display_name", displayName(proxy, i + 1))
                     .put("pool", subscription.optString("group", "primary"))
                     .put("priority", i + 1)
                     .put("alive", alive)
@@ -310,7 +311,7 @@ final class MobileRepository {
             JSONObject source = stored.getJSONObject(i);
             result.put(new JSONObject()
                     .put("id", source.getString("id"))
-                    .put("display_name", source.getString("display_name"))
+                    .put("display_name", displayName(source.optJSONObject("proxy"), i + 1))
                     .put("pool", source.getString("pool"))
                     .put("priority", source.optInt("priority", i + 1))
                     .put("alive", source.optBoolean("alive", true))
@@ -324,6 +325,7 @@ final class MobileRepository {
         for (int i = 0; i < whitelist.length(); i++) {
             JSONObject source = whitelist.getJSONObject(i);
             result.put(new JSONObject(source.toString())
+                    .put("display_name", displayName(source.optJSONObject("proxy"), i + 1))
                     .put("selected", whitelistSelected.equals(source.optString("id"))));
         }
         return result;
@@ -392,7 +394,7 @@ final class MobileRepository {
             JSONObject test = i < tests.length() ? tests.optJSONObject(i) : null;
             if (test == null || !test.optBoolean("alive", false)) continue;
             JSONObject proxy = proxies.getJSONObject(i);
-            nodes.put(new JSONObject().put("display_name", proxy.optString("name", "Сервер"))
+            nodes.put(new JSONObject().put("display_name", displayName(proxy, i + 1))
                     .put("pool", "whitelist").put("origin_pool", subscription.optString("group", "primary"))
                     .put("priority", nodes.length() + 1).put("alive", true)
                     .put("delay_ms", test.optInt("delay_ms", 0)).put("source_id", sourceId)
@@ -408,7 +410,7 @@ final class MobileRepository {
             JSONObject test = i < tests.length() ? tests.optJSONObject(i) : null;
             if (test == null || !test.optBoolean("alive", false)) continue;
             JSONObject proxy = proxies.getJSONObject(i);
-            nodes.put(new JSONObject().put("display_name", proxy.optString("name", "Сервер"))
+            nodes.put(new JSONObject().put("display_name", displayName(proxy, i + 1))
                     .put("origin_pool", subscription.optString("group", "primary")).put("priority", nodes.length() + 1)
                     .put("alive", true).put("delay_ms", test.optInt("delay_ms", 0)).put("source_id", sourceId)
                     .put("source_name", subscription.optString("name")).put("proxy", new JSONObject(proxy.toString())));
@@ -754,6 +756,52 @@ final class MobileRepository {
         String value = payload.optString(key, "").trim();
         if (value.isEmpty()) throw new JSONException("missing_" + key);
         return value;
+    }
+
+    private String subscriptionName(JSONObject payload) throws JSONException {
+        String explicit = payload.optString("name", "").trim();
+        if (!explicit.isEmpty()) return explicit;
+        String parser = payload.optString("parser", "standard");
+        String secret = payload.optString("secret", "").trim();
+        if ("blacktemple".equals(parser)) return "BlackTemple";
+        if ("wireguard".equals(parser)) return "WireGuard";
+        if ("inline".equals(parser)) return "Добавленные серверы";
+        try {
+            java.net.URI uri = new java.net.URI(secret.split("\\s+", 2)[0]);
+            String host = uri.getHost();
+            if (host != null && !host.trim().isEmpty()) return host;
+        } catch (Exception ignored) { }
+        return "Источник " + (root.getJSONArray("subscriptions").length() + 1);
+    }
+
+    private static String displayName(JSONObject proxy, int index) {
+        if (proxy == null) return "Сервер " + index;
+        String internal = proxy.optString("name", "").trim();
+        String label = internal.replaceFirst("^[A-Z0-9-]+-[0-9a-fA-F]{12}\\s*", "").trim();
+        if (!label.isEmpty() && !label.equals(internal)) return label;
+        if (!internal.isEmpty() && label.equals(internal)) return internal;
+        String type = proxy.optString("type", "VPN").toUpperCase(java.util.Locale.ROOT);
+        String server = proxy.optString("server", "").trim();
+        return server.isEmpty() ? type + " сервер" : type + " · " + server;
+    }
+
+    private void migrateDisplayNames() {
+        boolean changed = false;
+        try {
+            for (String key : new String[]{"nodes", "whitelist_nodes"}) {
+                JSONArray nodes = root.optJSONArray(key);
+                if (nodes == null) continue;
+                for (int i = 0; i < nodes.length(); i++) {
+                    JSONObject node = nodes.getJSONObject(i);
+                    String display = displayName(node.optJSONObject("proxy"), i + 1);
+                    if (!display.equals(node.optString("display_name"))) {
+                        node.put("display_name", display);
+                        changed = true;
+                    }
+                }
+            }
+            if (changed) save();
+        } catch (JSONException ignored) { }
     }
 
     private static void validate(JSONObject item) throws JSONException {

@@ -15,7 +15,8 @@ func TestClassifyThreeStates(t *testing.T) {
 		{"normal", Observation{AllowlistAvailable: true, ConfiguredOpenAvailable: true, OpenAnchorGitHubAvailable: true, OpenAnchorMozillaAvailable: true}, Normal},
 		{"allowlist", Observation{AllowlistAvailable: true, ConfiguredOpenAvailable: false, OpenAnchorGitHubAvailable: false, OpenAnchorMozillaAvailable: false}, Allowlist},
 		{"offline", Observation{}, Offline},
-		{"partial open is not normal", Observation{ConfiguredOpenAvailable: true, OpenAnchorGitHubAvailable: true}, Offline},
+		{"partial open is restricted, not offline", Observation{ConfiguredOpenAvailable: true, OpenAnchorGitHubAvailable: true}, Allowlist},
+		{"single reachable anchor proves a restricted network", Observation{OpenAnchorMozillaAvailable: true}, Allowlist},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
