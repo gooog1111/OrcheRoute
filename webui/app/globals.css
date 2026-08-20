@@ -160,6 +160,18 @@ button.node-row { cursor: pointer; }
 .node-row strong, .subscription-row strong { overflow: hidden; font-size: 12px; font-weight: 580; text-overflow: ellipsis; white-space: nowrap; }
 .node-row small, .subscription-row small { color: var(--faint); font-size: 10px; }
 .node-row em, .subscription-row em { color: var(--muted); font-size: 10px; font-style: normal; text-transform: uppercase; }
+.node-editor-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; border-bottom: 1px solid var(--line); background: var(--surface-soft); }
+.node-editor-row:last-child { border-bottom: 0; }
+.node-editor-row:hover, .node-editor-row.selected { background: var(--surface-raised); }
+.node-editor-main { min-width: 0; min-height: 58px; padding: 10px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.node-editor-main:disabled { opacity: .48; cursor: not-allowed; }
+.node-editor-main > span:nth-child(2) { min-width: 0; display: grid; gap: 2px; }
+.node-editor-main strong { overflow: hidden; font-size: 12px; font-weight: 580; text-overflow: ellipsis; white-space: nowrap; }
+.node-editor-main small { overflow: hidden; color: var(--faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.node-editor-main em { color: var(--muted); font-size: 10px; font-style: normal; white-space: nowrap; text-transform: uppercase; }
+.node-delete-button { align-self: center; min-height: 34px; margin-right: 10px; padding: 0 10px; border: 1px solid rgba(255,119,110,.28); border-radius: 8px; background: rgba(255,119,110,.06); color: var(--danger); cursor: pointer; font-size: 10px; }
+.node-delete-button:hover:not(:disabled) { background: rgba(255,119,110,.14); }
+.node-delete-button:disabled { opacity: .45; cursor: not-allowed; }
 .empty-state { margin: 0; padding: 18px; color: var(--muted); font-size: 12px; background: var(--surface-soft); }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .detail { min-height: 72px; padding: 14px; display: grid; align-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); }

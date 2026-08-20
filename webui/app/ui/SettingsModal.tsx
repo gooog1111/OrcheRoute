@@ -24,6 +24,7 @@ import {
   type DashboardData,
   type DnsConfig,
   type NetworkProfile,
+  type Node,
   type RouteState,
   type Subscription,
 } from "../lib/api";
@@ -839,6 +840,8 @@ function PoolNodes({
   run: Runner;
 }) {
   const [showUnavailable, setShowUnavailable] = useState(false);
+  const [deletingNode, setDeletingNode] = useState<Node | null>(null);
+  const canEditPool = isAndroidRuntime();
   const allNodes = data?.nodes.filter((node) => node.pool === pool) ?? [];
   const unavailable = allNodes.filter((node) => !node.alive).length;
   const nodes = showUnavailable
@@ -877,30 +880,45 @@ function PoolNodes({
       </div>
       <div className="node-list">
         {nodes.map((node) => (
-          <button
-            type="button"
-            className={`node-row ${node.selected ? "selected" : ""}`}
+          <div
+            className={`node-editor-row ${node.selected ? "selected" : ""}`}
             key={node.id}
-            disabled={!node.alive || busy || pool === "whitelist"}
-            onClick={() => pool !== "whitelist" &&
-              void run(
-                () => actions.setManual(node.id),
-                `Узел ${node.display_name} закреплён вручную.`,
-              )
-            }
           >
-            <span className={`node-status ${node.alive ? "alive" : ""}`} />
-            <span>
-              <strong>{node.display_name}</strong>
-              <small>
-                {node.source_name ||
-                  node.source_id ||
-                  "Источник прежнего формата"}{" "}
-                · {node.alive ? "доступен" : "недоступен"}
-              </small>
-            </span>
-            <em>{node.delay_ms ? `${node.delay_ms} мс` : "—"}</em>
-          </button>
+            <button
+              type="button"
+              className="node-editor-main"
+              disabled={!node.alive || busy || pool === "whitelist"}
+              onClick={() => pool !== "whitelist" &&
+                void run(
+                  () => actions.setManual(node.id),
+                  `Узел ${node.display_name} закреплён вручную.`,
+                )
+              }
+            >
+              <span className={`node-status ${node.alive ? "alive" : ""}`} />
+              <span>
+                <strong>{node.display_name}</strong>
+                <small>
+                  {node.source_name ||
+                    node.source_id ||
+                    "Источник прежнего формата"}{" "}
+                  · {node.alive ? "доступен" : "недоступен"}
+                </small>
+              </span>
+              <em>{node.delay_ms ? `${node.delay_ms} мс` : "—"}</em>
+            </button>
+            {canEditPool && (
+              <button
+                type="button"
+                className="node-delete-button"
+                disabled={busy}
+                onClick={() => setDeletingNode(node)}
+                aria-label={`Удалить ${node.display_name} из текущего пула`}
+              >
+                Удалить
+              </button>
+            )}
+          </div>
         ))}
         {!nodes.length && (
           <p className="empty-state">
@@ -910,6 +928,53 @@ function PoolNodes({
           </p>
         )}
       </div>
+      {deletingNode && (
+        <div
+          className="picker-dialog-backdrop"
+          role="presentation"
+          onMouseDown={() => !busy && setDeletingNode(null)}
+        >
+          <section
+            className="picker-dialog subscription-delete-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-pool-node-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <strong id="delete-pool-node-title">Удалить сервер из пула?</strong>
+                <small>Удаляется только текущая копия</small>
+              </div>
+              <button type="button" disabled={busy} onClick={() => setDeletingNode(null)} aria-label="Закрыть">×</button>
+            </header>
+            <div className="subscription-delete-body">
+              <p>«{deletingNode.display_name}» исчезнет из текущего пула.</p>
+              <small>Следующая проверка или обновление подписки сможет добавить сервер снова. Если он сейчас активен, OrcheRoute выберет следующий доступный сервер.</small>
+            </div>
+            <footer>
+              <button className="secondary-button" type="button" disabled={busy} onClick={() => setDeletingNode(null)}>Отмена</button>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void (async () => {
+                    const ok = await run(
+                      () => actions.deleteNode(deletingNode.id),
+                      "Сервер удалён из текущего пула. Обновление подписки сможет добавить его снова.",
+                      { title: "Удаляем сервер из пула" },
+                    );
+                    if (ok) setDeletingNode(null);
+                  })()
+                }
+              >
+                Удалить
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
       <div className="pool-audit">
         <div>
           {Object.entries(sources).map(([name, count]) => (

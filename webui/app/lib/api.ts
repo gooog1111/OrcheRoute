@@ -501,4 +501,10 @@ export const actions = {
   deleteSubscription(id: string) {
     return request<{ deleted: boolean }>(`/v1/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE", body: "{}" });
   },
+  deleteNode(id: string) {
+    return request<{
+      deleted: boolean;
+      node: { id: string; pool: Node["pool"]; was_selected: boolean; remaining: number };
+    }>(`/v1/nodes/${encodeURIComponent(id)}`, { method: "DELETE", body: "{}" });
+  },
 };

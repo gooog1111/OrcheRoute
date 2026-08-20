@@ -86,6 +86,11 @@ func Transition(input State, command Command) (Result, error) {
 			return Result{}, errors.New("source_id_required")
 		}
 		removeSource(&state, command.SourceID)
+	case "remove_node":
+		if command.NodeID == "" {
+			return Result{}, errors.New("node_id_required")
+		}
+		removeNode(&state, command.NodeID)
 	case "active":
 		candidate = selectCandidate(&state, false)
 	case "request":
@@ -197,6 +202,17 @@ func removeSource(state *State, sourceID string) {
 	kept := state.Nodes[:0]
 	for _, node := range state.Nodes {
 		if node.SourceID != sourceID {
+			kept = append(kept, node)
+		}
+	}
+	state.Nodes = kept
+	reindex(state)
+	validateSelection(state)
+}
+func removeNode(state *State, nodeID string) {
+	kept := state.Nodes[:0]
+	for _, node := range state.Nodes {
+		if node.ID != nodeID {
 			kept = append(kept, node)
 		}
 	}

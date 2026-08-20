@@ -181,6 +181,8 @@ final class MobileRuntime {
             if ("GET".equals(verb) && "/v1/status".equals(path)) return response(200, status());
             if ("GET".equals(verb) && "/v1/pools".equals(path)) return response(200, new JSONObject().put("pools", repository.pools()));
             if ("GET".equals(verb) && "/v1/nodes".equals(path)) return response(200, new JSONObject().put("nodes", repository.nodes()));
+            String poolNodeId = entityId(path, "/v1/nodes/");
+            if ("DELETE".equals(verb) && poolNodeId != null) return deletePoolNode(poolNodeId);
             if ("GET".equals(verb) && "/v1/subscriptions".equals(path)) return response(200, new JSONObject().put("subscriptions", repository.subscriptions()));
             if ("GET".equals(verb) && "/v1/operations".equals(path)) return response(200, operations());
             if ("POST".equals(verb) && "/v1/operations/subscription-update/cancel".equals(path)) {
@@ -1108,6 +1110,37 @@ final class MobileRuntime {
         String raw = path.substring(prefix.length(), path.length() - suffix.length());
         if (raw.isEmpty() || raw.contains("/")) return null;
         return Uri.decode(raw);
+    }
+    private static String entityId(String path, String prefix) {
+        if (path == null || !path.startsWith(prefix)) return null;
+        String raw = path.substring(prefix.length());
+        if (raw.isEmpty() || raw.contains("/")) return null;
+        return Uri.decode(raw);
+    }
+
+    private synchronized String deletePoolNode(String id) throws JSONException {
+        JSONObject deleted = repository.deleteNode(id);
+        if (deleted == null) return error(404, "node_not_found", "Сервер не найден");
+        String pool = deleted.optString("pool");
+        boolean selected = deleted.optBoolean("was_selected");
+        if ("whitelist".equals(pool)) allowlistWorkingFound = repository.whitelistCount() > 0;
+        if (selected) connectedNodeID = "";
+        if (selected && desiredEnabled) {
+            if ("whitelist".equals(pool) && allowlistRouteOverride) {
+                whitelistConnectPending = false;
+                if (requestWhitelistConnection()) {
+                    OrcheRouteVpnService.reload(context);
+                } else {
+                    allowlistWorkingFound = false;
+                    onWhitelistPoolEmpty();
+                    refreshError = "Пул белого списка пуст после удаления сервера";
+                    OrcheRouteVpnService.stopWithError(context);
+                }
+            } else {
+                restartIfEnabled();
+            }
+        }
+        return response(200, new JSONObject().put("deleted", true).put("node", deleted));
     }
 
     private static String emptyObject(String body) { return body == null || body.trim().isEmpty() ? "{}" : body; }

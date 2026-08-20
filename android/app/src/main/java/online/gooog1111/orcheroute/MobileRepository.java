@@ -422,6 +422,41 @@ final class MobileRepository {
 
     synchronized int whitelistCount() { JSONArray nodes = root.optJSONArray("whitelist_nodes"); return nodes == null ? 0 : nodes.length(); }
 
+    synchronized JSONObject deleteNode(String id) throws JSONException {
+        JSONObject normal = findNode(id);
+        JSONObject whitelist = findWhitelistNode(id);
+        if (normal == null && whitelist == null) return null;
+        String pool;
+        boolean wasSelected;
+        int remaining;
+        if (normal != null) {
+            pool = normal.optString("pool", "primary");
+            wasSelected = id.equals(root.optString("selected_node", ""));
+            JSONArray source = root.getJSONArray("nodes"), next = new JSONArray();
+            for (int i = 0; i < source.length(); i++) if (!id.equals(source.getJSONObject(i).optString("id"))) next.put(source.getJSONObject(i));
+            root.put("nodes", next);
+            if (wasSelected) {
+                root.remove("selected_node");
+                if ("manual".equals(mode())) root.put("mode", "auto");
+                selectBestLocked();
+            }
+            remaining = 0;
+            for (int i = 0; i < next.length(); i++) if (pool.equals(next.getJSONObject(i).optString("pool"))) remaining++;
+        } else {
+            pool = "whitelist";
+            wasSelected = id.equals(root.optString("selected_whitelist_node", ""));
+            whitelistTransitionLocked(new JSONObject().put("operation", "remove_node").put("node_id", id));
+            remaining = root.getJSONArray("whitelist_nodes").length();
+        }
+        if (normal != null && findNode(root.optString("selected_node", "")) == null) {
+            root.remove("selected_node");
+            selectBestLocked();
+        }
+        clearMissingSelectionLocked();
+        save();
+        return new JSONObject().put("id", id).put("pool", pool).put("was_selected", wasSelected).put("remaining", remaining);
+    }
+
     private JSONObject whitelistTransitionLocked(JSONObject command) throws JSONException {
         JSONObject state = new JSONObject().put("nodes", root.optJSONArray("whitelist_nodes") == null ? new JSONArray() : root.getJSONArray("whitelist_nodes"))
                 .put("selected_node", root.optString("selected_whitelist_node", ""))
@@ -675,6 +710,12 @@ final class MobileRepository {
 
     private JSONObject findNode(String id) throws JSONException {
         JSONArray items = root.getJSONArray("nodes");
+        for (int i = 0; i < items.length(); i++) if (id.equals(items.getJSONObject(i).optString("id"))) return items.getJSONObject(i);
+        return null;
+    }
+
+    private JSONObject findWhitelistNode(String id) throws JSONException {
+        JSONArray items = root.getJSONArray("whitelist_nodes");
         for (int i = 0; i < items.length(); i++) if (id.equals(items.getJSONObject(i).optString("id"))) return items.getJSONObject(i);
         return null;
     }
