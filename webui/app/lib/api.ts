@@ -278,6 +278,22 @@ type AndroidRuntimeBridge = {
   scanQr?: () => void;
   openTextFile?: () => void;
   saveTextFile?: (filename: string, content: string) => void;
+  appUpdateStatus?: () => string;
+  checkAppUpdate?: () => boolean;
+  installAppUpdate?: () => boolean;
+};
+
+export type AndroidAppUpdateStatus = {
+  state: "idle" | "checking" | "current" | "available" | "downloading" | "permission" | "installer" | "error";
+  message: string;
+  current_version: string;
+  current_version_code: number;
+  latest_version?: string;
+  latest_version_code?: number;
+  current?: number;
+  total?: number;
+  error?: string;
+  active: boolean;
 };
 
 function androidBridge() {
@@ -312,6 +328,26 @@ export function saveTextFile(filename: string, content: string) {
   if (typeof bridge?.saveTextFile !== "function") return false;
   bridge.saveTextFile(filename, content);
   return true;
+}
+
+export function getAndroidAppUpdateStatus(): AndroidAppUpdateStatus | null {
+  const bridge = androidBridge();
+  if (typeof bridge?.appUpdateStatus !== "function") return null;
+  try {
+    return JSON.parse(bridge.appUpdateStatus()) as AndroidAppUpdateStatus;
+  } catch {
+    return null;
+  }
+}
+
+export function checkAndroidAppUpdate() {
+  const bridge = androidBridge();
+  return typeof bridge?.checkAppUpdate === "function" && bridge.checkAppUpdate();
+}
+
+export function installAndroidAppUpdate() {
+  const bridge = androidBridge();
+  return typeof bridge?.installAppUpdate === "function" && bridge.installAppUpdate();
 }
 
 export function isEmbeddedRuntime() {

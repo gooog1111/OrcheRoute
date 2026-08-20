@@ -58,6 +58,7 @@ public final class MainActivity extends ComponentActivity {
     private WebView webView;
     private WebViewAssetLoader assetLoader;
     private String pendingTextFile = "";
+    private AppUpdater appUpdater;
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -95,6 +96,7 @@ public final class MainActivity extends ComponentActivity {
             return WindowInsetsCompat.CONSUMED;
         });
         setContentView(root);
+        appUpdater = new AppUpdater(this);
         ViewCompat.requestApplyInsets(root);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -105,6 +107,12 @@ public final class MainActivity extends ComponentActivity {
         });
         webView.loadUrl("https://" + APP_HOST + "/index.html");
         requestOperationalPermissions();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (appUpdater != null) appUpdater.resumeInstallIfPermitted();
     }
 
     private void requestOperationalPermissions() {
@@ -389,6 +397,21 @@ public final class MainActivity extends ComponentActivity {
         @JavascriptInterface
         public void saveTextFile(String filename, String content) {
             MainActivity.this.saveTextFile(filename, content);
+        }
+
+        @JavascriptInterface
+        public String appUpdateStatus() {
+            return appUpdater.status();
+        }
+
+        @JavascriptInterface
+        public boolean checkAppUpdate() {
+            return appUpdater.check();
+        }
+
+        @JavascriptInterface
+        public boolean installAppUpdate() {
+            return appUpdater.downloadAndInstall();
         }
     }
 

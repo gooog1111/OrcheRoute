@@ -15,6 +15,9 @@ import {
   actions,
   canOpenTextFile,
   canScanQr,
+  checkAndroidAppUpdate,
+  getAndroidAppUpdateStatus,
+  installAndroidAppUpdate,
   isEmbeddedRuntime,
   isAndroidRuntime,
   loadOperations,
@@ -1114,15 +1117,6 @@ function AndroidNetworkForm({
             </small>
           </button>
         ))}
-      </div>
-      <div className="context-note">
-        <strong>Один транспорт для исходящих соединений</strong>
-        <span>
-          Android `VpnService` выбирает underlying network для защищённых
-          сокетов OrcheRoute. Direct и соединение с VPN-сервером используют этот
-          транспорт; раздельное физическое связывание outbound-сокетов
-          недоступно обычному приложению без системных прав.
-        </span>
       </div>
       <ActionBar>
         <span>
@@ -2926,6 +2920,16 @@ function ComponentsForm({
   const [geoSource, setGeoSource] = useState("metacubex");
   const [geoIPURL, setGeoIPURL] = useState("");
   const [geoSiteURL, setGeoSiteURL] = useState("");
+  const [appUpdate, setAppUpdate] = useState(() =>
+    embedded ? getAndroidAppUpdateStatus() : null,
+  );
+  useEffect(() => {
+    if (!embedded) return;
+    const refresh = () => setAppUpdate(getAndroidAppUpdateStatus());
+    refresh();
+    const timer = window.setInterval(refresh, 750);
+    return () => window.clearInterval(timer);
+  }, [embedded]);
   useEffect(() => {
     if (components) {
       setGeoEnabled(components.auto_update);
@@ -3034,6 +3038,47 @@ function ComponentsForm({
           }
         />
       </div>
+      {embedded && (
+        <div className="editor-card">
+          <strong>Обновление OrcheRoute</strong>
+          <p className="route-help">
+            {appUpdate?.message ?? "Проверка обновлений доступна через GitHub Releases."}
+          </p>
+          {appUpdate?.state === "error" && appUpdate.error && (
+            <p className="field-error">{appUpdate.error}</p>
+          )}
+          {appUpdate?.total && appUpdate.state === "downloading" ? (
+            <div className="operation-progress-wrap">
+              <div className="operation-progress">
+                <span style={{ width: `${Math.min(100, Math.round(((appUpdate.current ?? 0) / appUpdate.total) * 100))}%` }} />
+              </div>
+              <small>{Math.round(((appUpdate.current ?? 0) / appUpdate.total) * 100)}%</small>
+            </div>
+          ) : null}
+          <ActionBar>
+            <span>
+              Установлена {appUpdate?.current_version ?? "—"}
+              {appUpdate?.latest_version ? ` · latest ${appUpdate.latest_version}` : ""}
+            </span>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={Boolean(appUpdate?.active)}
+              onClick={() => checkAndroidAppUpdate()}
+            >
+              Проверить обновление
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={Boolean(appUpdate?.active) || appUpdate?.state !== "available"}
+              onClick={() => installAndroidAppUpdate()}
+            >
+              Скачать и установить
+            </button>
+          </ActionBar>
+        </div>
+      )}
       <div className="editor-card">
         <strong>Источник GeoIP и GeoSite</strong>
         <p className="route-help">
