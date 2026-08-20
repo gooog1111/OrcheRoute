@@ -316,8 +316,8 @@ final class MobileRuntime {
             }
             if ("POST".equals(verb) && "/v1/subscriptions".equals(path)) {
                 JSONObject created = repository.create(new JSONObject(emptyObject(body)));
-                scheduleRefresh(created.getString("id"), false, null);
-                return response(201, new JSONObject().put("subscription", created));
+                return response(201, new JSONObject().put("subscription", created)
+                        .put("refresh_scheduled", false).put("refresh_required", true));
             }
             if ("POST".equals(verb) && "/v1/subscriptions/import".equals(path)) {
                 JSONArray input = new JSONObject(emptyObject(body)).optJSONArray("subscriptions");
@@ -342,8 +342,8 @@ final class MobileRuntime {
             }
             if ("PUT".equals(verb) && "/v1/subscriptions/default-emergency".equals(path)) {
                 repository.updateDefaultEmergency(new JSONObject(emptyObject(body)).optJSONArray("enabled_ids"));
-                JSONObject accepted = scheduleRefresh(null, false, null);
-                return response(200, new JSONObject().put("updated", true).put("refresh_scheduled", accepted.optBoolean("accepted")));
+                return response(200, new JSONObject().put("updated", true)
+                        .put("refresh_scheduled", false).put("refresh_required", true));
             }
             String subscriptionId = subscriptionId(path, "/refresh");
             if ("POST".equals(verb) && subscriptionId != null) return response(202, scheduleRefresh(subscriptionId, false, null));
@@ -376,8 +376,8 @@ final class MobileRuntime {
             if ("PATCH".equals(verb) && subscriptionId != null) {
                 JSONObject updated = repository.update(subscriptionId, new JSONObject(emptyObject(body)));
                 if (updated == null) return error(404, "subscription_not_found", "Подписка не найдена");
-                if (updated.optBoolean("enabled", true)) scheduleRefresh(subscriptionId, false, null);
-                return response(200, new JSONObject().put("subscription", updated));
+                return response(200, new JSONObject().put("subscription", updated)
+                        .put("refresh_scheduled", false).put("refresh_required", updated.optBoolean("enabled", true)));
             }
             if ("DELETE".equals(verb) && subscriptionId != null) {
                 return response(200, new JSONObject().put("deleted", repository.delete(subscriptionId)));

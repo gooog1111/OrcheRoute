@@ -2509,6 +2509,7 @@ function SubscriptionsForm({
   const [exporting, setExporting] = useState<Subscription | null>(null);
   const [deleting, setDeleting] = useState<Subscription | null>(null);
   const [copiedID, setCopiedID] = useState<string | null>(null);
+  const androidRuntime = isAndroidRuntime();
   const subscriptionUpdate = data?.operations?.subscription_update;
   const updateRunning = Boolean(
     subscriptionUpdate?.active ||
@@ -2653,8 +2654,12 @@ function SubscriptionsForm({
             onClick={() =>
               void run(
                 () => actions.updateDefaultEmergency(selectedDefaults),
-                "Набор аварийных источников сохранён, пул пересобран.",
-                { title: "Обновляем аварийный пул", waitFor: "subscriptions" },
+                androidRuntime
+                  ? "Набор аварийных источников сохранён. Для загрузки нажмите «Обновить»."
+                  : "Набор аварийных источников сохранён, пул пересобран.",
+                androidRuntime
+                  ? { title: "Сохраняем аварийные источники" }
+                  : { title: "Обновляем аварийный пул", waitFor: "subscriptions" },
               )
             }
           >
