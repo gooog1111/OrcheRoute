@@ -137,6 +137,20 @@ test("android prerelease builds use the red interface accent without changing st
   assert.match(activity, /class=\\"prerelease-theme\\"/);
 });
 
+test("android prerelease branding adds a beta header and red launcher icon", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const gradle = await readFile(new URL("../../android/app/build.gradle", import.meta.url), "utf8");
+  const manifest = await readFile(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+  const icon = await readFile(new URL("../../android/app/src/main/res/drawable/ic_launcher.xml", import.meta.url), "utf8");
+  assert.match(dashboard, /className="brand-beta">BETA/);
+  assert.match(css, /html\.prerelease-theme \.brand-beta \{ display: inline-flex/);
+  assert.match(gradle, /orcheRoutePrerelease \? "#FF5B61" : "#45F3C2"/);
+  assert.match(gradle, /orcheRoutePrerelease \? "OrcheRoute BETA" : "OrcheRoute"/);
+  assert.match(manifest, /android:label="@string\/app_name"/);
+  assert.match(icon, /@color\/launcher_accent/);
+});
+
 test("qualification UI exposes connectivity anchors and emergency per-source top", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(settings, /Доступно при белых списках/);

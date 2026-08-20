@@ -252,7 +252,7 @@ func (b *builder) android() error {
 		}
 		androidDir := filepath.Join(b.root, "android")
 		webOut := filepath.Join(b.root, "webui", "out")
-		if err := b.command(androidDir, androidEnv, gradle, "--no-daemon", "clean", "assembleDebug",
+		if err := b.command(androidDir, androidEnv, gradle, "--no-daemon", "--no-configuration-cache", "clean", "assembleDebug",
 			"-PorcherouteMobileCoreAar="+aar, "-PorcherouteWebAssets="+webOut); err != nil {
 			return err
 		}

@@ -201,7 +201,7 @@ export function Dashboard() {
       <header className="topbar">
         <a className="brand" href="#" aria-label="OrcheRoute">
           <span className="brand-mark"><span /><span /><span /></span>
-          <span><strong>OrcheRoute</strong><small>traffic orchestration</small></span>
+          <span><strong>OrcheRoute <em className="brand-beta">BETA</em></strong><small>traffic orchestration</small></span>
         </a>
         <div className="topbar-actions">
           <button className="icon-button" type="button" disabled={busy} onClick={() => setSettingsOpen(true)} aria-label="Открыть настройки">

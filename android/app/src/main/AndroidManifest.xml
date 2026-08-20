@@ -12,7 +12,7 @@
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
-        android:label="OrcheRoute"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.OrcheRoute"
         android:usesCleartextTraffic="false">
