@@ -3038,6 +3038,7 @@ function ComponentsForm({
     (geoEnabled !== components.auto_update ||
       geoInterval !== components.interval_hours),
   );
+  const geoSettingsChanged = sourceChanged || scheduleChanged;
   const customSourceValid =
     geoSource !== "custom" ||
     (geoIPURL.trim().startsWith("https://") &&
@@ -3208,8 +3209,8 @@ function ComponentsForm({
 		  </div>
 		</div>
 	  )}
-      <div className="editor-card">
-        <strong>Источник GeoIP и GeoSite</strong>
+      <div className="editor-card geo-settings-card">
+        <strong>GeoIP и GeoSite</strong>
         <p className="route-help">
           Выберите один совместимый набор. Новые файлы применятся после кнопки
           «Обновить геобазы», а списки категорий в маршрутах будут прочитаны
@@ -3255,90 +3256,80 @@ function ComponentsForm({
             </Field>
           </div>
         )}
-        <ActionBar>
-          <span>
-            {sourceChanged
-              ? "Источник изменён. Сохраните его, затем обновите геобазы."
-              : "Настройки источника сохранены."}
-          </span>
-          <button
-            className="primary-button"
-            type="button"
-            disabled={
-              busy || !components || !sourceChanged || !customSourceValid
-            }
-            onClick={() =>
-              void run(
-                async () => {
-                  await actions.updateComponentSettings(settingsPayload);
-                  await actions.updateComponents("geo");
-                },
-                "Источник GEO сохранён, GeoIP и GeoSite обновлены.",
-                { title: "Сохраняем и обновляем GEO", waitFor: "components" },
-              )
-            }
-          >
-            Сохранить и обновить
-          </button>
-        </ActionBar>
-      </div>
-      <div className="editor-card component-schedule">
-        <strong>Расписание GeoIP и GeoSite</strong>
-        <div className="form-grid two">
-          <Toggle
-            checked={geoEnabled}
-            onChange={setGeoEnabled}
-            label="Автоматическое обновление"
-          />
-          <Field label="Интервал">
-            <select
-              value={geoInterval}
-              disabled={!geoEnabled}
-              onChange={(event) => setGeoInterval(Number(event.target.value))}
-            >
-              <option value={6}>Каждые 6 часов</option>
-              <option value={12}>Каждые 12 часов</option>
-              <option value={24}>Раз в сутки</option>
-              <option value={48}>Раз в 2 дня</option>
-              <option value={72}>Раз в 3 дня</option>
-              <option value={168}>Раз в неделю</option>
-            </select>
-          </Field>
-        </div>
-        <ActionBar>
-          <span>
+        <div className="geo-settings-schedule">
+          <strong>Расписание обновления</strong>
+          <div className="form-grid two">
+            <Toggle
+              checked={geoEnabled}
+              onChange={setGeoEnabled}
+              label="Автоматическое обновление"
+            />
+            <Field label="Интервал">
+              <select
+                value={geoInterval}
+                disabled={!geoEnabled}
+                onChange={(event) => setGeoInterval(Number(event.target.value))}
+              >
+                <option value={6}>Каждые 6 часов</option>
+                <option value={12}>Каждые 12 часов</option>
+                <option value={24}>Раз в сутки</option>
+                <option value={48}>Раз в 2 дня</option>
+                <option value={72}>Раз в 3 дня</option>
+                <option value={168}>Раз в неделю</option>
+              </select>
+            </Field>
+          </div>
+          <p className="route-help">
             {embedded
               ? "Android запустит фоновую задачу при доступной сети; точное время может оптимизироваться системой."
               : "После сохранения systemd пересчитает время следующего запуска."}
+          </p>
+        </div>
+        <ActionBar>
+          <span>
+            {geoSettingsChanged
+              ? "Есть несохранённые настройки GEO."
+              : "Настройки GEO сохранены."}
           </span>
           <button
-            className="primary-button"
+            className="secondary-button"
             type="button"
             disabled={
-              busy || !components || !scheduleChanged || !customSourceValid
+              busy || !components || !geoSettingsChanged || !customSourceValid
             }
             onClick={() =>
               void run(
                 () => actions.updateComponentSettings(settingsPayload),
-                "Расписание GEO сохранено.",
-                { title: "Сохраняем расписание" },
+                "Настройки GEO сохранены.",
+                { title: "Сохраняем настройки GEO" },
               )
             }
           >
-            Сохранить расписание
+            Сохранить настройки
+          </button>
+          <button
+            className="primary-button"
+            type="button"
+            disabled={busy || !components || !customSourceValid}
+            onClick={() =>
+              void run(
+                async () => {
+                  if (geoSettingsChanged) {
+                    await actions.updateComponentSettings(settingsPayload);
+                  }
+                  await actions.updateComponents("geo");
+                },
+                "GeoIP и GeoSite обновлены.",
+                { title: "Обновляем GeoIP и GeoSite", waitFor: "components" },
+              )
+            }
+          >
+            Обновить геобазы
           </button>
         </ActionBar>
       </div>
-      <ActionBar>
-        <button
-          className="secondary-button"
-          type="button"
-          disabled={busy}
-          onClick={() => update("geo", "Обновляем GeoIP и GeoSite")}
-        >
-          Обновить геобазы
-        </button>
-        {!embedded && (
+      {!embedded && (
+        <ActionBar>
           <button
             className="primary-button"
             type="button"
@@ -3347,8 +3338,8 @@ function ComponentsForm({
           >
             Обновить Mihomo
           </button>
-        )}
-      </ActionBar>
+        </ActionBar>
+      )}
     </div>
   );
 }

@@ -403,6 +403,9 @@ html.prerelease-theme .input-wrap select {
 .geo-source-list span { min-width: 0; display: grid; gap: 3px; }
 .geo-source-list strong { font-size: 11px; }
 .geo-source-list small { color: var(--muted); font-size: 9px; line-height: 1.4; }
+.geo-settings-schedule { padding-top: 16px; display: grid; gap: 12px; border-top: 1px solid var(--line); }
+.geo-settings-schedule > strong { font-size: 12px; font-weight: 600; }
+.geo-settings-schedule > .route-help { margin: 0; }
 .default-source-card .action-bar { padding: 0; border: 0; background: transparent; }
 .subscription-list.editable .subscription-row { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
 .subscription-main { min-width: 0; display: grid; gap: 5px !important; }

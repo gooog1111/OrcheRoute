@@ -249,6 +249,13 @@ test("android exposes selectable geo sources and applies the selected source", a
   assert.match(runtime, /installed_geo_source/);
 });
 
+test("geo source, schedule, and update action share one settings card", async () => {
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  assert.match(settings, /editor-card geo-settings-card[\s\S]*geo-source-list[\s\S]*Расписание обновления[\s\S]*Обновить геобазы/);
+  assert.doesNotMatch(settings, /editor-card component-schedule/);
+  assert.match(settings, /if \(geoSettingsChanged\)[\s\S]*updateComponents\("geo"\)/);
+});
+
 test("android subscription export uses the system file picker", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
