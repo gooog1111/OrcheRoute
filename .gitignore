@@ -12,6 +12,12 @@ initial-credentials
 *.keystore
 local.properties
 
+# Local project notes and agent instructions (never publish)
+/AGENTS.md
+/PROJECT_STATUS.md
+/ARCHITECTURE_AUDIT.md
+/GO_MIGRATION.md
+
 # Generated packages, binaries and release staging
 /dist/
 /build/
