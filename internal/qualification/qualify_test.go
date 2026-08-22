@@ -11,6 +11,7 @@ type fakeBackend struct {
 	url        []Latency
 	speed      []SpeedEvidence
 	speedCalls int
+	speedBytes int64
 }
 
 type baselineBackend struct {
@@ -33,6 +34,7 @@ func (backend *fakeBackend) Speed(context.Context, []map[string]any, bool) ([]Sp
 	backend.speedCalls++
 	return backend.speed, nil
 }
+func (backend *fakeBackend) SetSpeedBytes(value int64) { backend.speedBytes = value }
 
 func goodDownloads(first, second float64) []Download {
 	return []Download{{OK: true, HTTPCode: 200, Bytes: SpeedBytes, BytesPerSecond: first}, {OK: true, HTTPCode: 200, Bytes: SpeedBytes, BytesPerSecond: second}}
@@ -107,6 +109,9 @@ func TestQualificationUsesTenPercentOfWANBaseline(t *testing.T) {
 	}
 	if result.Report.Qualified != 0 || result.Report.Outcomes["slow"] != 1 {
 		t.Fatalf("candidate should be below the dynamic threshold: %#v", result.Report)
+	}
+	if backend.speedBytes != MaxSpeedSampleBytes {
+		t.Fatalf("adaptive sample=%d want %d", backend.speedBytes, MaxSpeedSampleBytes)
 	}
 }
 
