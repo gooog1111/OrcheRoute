@@ -35,6 +35,8 @@ func main() {
 	flag.StringVar(&config.ComponentBinary, "component-binary", config.ComponentBinary, "component updater")
 	flag.StringVar(&config.CoreService, "core-service", config.CoreService, "Mihomo Windows service name")
 	flag.DurationVar(&config.ControllerEvery, "controller-interval", config.ControllerEvery, "controller interval")
+	flag.DurationVar(&config.ConnectivityEvery, "connectivity-interval", config.ConnectivityEvery, "physical-network monitor interval")
+	flag.DurationVar(&config.ConnectivityTimeout, "connectivity-timeout", config.ConnectivityTimeout, "physical-network probe timeout")
 	flag.BoolVar(&config.RequireAPIAuth, "api-auth", config.RequireAPIAuth, "require Bearer authentication for the control API")
 	flag.Parse()
 
@@ -98,6 +100,7 @@ func runServer(ctx context.Context, config serverruntime.Config) error {
 	}
 	defer runtime.Close()
 	go runtime.RunController(ctx)
+	go runtime.RunConnectivityMonitor(ctx)
 
 	api := newHTTPServer(config.Listen, runtime.APIHandler())
 	var web *http.Server

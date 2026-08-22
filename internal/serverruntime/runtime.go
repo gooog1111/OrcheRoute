@@ -26,21 +26,23 @@ import (
 )
 
 type Config struct {
-	Listen          string
-	WebListen       string
-	WebTLSListen    string
-	ProductionState string
-	StateDirectory  string
-	WebRoot         string
-	RuntimeEnv      string
-	ConfigDirectory string
-	MihomoAPI       string
-	MihomoBinary    string
-	UpdateBinary    string
-	NetworkBinary   string
-	ComponentBinary string
-	CoreService     string
-	ControllerEvery time.Duration
+	Listen              string
+	WebListen           string
+	WebTLSListen        string
+	ProductionState     string
+	StateDirectory      string
+	WebRoot             string
+	RuntimeEnv          string
+	ConfigDirectory     string
+	MihomoAPI           string
+	MihomoBinary        string
+	UpdateBinary        string
+	NetworkBinary       string
+	ComponentBinary     string
+	CoreService         string
+	ControllerEvery     time.Duration
+	ConnectivityEvery   time.Duration
+	ConnectivityTimeout time.Duration
 	// RequireAPIAuth protects the control API with the token from runtime.env.
 	// It may only be disabled for an API bound exclusively to loopback, as the
 	// Linux/Windows desktop packages do.
@@ -52,15 +54,16 @@ func DefaultConfig() Config {
 }
 
 type Runtime struct {
-	Config           Config
-	Store            *serverstate.Store
-	apiToken         string
-	controllerSecret string
-	client           *http.Client
-	mu               sync.RWMutex
-	lastDecision     controller.Decision
-	lastObservation  controller.Observation
-	startedAt        int64
+	Config                   Config
+	Store                    *serverstate.Store
+	apiToken                 string
+	controllerSecret         string
+	client                   *http.Client
+	mu                       sync.RWMutex
+	lastDecision             controller.Decision
+	lastObservation          controller.Observation
+	connectivityProbeFactory connectivityProbeFactory
+	startedAt                int64
 }
 
 func New(config Config) (*Runtime, error) {
@@ -69,6 +72,12 @@ func New(config Config) (*Runtime, error) {
 	}
 	if config.ControllerEvery <= 0 {
 		config.ControllerEvery = 10 * time.Second
+	}
+	if config.ConnectivityEvery <= 0 {
+		config.ConnectivityEvery = 10 * time.Second
+	}
+	if config.ConnectivityTimeout <= 0 {
+		config.ConnectivityTimeout = 6 * time.Second
 	}
 	_, stateErr := os.Stat(filepath.Join(config.StateDirectory, "state.db"))
 	freshState := os.IsNotExist(stateErr)

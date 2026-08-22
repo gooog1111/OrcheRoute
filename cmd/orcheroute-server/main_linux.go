@@ -32,6 +32,8 @@ func main() {
 	flag.StringVar(&config.ComponentBinary, "component-binary", config.ComponentBinary, "component updater")
 	flag.StringVar(&config.CoreService, "core-service", config.CoreService, "Mihomo systemd service")
 	flag.DurationVar(&config.ControllerEvery, "controller-interval", config.ControllerEvery, "controller interval")
+	flag.DurationVar(&config.ConnectivityEvery, "connectivity-interval", config.ConnectivityEvery, "physical-network monitor interval")
+	flag.DurationVar(&config.ConnectivityTimeout, "connectivity-timeout", config.ConnectivityTimeout, "physical-network probe timeout")
 	flag.BoolVar(&config.RequireAPIAuth, "api-auth", config.RequireAPIAuth, "require Bearer authentication for the control API")
 	flag.Parse()
 	runtime, err := serverruntime.New(config)
@@ -43,6 +45,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go runtime.RunController(ctx)
+	go runtime.RunConnectivityMonitor(ctx)
 	api := &http.Server{Addr: config.Listen, Handler: runtime.APIHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	var web *http.Server
 	errors := make(chan error, 3)
