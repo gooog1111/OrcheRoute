@@ -201,6 +201,7 @@ final class MobileRepository {
                 .put("url_timeout_ms", 3000)
                 .put("geo_timeout_ms", 5000)
                 .put("speed_timeout_ms", 15000)
+				.put("url_test_urls", defaultURLTestURLs())
                 .put("allowlist_probe_url", "https://ya.ru/")
                 .put("open_internet_probe_url", "https://www.cloudflare.com/cdn-cgi/trace");
         JSONObject unlimited = new JSONObject().put("url_limit", 0).put("speed_candidates", 0).put("speed_candidates_per_source", 0).put("keep", 0);
@@ -218,6 +219,7 @@ final class MobileRepository {
             if (!defaults.has("url_timeout_ms")) defaults.put("url_timeout_ms", 3000);
             if (!defaults.has("geo_timeout_ms")) defaults.put("geo_timeout_ms", 5000);
             if (!defaults.has("speed_timeout_ms")) defaults.put("speed_timeout_ms", 15000);
+			if (!defaults.has("url_test_urls")) defaults.put("url_test_urls", defaultURLTestURLs());
             if (!defaults.has("allowlist_probe_url")) defaults.put("allowlist_probe_url", "https://ya.ru/");
             String openProbe = defaults.optString("open_internet_probe_url", "");
             if (openProbe.isEmpty() || "https://www.gstatic.com/generate_204".equalsIgnoreCase(openProbe)) {
@@ -235,6 +237,13 @@ final class MobileRepository {
             throw new IllegalStateException(error);
         }
     }
+
+	private static JSONArray defaultURLTestURLs() {
+		return new JSONArray()
+				.put("https://www.gstatic.com/generate_204")
+				.put("https://cp.cloudflare.com/generate_204")
+				.put("https://www.msftconnecttest.com/connecttest.txt");
+	}
 
     synchronized JSONObject qualificationPolicy() throws JSONException {
         return new JSONObject(root.getJSONObject("qualification_policy").toString());

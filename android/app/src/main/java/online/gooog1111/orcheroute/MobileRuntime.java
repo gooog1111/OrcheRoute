@@ -564,10 +564,7 @@ final class MobileRuntime {
                     JSONArray urlSource = limit(tcpAlive, urlLimit);
                     JSONArray urlTests = new JSONArray();
                     final int urlBatchSize = 80;
-                    JSONArray testURLs = new JSONArray()
-                            .put("https://www.gstatic.com/generate_204")
-                            .put("https://cp.cloudflare.com/generate_204")
-                            .put("https://www.msftconnecttest.com/connecttest.txt");
+					JSONArray testURLs = effectivePolicy.getJSONArray("url_test_urls");
                     for (int offset = 0; offset < urlSource.length(); offset += urlBatchSize) {
                         int end = Math.min(urlSource.length(), offset + urlBatchSize);
                         updateRefresh("running", "url_test", "URL-test " + offset + "/" + urlSource.length() + " · «" + item.optString("name") + "»", offset, urlSource.length(), "");

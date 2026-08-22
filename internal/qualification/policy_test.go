@@ -59,6 +59,32 @@ func TestPolicyValidatesQualificationTimeouts(t *testing.T) {
 	}
 }
 
+func TestPolicyValidatesAndNormalizesURLTestURLs(t *testing.T) {
+	policy := DefaultPolicy()
+	defaults := policy["defaults"].(map[string]any)
+	defaults["url_test_urls"] = []any{" https://one.example/ping ", "https://two.example/204", "https://one.example/ping"}
+	validated, err := Validate(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	urls := validated["defaults"].(map[string]any)["url_test_urls"].([]any)
+	if len(urls) != 2 || urls[0] != "https://one.example/ping" || urls[1] != "https://two.example/204" {
+		t.Fatalf("URL-test URLs = %#v", urls)
+	}
+	extracted, err := URLTestURLs(validated)
+	if err != nil || len(extracted) != 2 || extracted[1] != "https://two.example/204" {
+		t.Fatalf("extracted URL-test URLs = %#v, err=%v", extracted, err)
+	}
+	validated["defaults"].(map[string]any)["url_test_urls"] = []any{}
+	if _, err := Validate(validated); err == nil || err.Error() != "invalid_url_test_urls" {
+		t.Fatalf("unexpected empty URL list validation: %v", err)
+	}
+	validated["defaults"].(map[string]any)["url_test_urls"] = []any{"file:///etc/passwd"}
+	if _, err := Validate(validated); err == nil || err.Error() != "invalid_url_test_url" {
+		t.Fatalf("unexpected URL validation: %v", err)
+	}
+}
+
 func TestPolicyValidatesConnectivityURLsAndEmergencyPerSourceLimit(t *testing.T) {
 	policy := DefaultPolicy()
 	validated, err := Validate(policy)

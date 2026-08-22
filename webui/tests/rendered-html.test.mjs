@@ -182,7 +182,7 @@ test("android locks portrait mode and settings save only changed drafts", async 
   const manifest = await readFile(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(manifest, /android:screenOrientation="portrait"/);
-  assert.match(settings, /disabled=\{busy \|\| !policy \|\| !policyChanged\}/);
+  assert.match(settings, /disabled=\{busy \|\| !policy \|\| !policyChanged \|\| !validTestURLs\}/);
   assert.match(settings, /disabled=\{busy \|\| !transportChanged\}/);
   assert.match(settings, /disabled=\{busy \|\| !dnsChanged\}/);
   assert.match(settings, /disabled=\{busy \|\| !profileChanged\}/);
@@ -252,6 +252,11 @@ test("qualification UI exposes connectivity anchors and emergency per-source top
   assert.match(settings, /url_timeout_ms/);
   assert.match(settings, /geo_timeout_ms/);
   assert.match(settings, /speed_timeout_ms/);
+  assert.match(settings, /url_test_urls/);
+  assert.match(settings, /Контрольные ссылки/);
+  assert.match(settings, /Добавить ссылку/);
+  assert.match(settings, /Удалить URL-test/);
+  assert.match(runtime, /effectivePolicy\.getJSONArray\("url_test_urls"\)/);
   assert.match(runtime, /engineTestTCP\(batch\.toString\(\), tcpTimeoutMs, 128\)/);
   assert.match(runtime, /engineTestProxiesMulti\(batch\.toString\(\), testURLs\.toString\(\), urlTimeoutMs, 80\)/);
   assert.match(runtime, /engineFilterCountries\(urlAlive\.toString\(\), excludedCountries\.toString\(\), geoTimeoutMs, 12\)/);

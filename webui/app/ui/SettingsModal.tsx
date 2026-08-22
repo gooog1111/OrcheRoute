@@ -128,6 +128,8 @@ function errorText(reason: unknown) {
     url_timeout_ms_out_of_range: "URL-таймаут должен быть от 1 до 30 секунд.",
     geo_timeout_ms_out_of_range: "GeoIP-таймаут должен быть от 1 до 15 секунд.",
     speed_timeout_ms_out_of_range: "Таймаут speed-test должен быть от 5 до 120 секунд.",
+    invalid_url_test_urls: "Добавьте от 1 до 16 ссылок для URL-test.",
+    invalid_url_test_url: "URL-test принимает только корректные HTTP(S)-ссылки без логина и пароля.",
     invalid_webui_username:
       "Логин: 3–64 символа, латинские буквы, цифры и знаки . _ @ -.",
     invalid_webui_password: "Пароль должен содержать не менее 12 символов.",
@@ -766,6 +768,11 @@ function QualificationForm({
   const [urlTimeout, setUrlTimeout] = useState("3");
   const [geoTimeout, setGeoTimeout] = useState("5");
   const [speedTimeout, setSpeedTimeout] = useState("15");
+  const [urlTestURLs, setURLTestURLs] = useState<string[]>([
+    "https://www.gstatic.com/generate_204",
+    "https://cp.cloudflare.com/generate_204",
+    "https://www.msftconnecttest.com/connecttest.txt",
+  ]);
   const [allowlistProbeURL, setAllowlistProbeURL] = useState("https://ya.ru/");
   const [openInternetProbeURL, setOpenInternetProbeURL] = useState("https://www.cloudflare.com/cdn-cgi/trace");
   const [emergencyTop, setEmergencyTop] = useState("100");
@@ -779,6 +786,11 @@ function QualificationForm({
     setUrlTimeout(String((policy.defaults.url_timeout_ms ?? 3000) / 1000));
     setGeoTimeout(String((policy.defaults.geo_timeout_ms ?? 5000) / 1000));
     setSpeedTimeout(String((policy.defaults.speed_timeout_ms ?? 15000) / 1000));
+    setURLTestURLs(policy.defaults.url_test_urls ?? [
+      "https://www.gstatic.com/generate_204",
+      "https://cp.cloudflare.com/generate_204",
+      "https://www.msftconnecttest.com/connecttest.txt",
+    ]);
     setAllowlistProbeURL(policy.defaults.allowlist_probe_url);
     setOpenInternetProbeURL(policy.defaults.open_internet_probe_url);
     setEmergencyTop(String(policy.pools.emergency.speed_candidates_per_source ?? 100));
@@ -795,6 +807,7 @@ function QualificationForm({
         url_timeout_ms: milliseconds(urlTimeout),
         geo_timeout_ms: milliseconds(geoTimeout),
         speed_timeout_ms: milliseconds(speedTimeout),
+        url_test_urls: urlTestURLs.map((value) => value.trim()),
         allowlist_probe_url: allowlistProbeURL.trim(),
         open_internet_probe_url: openInternetProbeURL.trim(),
       }
@@ -817,6 +830,17 @@ function QualificationForm({
   const policyChanged = Boolean(
     policyDraft && savedPolicy && !sameConfig(policyDraft, savedPolicy),
   );
+  const normalizedTestURLs = urlTestURLs.map((value) => value.trim());
+  const validTestURLs = normalizedTestURLs.length > 0 && normalizedTestURLs.length <= 16
+    && normalizedTestURLs.every((value) => {
+      try {
+        const parsed = new URL(value);
+        return (parsed.protocol === "https:" || parsed.protocol === "http:") && Boolean(parsed.hostname) && !parsed.username && !parsed.password;
+      } catch {
+        return false;
+      }
+    })
+    && new Set(normalizedTestURLs).size === normalizedTestURLs.length;
 
   const savePolicy = () =>
     nextDefaults && policy &&
@@ -873,6 +897,41 @@ function QualificationForm({
           <input type="number" min="5" max="120" step="1" value={speedTimeout} onChange={(event) => setSpeedTimeout(event.target.value)} />
         </Field>
       </div>
+      <Heading eyebrow="URL-test" title="Контрольные ссылки" compact />
+      <div className="url-test-editor">
+        <p>Сервер считается доступным, когда отвечает большинство указанных адресов.</p>
+        <div className="url-test-list">
+          {urlTestURLs.map((value, index) => (
+            <div className="url-test-row" key={index}>
+              <input
+                type="url"
+                aria-label={`URL-test ${index + 1}`}
+                value={value}
+                onChange={(event) => setURLTestURLs((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
+                placeholder="https://example.org/generate_204"
+              />
+              <button
+                type="button"
+                className="danger"
+                disabled={urlTestURLs.length === 1}
+                onClick={() => setURLTestURLs((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                aria-label={`Удалить URL-test ${index + 1}`}
+              >
+                Удалить
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={urlTestURLs.length >= 16}
+          onClick={() => setURLTestURLs((current) => [...current, ""])}
+        >
+          Добавить ссылку
+        </button>
+        {!validTestURLs && <small className="field-error">Укажите от 1 до 16 уникальных HTTP(S)-ссылок.</small>}
+      </div>
       <Heading eyebrow="Состояние сети" title="Контрольные адреса" compact />
       <div className="form-grid two">
         <Field label="Доступно при белых списках" hint="URL, который точно открывается при ограниченном доступе">
@@ -883,7 +942,7 @@ function QualificationForm({
         </Field>
       </div>
       <ActionBar>
-        <button className="primary-button" type="button" disabled={busy || !policy || !policyChanged} onClick={() => void savePolicy()}>
+        <button className="primary-button" type="button" disabled={busy || !policy || !policyChanged || !validTestURLs} onClick={() => void savePolicy()}>
           Сохранить
         </button>
       </ActionBar>

@@ -225,6 +225,15 @@ button.node-row { cursor: pointer; }
 .form-grid { display: grid; gap: 12px; }
 .form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.url-test-editor { padding: 15px; display: grid; gap: 11px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-soft); }
+.url-test-editor > p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.url-test-list { display: grid; gap: 8px; }
+.url-test-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.url-test-row input { min-width: 0; height: 39px; padding: 0 11px; border: 1px solid var(--line); border-radius: 10px; outline: 0; background: var(--surface-raised); color: var(--text); font-size: 11px; }
+.url-test-row input:focus { border-color: var(--line-strong); box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.06); }
+.url-test-row button { min-height: 39px; padding: 0 11px; border: 1px solid rgba(255,119,110,.28); border-radius: 9px; background: rgba(255,119,110,.06); color: var(--danger); cursor: pointer; font-size: 10px; }
+.url-test-row button:disabled { opacity: .4; cursor: not-allowed; }
+.field-error { color: var(--danger); font-size: 10px; }
 .form-field { min-width: 0; display: grid; gap: 7px; }
 .form-field > span { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: #c6cbce; font-size: 11px; font-weight: 560; }
 .form-field > span small { color: var(--faint); font-size: 9px; font-weight: 400; }

@@ -38,3 +38,13 @@ func TestURLMajorityDoesNotWaitForSlowThirdProbe(t *testing.T) {
 		t.Fatalf("majority waited for slow third URL: %v", elapsed)
 	}
 }
+
+func TestCustomURLAcceptsAnySuccessfulHTTPStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+	if _, err := probeURLMajority(context.Background(), server.Client(), []URLTarget{{URL: server.URL}}); err != nil {
+		t.Fatalf("custom URL-test rejected successful status: %v", err)
+	}
+}

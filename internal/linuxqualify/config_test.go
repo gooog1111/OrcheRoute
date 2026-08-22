@@ -62,3 +62,13 @@ func TestDefaultQualificationConcurrencyAndURLs(t *testing.T) {
 		t.Fatalf("URL targets = %d, want 3", len(config.URLTests))
 	}
 }
+
+func TestCustomURLAcceptsAnySuccessfulHTTPStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+	if _, err := probeURLMajority(context.Background(), server.Client(), "", []URLTarget{{URL: server.URL}}); err != nil {
+		t.Fatalf("custom URL-test rejected successful status: %v", err)
+	}
+}
