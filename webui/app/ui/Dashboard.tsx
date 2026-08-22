@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { actions, isAndroidRuntime, loadDashboard, loadLiveDashboard, type ConnectionIdentity, type DashboardData, type Node } from "../lib/api";
+import { actions, getAndroidAppUpdateStatus, installAndroidAppUpdate, isAndroidRuntime, loadDashboard, loadLiveDashboard, type AndroidAppUpdateStatus, type ConnectionIdentity, type DashboardData, type Node } from "../lib/api";
 import { ChevronIcon, CloseIcon, GlobeIcon, PowerIcon, RefreshIcon, RouteIcon, ServerIcon, SettingsIcon } from "./Icons";
 import { SettingsModal as EditableSettingsModal, type SettingsTab } from "./SettingsModal";
 import { OperationPanel, type OperationView } from "./OperationPanel";
@@ -59,10 +59,20 @@ export function Dashboard() {
   const [tab, setTab] = useState<SettingsTab>("general");
   const [operationView, setOperationView] = useState<OperationView | null>(null);
   const [stoppingWhitelist, setStoppingWhitelist] = useState(false);
+  const [appUpdate, setAppUpdate] = useState<AndroidAppUpdateStatus | null>(null);
+  const [dismissedUpdate, setDismissedUpdate] = useState("");
   const dataRef = useRef<DashboardData | null>(null);
   const refreshInFlight = useRef(false);
 
   useEffect(() => { dataRef.current = data; }, [data]);
+
+  useEffect(() => {
+    if (!isAndroidRuntime()) return;
+    const refreshUpdate = () => setAppUpdate(getAndroidAppUpdateStatus());
+    refreshUpdate();
+    const timer = window.setInterval(refreshUpdate, 750);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const refresh = useCallback(async (quiet = false, live = false) => {
     if (refreshInFlight.current) return;
@@ -112,6 +122,13 @@ export function Dashboard() {
   }, [operationView?.state]);
 
   const enabled = data?.status.service?.enabled ?? data?.status.connectivity !== "disabled";
+  const newerAppVersion = Boolean(
+    appUpdate?.latest_version
+      && (appUpdate.latest_version_code ?? 0) > appUpdate.current_version_code,
+  );
+  const showAppUpdate = newerAppVersion
+    && appUpdate?.latest_version !== dismissedUpdate
+    && ["available", "downloading", "permission", "installer", "error"].includes(appUpdate?.state ?? "");
   const healthy = enabled && data?.status.wan.available === true && !data?.status.stale;
   const activePool = data?.pools.find((pool) => pool.selected);
   const allAliveNodes = data?.pools.reduce((sum, pool) => sum + pool.alive, 0) ?? 0;
@@ -304,7 +321,66 @@ export function Dashboard() {
           onReload={() => refresh(true)}
         />
       )}
+      {showAppUpdate && !settingsOpen && appUpdate && (
+        <AppUpdatePrompt
+          update={appUpdate}
+          onLater={() => setDismissedUpdate(appUpdate.latest_version ?? "")}
+          onInstall={() => installAndroidAppUpdate()}
+        />
+      )}
     </main>
+  );
+}
+
+function AppUpdatePrompt({
+  update,
+  onLater,
+  onInstall,
+}: {
+  update: AndroidAppUpdateStatus;
+  onLater: () => void;
+  onInstall: () => void;
+}) {
+  const progress = update.total
+    ? Math.min(100, Math.round(((update.current ?? 0) / update.total) * 100))
+    : 0;
+  const downloading = update.state === "downloading";
+  const retry = update.state === "error";
+  const canInstall = update.state === "available" || retry;
+  return (
+    <div className="picker-dialog-backdrop app-update-backdrop" role="presentation">
+      <section className="picker-dialog subscription-delete-dialog app-update-prompt" role="alertdialog" aria-modal="true" aria-labelledby="app-update-title">
+        <header>
+          <div>
+            <small>{update.channel === "beta" ? "BETA-КАНАЛ" : "STABLE-КАНАЛ"}</small>
+            <strong id="app-update-title">Доступно обновление OrcheRoute</strong>
+          </div>
+        </header>
+        <div className="app-update-body">
+          <div className="app-update-version">
+            <span>{update.current_version}</span>
+            <strong>→</strong>
+            <span>{update.latest_version}</span>
+          </div>
+          {update.channel === "beta" && (
+            <p className="app-update-warning">Это тестовая версия. Возможны ошибки VPN и переключения сети.</p>
+          )}
+          <p>{update.error || update.message}</p>
+          {downloading && update.total ? (
+            <div className="operation-progress-wrap">
+              <div className="operation-progress"><span style={{ width: `${progress}%` }} /></div>
+              <small>{progress}%</small>
+            </div>
+          ) : null}
+        </div>
+        <footer>
+          <button className="secondary-button" type="button" disabled={update.active} onClick={onLater}>Позже</button>
+          <button className="primary-button" type="button" disabled={update.active || !canInstall} onClick={onInstall}>
+            {retry ? "Повторить" : downloading ? "Загружаем…" : update.state === "permission" ? "Ожидаем разрешение" : "Скачать и установить"}
+          </button>
+        </footer>
+      </section>
+    </div>
   );
 }
 

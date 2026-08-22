@@ -247,7 +247,7 @@ func probeURL(ctx context.Context, client *http.Client, proxyAddress string, tar
 		if response, requestErr := client.Do(request); requestErr == nil {
 			defer response.Body.Close()
 			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
-			if response.StatusCode == target.StatusCode {
+			if acceptedURLStatus(response.StatusCode, target.StatusCode) {
 				return time.Since(started).Seconds(), nil
 			}
 		}
@@ -300,10 +300,21 @@ func curlURL(ctx context.Context, proxyAddress string, target URLTarget) (float6
 		return 0, err
 	}
 	parts := strings.Fields(string(output))
-	if len(parts) != 2 || parts[0] != strconv.Itoa(target.StatusCode) {
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("unexpected status")
+	}
+	status, statusErr := strconv.Atoi(parts[0])
+	if statusErr != nil || !acceptedURLStatus(status, target.StatusCode) {
 		return 0, fmt.Errorf("unexpected status")
 	}
 	return strconv.ParseFloat(parts[1], 64)
+}
+
+func acceptedURLStatus(actual, expected int) bool {
+	if expected > 0 {
+		return actual == expected
+	}
+	return actual >= http.StatusOK && actual < http.StatusBadRequest
 }
 
 func directClient(config Config) (*http.Client, func()) {

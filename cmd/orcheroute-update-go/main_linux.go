@@ -175,6 +175,14 @@ func run(ctx context.Context, options options) error {
 	blacktemple := subscriptions.BlackTempleFetcher{CredentialsPath: credentialsPath}
 	var fetcher subscriptions.Fetcher = subscriptions.FetcherMap{subscriptions.Standard: standard, subscriptions.BlackTemple: blacktemple, subscriptions.Inline: subscriptions.InlineFetcher{}, subscriptions.WireGuard: subscriptions.WireGuardFetcher{}}
 	backendConfig := linuxqualify.DefaultConfig()
+	testURLs, err := qualification.URLTestURLs(validatedPolicy)
+	if err != nil {
+		return err
+	}
+	backendConfig.URLTests = make([]linuxqualify.URLTarget, 0, len(testURLs))
+	for _, target := range testURLs {
+		backendConfig.URLTests = append(backendConfig.URLTests, linuxqualify.URLTarget{URL: target})
+	}
 	backendConfig.MihomoBinary = options.Mihomo
 	backendConfig.Interface = vpnRole.Interface
 	backendConfig.Mark = 0x5352

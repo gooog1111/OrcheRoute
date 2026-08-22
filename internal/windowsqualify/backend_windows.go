@@ -254,7 +254,7 @@ func probeURLMajority(ctx context.Context, client *http.Client, targets []URLTar
 				if requestErr == nil {
 					_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
 					_ = response.Body.Close()
-					if response.StatusCode == target.StatusCode {
+					if acceptedURLStatus(response.StatusCode, target.StatusCode) {
 						results <- result{latency: time.Since(started).Seconds()}
 						return
 					}
@@ -282,6 +282,13 @@ func probeURLMajority(ctx context.Context, client *http.Client, targets []URLTar
 		}
 	}
 	return 0, fmt.Errorf("url_majority_failed")
+}
+
+func acceptedURLStatus(actual, expected int) bool {
+	if expected > 0 {
+		return actual == expected
+	}
+	return actual >= http.StatusOK && actual < http.StatusBadRequest
 }
 
 func coreConfig(config Config, proxyValue map[string]any, port int) map[string]any {

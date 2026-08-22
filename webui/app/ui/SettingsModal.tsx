@@ -36,7 +36,7 @@ import { ChevronIcon, CloseIcon } from "./Icons";
 import { OperationPanel, type OperationView } from "./OperationPanel";
 
 export type SettingsTab =
-  "general" | "access" | "network" | "routes" | "sources" | "components";
+  "general" | "access" | "network" | "routes" | "sources" | "qualification" | "components";
 
 type Props = {
   data: DashboardData | null;
@@ -124,6 +124,12 @@ function errorText(reason: unknown) {
     invalid_wireguard_config:
       "Конфигурация WireGuard/AmneziaWG неполная или имеет неверный формат.",
     invalid_country_code: "Коды стран должны состоять из двух латинских букв.",
+    tcp_timeout_ms_out_of_range: "TCP-таймаут должен быть от 0,5 до 10 секунд.",
+    url_timeout_ms_out_of_range: "URL-таймаут должен быть от 1 до 30 секунд.",
+    geo_timeout_ms_out_of_range: "GeoIP-таймаут должен быть от 1 до 15 секунд.",
+    speed_timeout_ms_out_of_range: "Таймаут speed-test должен быть от 5 до 120 секунд.",
+    invalid_url_test_urls: "Добавьте от 1 до 16 ссылок для URL-test.",
+    invalid_url_test_url: "URL-test принимает только корректные HTTP(S)-ссылки без логина и пароля.",
     invalid_webui_username:
       "Логин: 3–64 символа, латинские буквы, цифры и знаки . _ @ -.",
     invalid_webui_password: "Пароль должен содержать не менее 12 символов.",
@@ -191,12 +197,14 @@ export function SettingsModal({
   );
   const [operationCancellable, setOperationCancellable] = useState(false);
   const [operationCancelling, setOperationCancelling] = useState(false);
+  const [navEdges, setNavEdges] = useState({ left: false, right: false });
   const desktopMode = isEmbeddedRuntime();
   const touchStart = useRef<{ x: number; y: number; interactive: boolean } | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
   const tabs = useMemo<SettingsTab[]>(
     () => desktopMode
-      ? ["general", "network", "routes", "sources", "components"]
-      : ["general", "access", "network", "routes", "sources", "components"],
+      ? ["general", "network", "routes", "sources", "qualification", "components"]
+      : ["general", "access", "network", "routes", "sources", "qualification", "components"],
     [desktopMode],
   );
 
@@ -208,6 +216,44 @@ export function SettingsModal({
     }, 2600);
     return () => window.clearTimeout(timer);
   }, [operationView?.state]);
+
+  const updateNavEdges = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const max = Math.max(0, nav.scrollWidth - nav.clientWidth);
+    setNavEdges({ left: nav.scrollLeft > 3, right: nav.scrollLeft < max - 3 });
+  }, []);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const frame = window.requestAnimationFrame(updateNavEdges);
+    nav.addEventListener("scroll", updateNavEdges, { passive: true });
+    window.addEventListener("resize", updateNavEdges);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      nav.removeEventListener("scroll", updateNavEdges);
+      window.removeEventListener("resize", updateNavEdges);
+    };
+  }, [tabs.length, updateNavEdges]);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    const active = nav?.querySelector<HTMLElement>("button.active");
+    if (!nav || !active) return;
+    const left = active.offsetLeft;
+    const right = left + active.offsetWidth;
+    if (left < nav.scrollLeft) nav.scrollTo({ left, behavior: "smooth" });
+    else if (right > nav.scrollLeft + nav.clientWidth) {
+      nav.scrollTo({ left: right - nav.clientWidth, behavior: "smooth" });
+    }
+  }, [activeTab]);
+
+  const scrollNavigation = (direction: -1 | 1) => {
+    const nav = navRef.current;
+    if (!nav) return;
+    nav.scrollBy({ left: direction * Math.max(120, nav.clientWidth * 0.65), behavior: "smooth" });
+  };
 
   useEffect(() => {
     if (!busy) return;
@@ -472,7 +518,7 @@ export function SettingsModal({
     data.network.apply.revision === data.network.desired.revision &&
     ["failed", "blocked"].includes(data.network.apply.status ?? ""),
   );
-  const baseOperation: OperationView = lastApplyFailed
+  const baseOperation: OperationView | null = lastApplyFailed
     ? {
         state: "error",
         title: "Не удалось применить настройки",
@@ -491,13 +537,7 @@ export function SettingsModal({
           step: 0,
           steps: [],
         }
-      : {
-          state: "idle",
-          title: "Настройки применены",
-          detail: "Сохранённый сетевой профиль совпадает с действующим.",
-          step: 0,
-          steps: [],
-        };
+      : null;
   const displayedOperation = operationView ?? baseOperation;
   const applyNetwork = () => {
     if (!data?.network || data.network.in_sync) return;
@@ -567,7 +607,9 @@ export function SettingsModal({
           aria-busy={busy}
           inert={busy ? true : undefined}
         >
-          <nav className="settings-nav" aria-label="Разделы настроек">
+          <div className="settings-nav-scroll">
+          <button className="settings-nav-edge left" type="button" disabled={!navEdges.left} onClick={() => scrollNavigation(-1)} aria-label="Предыдущие разделы">‹</button>
+          <nav ref={navRef} className="settings-nav" aria-label="Разделы настроек">
             <Tab
               active={activeTab === "general"}
               onClick={() => onTab("general")}
@@ -596,11 +638,18 @@ export function SettingsModal({
               label="Подписки"
             />
             <Tab
+              active={activeTab === "qualification"}
+              onClick={() => onTab("qualification")}
+              label="Квалификация"
+            />
+            <Tab
               active={activeTab === "components"}
               onClick={() => onTab("components")}
               label="Обновления"
             />
           </nav>
+          <button className="settings-nav-edge right" type="button" disabled={!navEdges.right} onClick={() => scrollNavigation(1)} aria-label="Следующие разделы">›</button>
+          </div>
           <div className="settings-content" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
             {activeTab === "general" && (
               <GeneralForm data={data} busy={busy} run={run} />
@@ -617,6 +666,9 @@ export function SettingsModal({
             )}
             {activeTab === "sources" && (
               <SubscriptionsForm data={data} busy={busy} run={run} />
+            )}
+            {activeTab === "qualification" && (
+              <QualificationForm data={data} busy={busy} run={run} />
             )}
             {activeTab === "components" && (
               <ComponentsForm data={data} busy={busy} run={run} />
@@ -681,67 +733,7 @@ function GeneralForm({
   busy: boolean;
   run: Runner;
 }) {
-  const policy = data?.qualification?.policy;
   const currentNode = data?.nodes.find((node) => node.selected && node.alive);
-  const [countries, setCountries] = useState<string[]>([]);
-  const [speed, setSpeed] = useState("10");
-  const [stability, setStability] = useState("65");
-  const [allowlistProbeURL, setAllowlistProbeURL] = useState("https://ya.ru/");
-  const [openInternetProbeURL, setOpenInternetProbeURL] = useState("https://www.cloudflare.com/cdn-cgi/trace");
-  const [emergencyTop, setEmergencyTop] = useState("100");
-
-  useEffect(() => {
-    if (!policy) return;
-    setCountries(policy.defaults.excluded_countries);
-    setSpeed(String(policy.defaults.min_speed_mbps));
-    setStability(String(Math.round(policy.defaults.stability_ratio * 100)));
-    setAllowlistProbeURL(policy.defaults.allowlist_probe_url);
-    setOpenInternetProbeURL(policy.defaults.open_internet_probe_url);
-    setEmergencyTop(String(policy.pools.emergency.speed_candidates_per_source ?? 100));
-  }, [policy]);
-
-  const policyDraft = policy
-    ? {
-        defaults: {
-          excluded_countries: countries,
-          min_speed_mbps: Number(speed),
-          stability_ratio: Number(stability) / 100,
-          allowlist_probe_url: allowlistProbeURL.trim(),
-          open_internet_probe_url: openInternetProbeURL.trim(),
-        },
-        emergency_top: Number(emergencyTop),
-      }
-    : null;
-  const savedPolicy = policy
-    ? {
-        defaults: policy.defaults,
-        emergency_top: policy.pools.emergency.speed_candidates_per_source ?? 100,
-      }
-    : null;
-  const policyChanged = Boolean(
-    policyDraft && savedPolicy && !sameConfig(policyDraft, savedPolicy),
-  );
-
-  const savePolicy = () =>
-    run(
-      () =>
-        actions.updateQualification(
-          {
-            excluded_countries: countries,
-            min_speed_mbps: Number(speed),
-            stability_ratio: Number(stability) / 100,
-            allowlist_probe_url: allowlistProbeURL.trim(),
-            open_internet_probe_url: openInternetProbeURL.trim(),
-          },
-          {
-            emergency: {
-              ...policy!.pools.emergency,
-              speed_candidates_per_source: Number(emergencyTop),
-            },
-          },
-        ),
-      "Политика проверки сохранена. Она начнёт действовать при следующем обновлении подписок.",
-    );
 
   return (
     <div className="settings-section">
@@ -790,84 +782,202 @@ function GeneralForm({
         <PoolNodes key={pool} data={data} pool={pool} busy={busy} run={run} />
       ))}
       <PoolNodes data={data} pool="whitelist" busy={busy} run={run} />
+    </div>
+  );
+}
+
+function QualificationForm({
+  data,
+  busy,
+  run,
+}: {
+  data: DashboardData | null;
+  busy: boolean;
+  run: Runner;
+}) {
+  const policy = data?.qualification?.policy;
+  const [countries, setCountries] = useState<string[]>([]);
+  const [speed, setSpeed] = useState("10");
+  const [stability, setStability] = useState("65");
+  const [tcpTimeout, setTcpTimeout] = useState("2");
+  const [urlTimeout, setUrlTimeout] = useState("3");
+  const [geoTimeout, setGeoTimeout] = useState("5");
+  const [speedTimeout, setSpeedTimeout] = useState("15");
+  const [urlTestURLs, setURLTestURLs] = useState<string[]>([
+    "https://www.gstatic.com/generate_204",
+    "https://cp.cloudflare.com/generate_204",
+    "https://www.msftconnecttest.com/connecttest.txt",
+  ]);
+  const [allowlistProbeURL, setAllowlistProbeURL] = useState("https://ya.ru/");
+  const [openInternetProbeURL, setOpenInternetProbeURL] = useState("https://www.cloudflare.com/cdn-cgi/trace");
+  const [emergencyTop, setEmergencyTop] = useState("100");
+
+  useEffect(() => {
+    if (!policy) return;
+    setCountries(policy.defaults.excluded_countries);
+    setSpeed(String(policy.defaults.min_speed_mbps));
+    setStability(String(Math.round(policy.defaults.stability_ratio * 100)));
+    setTcpTimeout(String((policy.defaults.tcp_timeout_ms ?? 2000) / 1000));
+    setUrlTimeout(String((policy.defaults.url_timeout_ms ?? 3000) / 1000));
+    setGeoTimeout(String((policy.defaults.geo_timeout_ms ?? 5000) / 1000));
+    setSpeedTimeout(String((policy.defaults.speed_timeout_ms ?? 15000) / 1000));
+    setURLTestURLs(policy.defaults.url_test_urls ?? [
+      "https://www.gstatic.com/generate_204",
+      "https://cp.cloudflare.com/generate_204",
+      "https://www.msftconnecttest.com/connecttest.txt",
+    ]);
+    setAllowlistProbeURL(policy.defaults.allowlist_probe_url);
+    setOpenInternetProbeURL(policy.defaults.open_internet_probe_url);
+    setEmergencyTop(String(policy.pools.emergency.speed_candidates_per_source ?? 100));
+  }, [policy]);
+
+  const milliseconds = (seconds: string) => Math.round(Number(seconds) * 1000);
+  const nextDefaults = policy
+    ? {
+        ...policy.defaults,
+        excluded_countries: countries,
+        min_speed_mbps: Number(speed),
+        stability_ratio: Number(stability) / 100,
+        tcp_timeout_ms: milliseconds(tcpTimeout),
+        url_timeout_ms: milliseconds(urlTimeout),
+        geo_timeout_ms: milliseconds(geoTimeout),
+        speed_timeout_ms: milliseconds(speedTimeout),
+        url_test_urls: urlTestURLs.map((value) => value.trim()),
+        allowlist_probe_url: allowlistProbeURL.trim(),
+        open_internet_probe_url: openInternetProbeURL.trim(),
+      }
+    : null;
+  const policyDraft = nextDefaults
+    ? { defaults: nextDefaults, emergency_top: Number(emergencyTop) }
+    : null;
+  const savedPolicy = policy
+    ? {
+        defaults: {
+          ...policy.defaults,
+          tcp_timeout_ms: policy.defaults.tcp_timeout_ms ?? 2000,
+          url_timeout_ms: policy.defaults.url_timeout_ms ?? 3000,
+          geo_timeout_ms: policy.defaults.geo_timeout_ms ?? 5000,
+          speed_timeout_ms: policy.defaults.speed_timeout_ms ?? 15000,
+        },
+        emergency_top: policy.pools.emergency.speed_candidates_per_source ?? 100,
+      }
+    : null;
+  const policyChanged = Boolean(
+    policyDraft && savedPolicy && !sameConfig(policyDraft, savedPolicy),
+  );
+  const normalizedTestURLs = urlTestURLs.map((value) => value.trim());
+  const validTestURLs = normalizedTestURLs.length > 0 && normalizedTestURLs.length <= 16
+    && normalizedTestURLs.every((value) => {
+      try {
+        const parsed = new URL(value);
+        return (parsed.protocol === "https:" || parsed.protocol === "http:") && Boolean(parsed.hostname) && !parsed.username && !parsed.password;
+      } catch {
+        return false;
+      }
+    })
+    && new Set(normalizedTestURLs).size === normalizedTestURLs.length;
+
+  const savePolicy = () =>
+    nextDefaults && policy &&
+    run(
+      () =>
+        actions.updateQualification(nextDefaults, {
+          emergency: {
+            ...policy.pools.emergency,
+            speed_candidates_per_source: Number(emergencyTop),
+          },
+        }),
+      "Настройки квалификации сохранены. Они начнут действовать при следующей проверке серверов.",
+    );
+
+  return (
+    <div className="settings-section">
       <Heading
         eyebrow="Квалификация"
-        title="Фильтрация серверов"
-        text="Параметры применяются одинаково к основным и аварийным подпискам."
-        compact
+        title="Проверка и отбор серверов"
+        text="Настройки применяются к основным и аварийным подпискам."
       />
       <CountryPicker value={countries} onChange={setCountries} />
       <div className="form-grid two">
         <Field
           label="Резервный порог"
-          hint="Используется только если не удалось измерить WAN; обычно порог равен 10% скорости канала"
+          hint="Используется, если не удалось измерить WAN; обычно порог равен 10% скорости канала"
           suffix="Мбит/с"
         >
-          <input
-            type="number"
-            min="0.1"
-            max="10000"
-            step="0.1"
-            value={speed}
-            onChange={(event) => setSpeed(event.target.value)}
-          />
+          <input type="number" min="0.1" max="10000" step="0.1" value={speed} onChange={(event) => setSpeed(event.target.value)} />
         </Field>
         <Field label="Стабильность" suffix="%">
-          <input
-            type="number"
-            min="10"
-            max="100"
-            value={stability}
-            onChange={(event) => setStability(event.target.value)}
-          />
+          <input type="number" min="10" max="100" value={stability} onChange={(event) => setStability(event.target.value)} />
         </Field>
       </div>
-      <div className="form-grid two">
-        <Field
-          label="Speed-test аварийной подписки"
-          hint="Проверять скорость только у лучших по URL-test серверов каждого источника"
-          suffix="серверов"
-        >
-          <input
-            type="number"
-            min="1"
-            max="10000"
-            value={emergencyTop}
-            onChange={(event) => setEmergencyTop(event.target.value)}
-          />
+      <Field
+        label="Speed-test аварийной подписки"
+        hint="Проверять скорость только у лучших по URL-test серверов каждого источника"
+        suffix="серверов"
+      >
+        <input type="number" min="1" max="10000" value={emergencyTop} onChange={(event) => setEmergencyTop(event.target.value)} />
+      </Field>
+      <Heading eyebrow="Таймауты" title="Время ожидания одного сервера" compact />
+      <div className="form-grid two qualification-timeouts">
+        <Field label="TCP-проверка" hint="Соединение с адресом и портом" suffix="сек">
+          <input type="number" min="0.5" max="10" step="0.1" value={tcpTimeout} onChange={(event) => setTcpTimeout(event.target.value)} />
+        </Field>
+        <Field label="URL-test" hint="Каждый HTTPS-запрос через сервер" suffix="сек">
+          <input type="number" min="1" max="30" step="0.5" value={urlTimeout} onChange={(event) => setUrlTimeout(event.target.value)} />
+        </Field>
+        <Field label="Определение региона" hint="Запрос GeoIP через сервер" suffix="сек">
+          <input type="number" min="1" max="15" step="0.5" value={geoTimeout} onChange={(event) => setGeoTimeout(event.target.value)} />
+        </Field>
+        <Field label="Speed-test" hint="Один замер скорости через сервер" suffix="сек">
+          <input type="number" min="5" max="120" step="1" value={speedTimeout} onChange={(event) => setSpeedTimeout(event.target.value)} />
         </Field>
       </div>
+      <Heading eyebrow="URL-test" title="Контрольные ссылки" compact />
+      <div className="url-test-editor">
+        <p>Сервер считается доступным, когда отвечает большинство указанных адресов.</p>
+        <div className="url-test-list">
+          {urlTestURLs.map((value, index) => (
+            <div className="url-test-row" key={index}>
+              <input
+                type="url"
+                aria-label={`URL-test ${index + 1}`}
+                value={value}
+                onChange={(event) => setURLTestURLs((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
+                placeholder="https://example.org/generate_204"
+              />
+              <button
+                type="button"
+                className="danger"
+                disabled={urlTestURLs.length === 1}
+                onClick={() => setURLTestURLs((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                aria-label={`Удалить URL-test ${index + 1}`}
+              >
+                Удалить
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={urlTestURLs.length >= 16}
+          onClick={() => setURLTestURLs((current) => [...current, ""])}
+        >
+          Добавить ссылку
+        </button>
+        {!validTestURLs && <small className="field-error">Укажите от 1 до 16 уникальных HTTP(S)-ссылок.</small>}
+      </div>
+      <Heading eyebrow="Состояние сети" title="Контрольные адреса" compact />
       <div className="form-grid two">
-        <Field
-          label="Доступно при белых списках"
-          hint="URL, который точно открывается при ограниченном доступе"
-        >
-          <input
-            type="url"
-            value={allowlistProbeURL}
-            onChange={(event) => setAllowlistProbeURL(event.target.value)}
-            placeholder="https://доступный-сайт.example/ping"
-          />
+        <Field label="Доступно при белых списках" hint="URL, который точно открывается при ограниченном доступе">
+          <input type="url" value={allowlistProbeURL} onChange={(event) => setAllowlistProbeURL(event.target.value)} placeholder="https://доступный-сайт.example/ping" />
         </Field>
-        <Field
-          label="Доступно в обычном интернете"
-          hint="URL вне белых списков, который точно отвечает при полном доступе"
-        >
-          <input
-            type="url"
-            value={openInternetProbeURL}
-            onChange={(event) => setOpenInternetProbeURL(event.target.value)}
-            placeholder="https://внешний-сайт.example/generate_204"
-          />
+        <Field label="Доступно в обычном интернете" hint="URL вне белых списков, который отвечает при полном доступе">
+          <input type="url" value={openInternetProbeURL} onChange={(event) => setOpenInternetProbeURL(event.target.value)} placeholder="https://внешний-сайт.example/generate_204" />
         </Field>
       </div>
       <ActionBar>
-        <button
-          className="primary-button"
-          type="button"
-          disabled={busy || !policy || !policyChanged}
-          onClick={() => void savePolicy()}
-        >
+        <button className="primary-button" type="button" disabled={busy || !policy || !policyChanged || !validTestURLs} onClick={() => void savePolicy()}>
           Сохранить
         </button>
       </ActionBar>
@@ -887,6 +997,7 @@ function PoolNodes({
   run: Runner;
 }) {
   const [showUnavailable, setShowUnavailable] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [deletingNode, setDeletingNode] = useState<Node | null>(null);
   const canEditPool = isAndroidRuntime();
   const allNodes = data?.nodes.filter((node) => node.pool === pool) ?? [];
@@ -894,6 +1005,7 @@ function PoolNodes({
   const nodes = showUnavailable
     ? allNodes
     : allNodes.filter((node) => node.alive);
+  const visibleNodes = expanded ? nodes : nodes.slice(0, 5);
   const report = pool === "whitelist" ? null : data?.qualification?.reports?.[pool];
   const sourceNames = Object.fromEntries(
     (data?.subscriptions ?? [])
@@ -939,7 +1051,7 @@ function PoolNodes({
         )}
       </div>
       <div className="node-list">
-        {nodes.map((node) => (
+        {visibleNodes.map((node) => (
           <div
             className={`node-editor-row ${node.selected ? "selected" : ""}`}
             key={node.id}
@@ -980,6 +1092,17 @@ function PoolNodes({
             )}
           </div>
         ))}
+        {nodes.length > 5 && (
+          <button
+            type="button"
+            className={`node-list-toggle ${expanded ? "expanded" : ""}`}
+            onClick={() => setExpanded((current) => !current)}
+            aria-expanded={expanded}
+          >
+            <span>{expanded ? "Свернуть список" : `Показать все · ${nodes.length}`}</span>
+            <strong aria-hidden="true">›</strong>
+          </button>
+        )}
         {!nodes.length && (
           <p className="empty-state">
             {unavailable
@@ -2394,15 +2517,6 @@ function RouteTargetEditor({
           }
           allowCustom
         />
-      </div>
-      <div className="context-note">
-        <strong>О пресетах</strong>
-        <span>
-          HTTP, DNS, SSH и другие пункты преобразуются в правила протокола и
-          типовых портов. BitTorrent может использовать случайные порты,
-          шифрование и DHT, поэтому пресет 6881–6889 не гарантирует обнаружение
-          всего торрент-трафика на маршрутизаторе.
-        </span>
       </div>
     </div>
   );

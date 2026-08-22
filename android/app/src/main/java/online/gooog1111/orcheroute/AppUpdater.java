@@ -63,6 +63,7 @@ final class AppUpdater {
 		preferences = activity.getSharedPreferences(PREFERENCES, 0);
 		betaEnabled = preferences.getBoolean(BETA_ENABLED, currentVersion.contains("-"));
 		channel = betaEnabled ? "beta" : "stable";
+		check();
     }
 
     synchronized String status() {

@@ -82,10 +82,10 @@ test("android qualification checks the complete parsed set in ordered stages", a
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   assert.doesNotMatch(runtime, /sampleProxies/);
   assert.match(runtime, /engineTestTCP/);
-  assert.match(runtime, /engineTestTCP\(batch\.toString\(\), 2000, 128\)/);
+  assert.match(runtime, /engineTestTCP\(batch\.toString\(\), tcpTimeoutMs, 128\)/);
   assert.match(runtime, /engineTestProxiesMulti/);
   assert.match(runtime, /final int urlBatchSize = 80/);
-  assert.match(runtime, /engineTestProxiesMulti\(batch\.toString\(\), testURLs\.toString\(\), 3000, 80\)/);
+  assert.match(runtime, /engineTestProxiesMulti\(batch\.toString\(\), testURLs\.toString\(\), urlTimeoutMs, 80\)/);
   assert.match(runtime, /effectivePolicy\.optInt\("url_limit", 0\)/);
   assert.match(runtime, /effectivePolicy\.optInt\("speed_candidates", 0\)/);
   assert.match(runtime, /effectivePolicy\.optInt\("keep", 0\)/);
@@ -153,6 +153,18 @@ test("android updater selects a persistent prerelease channel with a stable-to-b
   assert.match(activity, /setAppUpdateBetaEnabled/);
 });
 
+test("android checks its selected update channel on launch and prompts on the dashboard", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const updater = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/AppUpdater.java", import.meta.url), "utf8");
+  assert.match(updater, /channel = betaEnabled \? "beta" : "stable";[\s\S]*check\(\);/);
+  assert.match(dashboard, /getAndroidAppUpdateStatus/);
+  assert.match(dashboard, /latest_version_code/);
+  assert.match(dashboard, /Доступно обновление OrcheRoute/);
+  assert.match(dashboard, /Скачать и установить/);
+  assert.match(dashboard, /Это тестовая версия/);
+  assert.match(dashboard, /Позже/);
+});
+
 test("android prerelease builds use the red interface accent without changing stable colors", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const rain = await readFile(new URL("../app/ui/MatrixRain.tsx", import.meta.url), "utf8");
@@ -182,7 +194,7 @@ test("android locks portrait mode and settings save only changed drafts", async 
   const manifest = await readFile(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(manifest, /android:screenOrientation="portrait"/);
-  assert.match(settings, /disabled=\{busy \|\| !policy \|\| !policyChanged\}/);
+  assert.match(settings, /disabled=\{busy \|\| !policy \|\| !policyChanged \|\| !validTestURLs\}/);
   assert.match(settings, /disabled=\{busy \|\| !transportChanged\}/);
   assert.match(settings, /disabled=\{busy \|\| !dnsChanged\}/);
   assert.match(settings, /disabled=\{busy \|\| !profileChanged\}/);
@@ -240,10 +252,44 @@ test("android uses OrcheRoute notification glyph and user-facing server-list ter
 
 test("qualification UI exposes connectivity anchors and emergency per-source top", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   assert.match(settings, /Доступно при белых списках/);
   assert.match(settings, /Доступно в обычном интернете/);
   assert.match(settings, /Speed-test аварийной подписки/);
   assert.match(settings, /speed_candidates_per_source/);
+  assert.match(settings, /activeTab === "qualification"/);
+  assert.match(settings, /label="Квалификация"/);
+  assert.match(settings, /tcp_timeout_ms/);
+  assert.match(settings, /url_timeout_ms/);
+  assert.match(settings, /geo_timeout_ms/);
+  assert.match(settings, /speed_timeout_ms/);
+  assert.match(settings, /url_test_urls/);
+  assert.match(settings, /Контрольные ссылки/);
+  assert.match(settings, /Добавить ссылку/);
+  assert.match(settings, /Удалить URL-test/);
+  assert.match(runtime, /effectivePolicy\.getJSONArray\("url_test_urls"\)/);
+  assert.match(runtime, /engineTestTCP\(batch\.toString\(\), tcpTimeoutMs, 128\)/);
+  assert.match(runtime, /engineTestProxiesMulti\(batch\.toString\(\), testURLs\.toString\(\), urlTimeoutMs, 80\)/);
+  assert.match(runtime, /engineFilterCountries\(urlAlive\.toString\(\), excludedCountries\.toString\(\), geoTimeoutMs, 12\)/);
+  assert.match(runtime, /engineTestSpeedAdaptive\(batch\.toString\(\), speedURL, speedTimeoutMs, 6/);
+  assert.match(settings, /nodes\.slice\(0, 5\)/);
+  assert.match(settings, /className={`node-list-toggle/);
+  assert.match(settings, /aria-expanded={expanded}/);
+  assert.doesNotMatch(settings, /settings-nav-swipe-hint/);
+  assert.match(settings, /settings-nav-edge left/);
+  assert.match(settings, /settings-nav-edge right/);
+  assert.match(settings, /scrollNavigation\(-1\)/);
+  assert.match(settings, /scrollNavigation\(1\)/);
+  assert.match(settings, /querySelector<HTMLElement>\("button\.active"\)/);
+  assert.match(settings, /right - nav\.clientWidth/);
+  assert.match(styles, /\.settings-nav-edge\.left/);
+  assert.match(styles, /\.settings-nav-edge\.right/);
+  assert.match(styles, /grid-template-columns: 30px minmax\(0, 1fr\) 30px/);
+  assert.match(styles, /\.settings-nav-edge:disabled/);
+  assert.match(settings, /const baseOperation: OperationView \| null/);
+  assert.match(settings, /: null;\s*const displayedOperation/);
+  assert.match(styles, /overflow-x: auto/);
 });
 
 test("android exposes selectable geo sources and applies the selected source", async () => {

@@ -177,6 +177,14 @@ func run(ctx context.Context, options options) error {
 		subscriptions.Inline:      subscriptions.InlineFetcher{}, subscriptions.WireGuard: subscriptions.WireGuardFetcher{},
 	}
 	backendConfig := windowsqualify.DefaultConfig()
+	testURLs, err := qualification.URLTestURLs(validatedPolicy)
+	if err != nil {
+		return err
+	}
+	backendConfig.URLTests = make([]windowsqualify.URLTarget, 0, len(testURLs))
+	for _, target := range testURLs {
+		backendConfig.URLTests = append(backendConfig.URLTests, windowsqualify.URLTarget{URL: target})
+	}
 	backendConfig.MihomoBinary, backendConfig.Interface = options.Mihomo, vpnRole.Interface
 	backendConfig.DNS = windowsqualify.DNSConfig{CacheAlgorithm: profile.DNS.CacheAlgorithm, Bootstrap: profile.DNS.Bootstrap, Proxy: profile.DNS.Proxy, VPNUnderlay: profile.DNS.VPNUnderlay}
 	probeBackend := &windowsqualify.Backend{Config: backendConfig}
