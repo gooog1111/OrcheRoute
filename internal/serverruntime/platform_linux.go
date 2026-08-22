@@ -24,7 +24,7 @@ func platformDefaultConfig() Config {
 		WebRoot: "/opt/orcheroute/webui", RuntimeEnv: "/etc/orcheroute/runtime.env", ConfigDirectory: "/etc/orcheroute",
 		MihomoAPI: "http://127.0.0.1:19090", MihomoBinary: "/opt/orcheroute/bin/mihomo",
 		UpdateBinary: "/opt/orcheroute/bin/orcheroute-update-go", NetworkBinary: "/opt/orcheroute/bin/orcheroute-network-go",
-		ComponentBinary: "/opt/orcheroute/bin/orcheroute-components-go", CoreService: "orcheroute-core.service", ControllerEvery: 10 * time.Second,
+		ComponentBinary: "/opt/orcheroute/bin/orcheroute-components-go", SelfUpdateBinary: "/opt/orcheroute/bin/orcheroute-self-update", CoreService: "orcheroute-core.service", ControllerEvery: 10 * time.Second,
 		ConnectivityEvery: 10 * time.Second, ConnectivityTimeout: 6 * time.Second,
 		RequireAPIAuth: true}
 }

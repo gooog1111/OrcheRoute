@@ -17,6 +17,7 @@ import {
   canScanQr,
   checkAndroidAppUpdate,
   getAndroidAppUpdateStatus,
+  getServerAppUpdateStatus,
   installAndroidAppUpdate,
   isEmbeddedRuntime,
   isAndroidRuntime,
@@ -3084,13 +3085,10 @@ function ComponentsForm({
   const [geoSource, setGeoSource] = useState("metacubex");
   const [geoIPURL, setGeoIPURL] = useState("");
   const [geoSiteURL, setGeoSiteURL] = useState("");
-  const [appUpdate, setAppUpdate] = useState(() =>
-    embedded ? getAndroidAppUpdateStatus() : null,
-  );
+  const [appUpdate, setAppUpdate] = useState(() => embedded ? getAndroidAppUpdateStatus() : data?.appUpdate ?? null);
 	const [betaWarning, setBetaWarning] = useState(false);
   useEffect(() => {
-    if (!embedded) return;
-    const refresh = () => setAppUpdate(getAndroidAppUpdateStatus());
+    const refresh = () => embedded ? setAppUpdate(getAndroidAppUpdateStatus()) : void getServerAppUpdateStatus().then(setAppUpdate).catch(() => {});
     refresh();
     const timer = window.setInterval(refresh, 750);
     return () => window.clearInterval(timer);
@@ -3204,7 +3202,7 @@ function ComponentsForm({
           }
         />
       </div>
-      {embedded && (
+      {(embedded || appUpdate?.supported) && (
         <div className="editor-card">
           <strong>Обновление OrcheRoute</strong>
           <p className="route-help">
@@ -3228,11 +3226,11 @@ function ComponentsForm({
               disabled={Boolean(appUpdate?.active)}
               onChange={(event) => {
                 if (!event.target.checked) {
-                  setAndroidAppUpdateBetaEnabled(false);
+                  if (embedded) setAndroidAppUpdateBetaEnabled(false); else setAppUpdate((value) => value ? {...value, beta_enabled:false} : value);
                   return;
                 }
                 if (appUpdate?.current_prerelease) {
-                  setAndroidAppUpdateBetaEnabled(true);
+                  if (embedded) setAndroidAppUpdateBetaEnabled(true); else setAppUpdate((value) => value ? {...value, beta_enabled:true} : value);
                   return;
                 }
                 setBetaWarning(true);
@@ -3252,7 +3250,7 @@ function ComponentsForm({
               className="secondary-button"
               type="button"
               disabled={Boolean(appUpdate?.active)}
-              onClick={() => checkAndroidAppUpdate()}
+              onClick={() => embedded ? checkAndroidAppUpdate() : void actions.checkAppUpdate(Boolean(appUpdate?.beta_enabled))}
             >
               Проверить обновление
             </button>
@@ -3260,14 +3258,14 @@ function ComponentsForm({
               className="primary-button"
               type="button"
               disabled={Boolean(appUpdate?.active) || appUpdate?.state !== "available"}
-              onClick={() => installAndroidAppUpdate()}
+              onClick={() => embedded ? installAndroidAppUpdate() : void actions.installAppUpdate(Boolean(appUpdate?.beta_enabled))}
             >
               Скачать и установить
             </button>
           </ActionBar>
         </div>
       )}
-	  {embedded && betaWarning && (
+	  {(embedded || appUpdate?.supported) && betaWarning && (
 		<div className="picker-dialog-backdrop" onClick={() => setBetaWarning(false)}>
 		  <div
 			className="picker-dialog subscription-delete-dialog"

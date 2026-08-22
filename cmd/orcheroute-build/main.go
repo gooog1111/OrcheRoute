@@ -188,7 +188,7 @@ func (b *builder) buildServer(goos string) error {
 		if err := os.MkdirAll(out, 0o755); err != nil {
 			return err
 		}
-		commands := []string{"orcheroute-server", "orcheroute-components-go", "orcheroute-network-go", "orcheroute-update-go"}
+		commands := []string{"orcheroute-server", "orcheroute-components-go", "orcheroute-network-go", "orcheroute-update-go", "orcheroute-self-update"}
 		for _, name := range commands {
 			ext := ""
 			if goos == "windows" {

@@ -96,6 +96,8 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return 200, runtime.operations()
 		case "/v1/components":
 			return runtime.getComponents(ctx)
+		case "/v1/app-update":
+			return runtime.getAppUpdate()
 		}
 	}
 	if method == http.MethodPost {
@@ -211,6 +213,10 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.applyNetwork(ctx, body)
 		case path == "/v1/components/update":
 			return runtime.componentUpdate(body)
+		case path == "/v1/app-update/check":
+			return runtime.startAppUpdate("check", body)
+		case path == "/v1/app-update/install":
+			return runtime.startAppUpdate("install", body)
 		case path == "/v1/whitelist/transition":
 			payload, err := json.Marshal(body)
 			if err != nil {

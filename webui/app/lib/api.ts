@@ -231,6 +231,7 @@ export type DashboardData = {
   components: ComponentStatus | null;
   operations: OperationSnapshot | null;
   access: WebAccess | null;
+  appUpdate: AndroidAppUpdateStatus | null;
 };
 
 export type OperationSnapshot = {
@@ -297,15 +298,17 @@ export type AndroidAppUpdateStatus = {
   state: "idle" | "checking" | "current" | "available" | "downloading" | "permission" | "installer" | "error";
   message: string;
   current_version: string;
-  current_version_code: number;
+  current_version_code?: number;
   latest_version?: string;
   latest_version_code?: number;
   current?: number;
   total?: number;
   error?: string;
   active: boolean;
-	current_prerelease: boolean;
+	current_prerelease?: boolean;
 	beta_enabled: boolean;
+	supported?: boolean;
+	update_available?: boolean;
 	channel?: "stable" | "beta";
 };
 
@@ -368,6 +371,8 @@ export function setAndroidAppUpdateBetaEnabled(enabled: boolean) {
 	return typeof bridge?.setAppUpdateBetaEnabled === "function" && bridge.setAppUpdateBetaEnabled(enabled);
 }
 
+export function getServerAppUpdateStatus() { return request<AndroidAppUpdateStatus>("/v1/app-update"); }
+
 export function isEmbeddedRuntime() {
   if (typeof window === "undefined") return false;
   const host = window as Window & { runtime?: unknown; OrcheRouteAndroid?: unknown };
@@ -416,7 +421,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export async function loadDashboard(): Promise<DashboardData> {
-  const [status, pools, nodes, subscriptions, network, interfaces, qualification, dns, routes, components, operations, access] = await Promise.all([
+  const [status, pools, nodes, subscriptions, network, interfaces, qualification, dns, routes, components, operations, access, appUpdate] = await Promise.all([
     request<OrcheRouteStatus>("/v1/status"),
     request<{ pools: Pool[] }>("/v1/pools").catch(() => ({ pools: [] })),
     request<{ nodes: Node[] }>("/v1/nodes").catch(() => ({ nodes: [] })),
@@ -429,6 +434,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     request<ComponentStatus>("/v1/components").catch(() => null),
     request<OperationSnapshot>("/v1/operations").catch(() => null),
     isEmbeddedRuntime() ? Promise.resolve(null) : request<WebAccess>("/v1/web/access").catch(() => null),
+    isAndroidRuntime() ? Promise.resolve(getAndroidAppUpdateStatus()) : request<AndroidAppUpdateStatus>("/v1/app-update").catch(() => null),
   ]);
   return {
     status,
@@ -443,6 +449,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     components,
     operations,
     access,
+    appUpdate,
   };
 }
 
@@ -506,6 +513,8 @@ export const actions = {
   updateComponents(component: "check" | "geo" | "core" | "all") {
     return request<{ accepted: boolean }>("/v1/components/update", { method: "POST", body: JSON.stringify({ component }) });
   },
+  checkAppUpdate(beta_enabled: boolean) { return request<{accepted:boolean}>("/v1/app-update/check", {method:"POST", body:JSON.stringify({beta_enabled})}); },
+  installAppUpdate(beta_enabled: boolean) { return request<{accepted:boolean}>("/v1/app-update/install", {method:"POST", body:JSON.stringify({beta_enabled})}); },
   updateComponentSettings(payload: { geo_auto_update: boolean; geo_interval_hours: number; geo_source: string; geoip_url?: string; geosite_url?: string }) {
     return request<{ updated: boolean }>("/v1/components/settings", {
       method: "PUT",

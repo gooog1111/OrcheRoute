@@ -27,7 +27,7 @@ func platformDefaultConfig() Config {
 		WebRoot: filepath.Join(root, "webui"), RuntimeEnv: filepath.Join(root, "runtime.env"), ConfigDirectory: root,
 		MihomoAPI: "http://127.0.0.1:19090", MihomoBinary: filepath.Join(bin, "mihomo.exe"),
 		UpdateBinary: filepath.Join(bin, "orcheroute-update-go.exe"), NetworkBinary: filepath.Join(bin, "orcheroute-network-go.exe"),
-		ComponentBinary: filepath.Join(bin, "orcheroute-components-go.exe"), CoreService: "OrcheRouteMihomo", ControllerEvery: 10 * time.Second,
+		ComponentBinary: filepath.Join(bin, "orcheroute-components-go.exe"), SelfUpdateBinary: filepath.Join(bin, "orcheroute-self-update.exe"), CoreService: "OrcheRouteMihomo", ControllerEvery: 10 * time.Second,
 		ConnectivityEvery: 10 * time.Second, ConnectivityTimeout: 6 * time.Second,
 		RequireAPIAuth: true}
 }

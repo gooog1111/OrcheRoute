@@ -40,6 +40,7 @@ type Config struct {
 	UpdateBinary        string
 	NetworkBinary       string
 	ComponentBinary     string
+	SelfUpdateBinary    string
 	CoreService         string
 	ControllerEvery     time.Duration
 	ConnectivityEvery   time.Duration

@@ -125,10 +125,10 @@ export function Dashboard() {
   }, [operationView?.state]);
 
   const enabled = data?.status.service?.enabled ?? data?.status.connectivity !== "disabled";
-  const newerAppVersion = Boolean(
+  const newerAppVersion = Boolean(appUpdate?.update_available || (
     appUpdate?.latest_version
-      && (appUpdate.latest_version_code ?? 0) > appUpdate.current_version_code,
-  );
+      && (appUpdate.latest_version_code ?? 0) > (appUpdate.current_version_code ?? 0)
+  ));
   const showAppUpdate = newerAppVersion
     && appUpdate?.latest_version !== dismissedUpdate
     && ["available", "downloading", "permission", "installer", "error"].includes(appUpdate?.state ?? "");
