@@ -207,7 +207,7 @@ func (runtime *Runtime) bootstrap(ctx context.Context, freshState bool) error {
 
 func (runtime *Runtime) bootstrapMihomoFiles() error {
 	providersDirectory := filepath.Join(runtime.Config.StateDirectory, "providers")
-	for _, pool := range []string{"primary", "emergency"} {
+	for _, pool := range []string{"primary", "emergency", "whitelist"} {
 		path := filepath.Join(providersDirectory, pool+".json")
 		if _, err := os.Stat(path); err == nil {
 			continue

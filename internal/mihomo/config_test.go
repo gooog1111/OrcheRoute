@@ -32,6 +32,29 @@ func TestSystemIncludesTun(t *testing.T) {
 	}
 }
 
+func TestAllowlistProviderIsSelectable(t *testing.T) {
+	config, err := Build(testInput("system"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	providers := config["proxy-providers"].(map[string]any)
+	if _, ok := providers["whitelist"]; !ok {
+		t.Fatal("whitelist provider missing")
+	}
+	groups := config["proxy-groups"].([]any)
+	active := groups[0].(map[string]any)
+	uses := active["use"].([]string)
+	found := false
+	for _, value := range uses {
+		if value == "whitelist" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("ACTIVE cannot select whitelist provider: %#v", uses)
+	}
+}
+
 func TestInterfaceCaptureIncludesTun(t *testing.T) {
 	config, err := Build(testInput("interfaces"))
 	if err != nil {

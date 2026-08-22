@@ -23,7 +23,7 @@ func TestGeneratedCleanInstallConfigWithMihomo(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, pool := range []string{"primary", "emergency"} {
+	for _, pool := range []string{"primary", "emergency", "whitelist"} {
 		writeIntegrationJSON(t, filepath.Join(directory, "providers", pool+".json"), map[string]any{"proxies": []any{}})
 	}
 	for _, name := range []string{"direct", "proxy", "block"} {

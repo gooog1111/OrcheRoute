@@ -152,6 +152,7 @@ func Build(input Input) (map[string]any, error) {
 		"proxies": []any{directEgress, underlayDNS},
 		"proxy-providers": map[string]any{
 			"primary": provider("primary", 300), "emergency": provider("emergency", 60),
+			"whitelist": provider("whitelist", 60),
 		},
 		"rule-providers": map[string]any{
 			"routes-block":  ruleProvider(input.StateDir, "block"),
@@ -161,7 +162,7 @@ func Build(input Input) (map[string]any, error) {
 		"proxy-groups": []any{
 			map[string]any{
 				"name": "ACTIVE", "type": "select", "proxies": []string{"DIRECT-EGRESS"},
-				"use": []string{"primary", "emergency"},
+				"use": []string{"primary", "emergency", "whitelist"},
 			},
 			map[string]any{"name": "DEFAULT", "type": "select", "proxies": defaultOrder, "hidden": true},
 			map[string]any{
@@ -171,6 +172,11 @@ func Build(input Input) (map[string]any, error) {
 			},
 			map[string]any{
 				"name": "PROBE-EMERGENCY", "type": "url-test", "use": []string{"emergency"},
+				"url": input.TestURL, "interval": 60, "timeout": 5000, "tolerance": 100,
+				"lazy": false, "expected-status": 204,
+			},
+			map[string]any{
+				"name": "PROBE-WHITELIST", "type": "url-test", "use": []string{"whitelist"},
 				"url": input.TestURL, "interval": 60, "timeout": 5000, "tolerance": 100,
 				"lazy": false, "expected-status": 204,
 			},
