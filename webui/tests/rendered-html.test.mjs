@@ -153,6 +153,18 @@ test("android updater selects a persistent prerelease channel with a stable-to-b
   assert.match(activity, /setAppUpdateBetaEnabled/);
 });
 
+test("android checks its selected update channel on launch and prompts on the dashboard", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const updater = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/AppUpdater.java", import.meta.url), "utf8");
+  assert.match(updater, /channel = betaEnabled \? "beta" : "stable";[\s\S]*check\(\);/);
+  assert.match(dashboard, /getAndroidAppUpdateStatus/);
+  assert.match(dashboard, /latest_version_code/);
+  assert.match(dashboard, /Доступно обновление OrcheRoute/);
+  assert.match(dashboard, /Скачать и установить/);
+  assert.match(dashboard, /Это тестовая версия/);
+  assert.match(dashboard, /Позже/);
+});
+
 test("android prerelease builds use the red interface accent without changing stable colors", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const rain = await readFile(new URL("../app/ui/MatrixRain.tsx", import.meta.url), "utf8");

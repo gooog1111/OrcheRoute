@@ -378,6 +378,16 @@ html.prerelease-theme .input-wrap select {
 .subscription-delete-body p { margin: 0; color: var(--text); font-size: 13px; line-height: 1.5; }
 .subscription-delete-body small { color: var(--muted); font-size: 10px; line-height: 1.45; }
 .subscription-delete-dialog > footer { gap: 8px; }
+.app-update-backdrop { z-index: 90; }
+.app-update-prompt { width: min(460px, calc(100vw - 32px)); grid-template-rows: auto auto auto; }
+.app-update-body { padding: 15px; display: grid; gap: 12px; border: 1px solid rgba(var(--accent-rgb),.22); border-radius: 11px; background: rgba(var(--accent-rgb),.045); }
+.app-update-body > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.app-update-body > p.app-update-warning { color: var(--warning); }
+.app-update-version { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; }
+.app-update-version span { min-width: 0; overflow-wrap: anywhere; color: var(--text); font: 600 12px/1.35 var(--mono); }
+.app-update-version span:last-child { color: var(--accent); text-align: right; }
+.app-update-version strong { color: var(--faint); font-size: 15px; }
+.app-update-prompt > footer { gap: 8px; }
 .danger-button { min-height: 38px; padding: 0 15px; border: 1px solid rgba(255,119,110,.42); border-radius: 9px; background: rgba(255,119,110,.12); color: var(--danger); cursor: pointer; }
 .danger-button:hover:not(:disabled) { background: rgba(255,119,110,.2); }
 .danger-button:disabled { opacity: .5; cursor: not-allowed; }
