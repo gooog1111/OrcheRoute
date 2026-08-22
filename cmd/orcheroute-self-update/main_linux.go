@@ -37,10 +37,10 @@ func main() {
 	beta := flag.Bool("beta", false, "")
 	flag.Parse()
 	if os.Geteuid() != 0 {
-		fatal(*state, "root_required")
+		fatal(*state, "root_required", *beta)
 	}
 	if err := run(*action, *state, *beta); err != nil {
-		fatal(*state, err.Error())
+		fatal(*state, err.Error(), *beta)
 	}
 }
 func run(action, dir string, beta bool) error {
@@ -176,8 +176,8 @@ func write(dir string, s status) {
 	b, _ := json.MarshalIndent(s, "", "  ")
 	os.WriteFile(filepath.Join(dir, "app-update.json"), append(b, '\n'), 0600)
 }
-func fatal(dir, msg string) {
-	write(dir, status{State: "error", Message: "Обновление не выполнено", CurrentVersion: installed(), Error: msg, UpdatedAt: time.Now().Unix()})
+func fatal(dir, msg string, beta bool) {
+	write(dir, status{State: "error", Message: "Обновление не выполнено", CurrentVersion: installed(), Error: msg, UpdatedAt: time.Now().Unix(), Beta: beta})
 	fmt.Fprintln(os.Stderr, msg)
 	os.Exit(1)
 }
