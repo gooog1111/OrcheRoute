@@ -12,7 +12,9 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
 
 ## Скачать
 
-- [Последний стабильный выпуск](https://github.com/gooog1111/OrcheRoute/releases/latest)
+- **Текущая стабильная версия: 0.5.10** (`versionCode 48`)
+- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.5.10/OrcheRoute-Android-0.5.10-code48-arm64.apk)
+- [Страница последнего стабильного выпуска](https://github.com/gooog1111/OrcheRoute/releases/latest)
 - [Все выпуски и beta-версии](https://github.com/gooog1111/OrcheRoute/releases)
 
 Для Android требуется Android 8.0 или новее. Root-доступ не нужен.
@@ -22,6 +24,9 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
 3. При первом включении подтвердите создание VPN-подключения Android.
 4. Разрешите уведомления и, если Android предложит, исключите OrcheRoute из
    энергосбережения — это помогает системе не останавливать VPN в фоне.
+5. Добавьте собственную подписку в разделе «Подписки» или включите нужные
+   встроенные аварийные источники.
+6. Вернитесь на главный экран и нажмите «Включить».
 
 Обновления устанавливаются из самого приложения через GitHub Releases. Для
 обычных обновлений оставьте флажок «Beta-версии» выключенным.
@@ -135,14 +140,18 @@ QR-кода.
 
 ## Документация для разработки
 
-- [PROJECT_STATUS.md](PROJECT_STATUS.md) — фактическое состояние платформ;
-- [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md) — архитектура и известные расхождения;
 - [API.md](API.md) — локальный HTTP API;
 - [BUILD.md](BUILD.md) — единая локальная сборка и проверки;
-- [MOBILE.md](MOBILE.md) — мобильный runtime;
 - [android/README.md](android/README.md) — Android-сборка;
+- [ANDROID_ARCHITECTURE.md](ANDROID_ARCHITECTURE.md) — устройство Android-приложения;
+- [MOBILE.md](MOBILE.md) — общий мобильный runtime;
 - [desktop/README.md](desktop/README.md) — Desktop-оболочка;
+- [apple/README.md](apple/README.md) — заготовка iOS/macOS;
 - [webui/README.md](webui/README.md) — общий интерфейс.
+
+Актуальная разработка ведётся в единственной ветке `main`. Стабильные версии
+зафиксированы тегами `v*`, а тестовые Android-сборки — тегом `android-beta`.
+Сборки и проверки выполняются локально; GitHub Actions в репозитории отключены.
 
 ## Лицензии и авторство
 
