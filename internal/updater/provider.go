@@ -30,7 +30,17 @@ func (store FileProviderStore) Write(pool string, result qualification.Result, s
 	if err := atomicJSON(filepath.Join(store.ProvidersDirectory, pool+".json"), map[string]any{"proxies": result.Proxies}); err != nil {
 		return err
 	}
-	if err := atomicJSON(filepath.Join(store.ProvidersDirectory, pool+".sources.json"), map[string]any{"nodes": sources}); err != nil {
+	nodes := map[string]any{}
+	for name, source := range sources {
+		value := map[string]any{"id": source.ID, "name": source.Name}
+		if metrics, ok := result.Metrics[name]; ok {
+			value["delay_ms"] = metrics.DelayMS
+			value["speed_mbps"] = metrics.SpeedMbps
+			value["stability_ratio"] = metrics.StabilityRatio
+		}
+		nodes[name] = value
+	}
+	if err := atomicJSON(filepath.Join(store.ProvidersDirectory, pool+".sources.json"), map[string]any{"nodes": nodes}); err != nil {
 		return err
 	}
 	return nil

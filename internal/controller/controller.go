@@ -3,6 +3,8 @@ package controller
 import (
 	"sort"
 	"time"
+
+	"github.com/gooog1111/orcheroute/internal/noderank"
 )
 
 const (
@@ -11,10 +13,14 @@ const (
 )
 
 type Node struct {
-	Name  string `json:"name"`
-	Pool  string `json:"pool"`
-	Alive bool   `json:"alive"`
-	Delay int    `json:"delay_ms"`
+	Name            string  `json:"name"`
+	Pool            string  `json:"pool"`
+	Alive           bool    `json:"alive"`
+	Delay           int     `json:"delay_ms"`
+	SpeedMbps       float64 `json:"speed_mbps,omitempty"`
+	StabilityRatio  float64 `json:"stability_ratio,omitempty"`
+	HealthSuccesses int     `json:"health_successes,omitempty"`
+	HealthFailures  int     `json:"health_failures,omitempty"`
 }
 
 type Control struct {
@@ -264,15 +270,10 @@ func candidates(nodes []Node, pool string, cooldowns map[string]int64, exclude s
 		if pi != pj {
 			return pi < pj
 		}
-		di, dj := result[i].Delay, result[j].Delay
-		if di <= 0 {
-			di = 1 << 30
-		}
-		if dj <= 0 {
-			dj = 1 << 30
-		}
-		if di != dj {
-			return di < dj
+		si := noderank.Score(noderank.Node{ID: result[i].Name, Pool: result[i].Pool, Alive: result[i].Alive, DelayMS: result[i].Delay, SpeedMbps: result[i].SpeedMbps, StabilityRatio: result[i].StabilityRatio, HealthSuccesses: result[i].HealthSuccesses, HealthFailures: result[i].HealthFailures})
+		sj := noderank.Score(noderank.Node{ID: result[j].Name, Pool: result[j].Pool, Alive: result[j].Alive, DelayMS: result[j].Delay, SpeedMbps: result[j].SpeedMbps, StabilityRatio: result[j].StabilityRatio, HealthSuccesses: result[j].HealthSuccesses, HealthFailures: result[j].HealthFailures})
+		if si != sj {
+			return si > sj
 		}
 		return result[i].Name < result[j].Name
 	})

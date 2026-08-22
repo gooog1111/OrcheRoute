@@ -66,3 +66,14 @@ func TestEmergencyModeKeepsHealthyEmergency(t *testing.T) {
 		t.Fatalf("state=%+v decision=%+v", state, decision)
 	}
 }
+
+func TestCandidatesUseSharedLatencySpeedAndStabilityRating(t *testing.T) {
+	input := Observation{Now: 100, WAN: true, Active: "old", ActivePool: Primary, ActiveOK: false, Control: Control{Enabled: true}, Nodes: []Node{
+		{Name: "low-ping-unstable", Pool: Primary, Alive: true, Delay: 20, SpeedMbps: 3, HealthSuccesses: 1, HealthFailures: 10},
+		{Name: "balanced", Pool: Primary, Alive: true, Delay: 55, SpeedMbps: 60, StabilityRatio: .9, HealthSuccesses: 20},
+	}}
+	_, decision := Step(State{Status: "proxy_degraded", FailureStreak: 1}, input, DefaultPolicy())
+	if decision.Target != "balanced" {
+		t.Fatalf("decision=%+v", decision)
+	}
+}

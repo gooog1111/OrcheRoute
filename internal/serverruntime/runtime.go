@@ -19,6 +19,7 @@ import (
 
 	"github.com/gooog1111/orcheroute/internal/controller"
 	"github.com/gooog1111/orcheroute/internal/network"
+	"github.com/gooog1111/orcheroute/internal/noderank"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"github.com/gooog1111/orcheroute/internal/whitelist"
@@ -360,16 +361,21 @@ func (runtime *Runtime) mihomo(ctx context.Context, method, path string, body an
 }
 
 type PublicNode struct {
-	ID          string `json:"id"`
-	DisplayName string `json:"display_name"`
-	Pool        string `json:"pool"`
-	Priority    int    `json:"priority"`
-	Alive       bool   `json:"alive"`
-	Delay       *int   `json:"delay_ms"`
-	Selected    bool   `json:"selected"`
-	SourceID    any    `json:"source_id"`
-	SourceName  any    `json:"source_name"`
-	FullName    string `json:"-"`
+	ID              string  `json:"id"`
+	DisplayName     string  `json:"display_name"`
+	Pool            string  `json:"pool"`
+	Priority        int     `json:"priority"`
+	Alive           bool    `json:"alive"`
+	Delay           *int    `json:"delay_ms"`
+	SpeedMbps       float64 `json:"speed_mbps,omitempty"`
+	StabilityRatio  float64 `json:"stability_ratio,omitempty"`
+	HealthSuccesses int     `json:"health_successes,omitempty"`
+	HealthFailures  int     `json:"health_failures,omitempty"`
+	Score           float64 `json:"score,omitempty"`
+	Selected        bool    `json:"selected"`
+	SourceID        any     `json:"source_id"`
+	SourceName      any     `json:"source_name"`
+	FullName        string  `json:"-"`
 }
 
 func safeName(value string) string {
@@ -437,14 +443,27 @@ func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string
 				}
 			}
 			var sourceID, sourceName any
+			speedMbps, stabilityRatio := float64(0), float64(0)
+			healthSuccesses, healthFailures := 0, 0
 			if item, ok := metadata[full].(map[string]any); ok {
 				sourceID, sourceName = item["id"], item["name"]
+				if value := intValue(item["delay_ms"]); value > 0 {
+					delay = &value
+				}
+				speedMbps = floatValue(item["speed_mbps"])
+				stabilityRatio = floatValue(item["stability_ratio"])
+				healthSuccesses = intValue(item["health_successes"])
+				healthFailures = intValue(item["health_failures"])
 			}
 			priority := 1
 			if pool == "primary" {
 				priority = 0
 			}
-			result = append(result, PublicNode{ID: id, DisplayName: display, Pool: pool, Priority: priority, Alive: alive, Delay: delay, Selected: full == selected, SourceID: sourceID, SourceName: sourceName, FullName: full})
+			ranked := noderank.Node{ID: id, Pool: pool, Alive: alive, SpeedMbps: speedMbps, StabilityRatio: stabilityRatio, HealthSuccesses: healthSuccesses, HealthFailures: healthFailures}
+			if delay != nil {
+				ranked.DelayMS = *delay
+			}
+			result = append(result, PublicNode{ID: id, DisplayName: display, Pool: pool, Priority: priority, Alive: alive, Delay: delay, SpeedMbps: speedMbps, StabilityRatio: stabilityRatio, HealthSuccesses: healthSuccesses, HealthFailures: healthFailures, Score: noderank.Score(ranked), Selected: full == selected, SourceID: sourceID, SourceName: sourceName, FullName: full})
 			mapping[id] = full
 		}
 	}
@@ -488,6 +507,21 @@ func intValue(value any) int {
 	case json.Number:
 		value, _ := strconv.Atoi(current.String())
 		return value
+	}
+	return 0
+}
+
+func floatValue(value any) float64 {
+	switch current := value.(type) {
+	case float64:
+		return current
+	case float32:
+		return float64(current)
+	case int:
+		return float64(current)
+	case json.Number:
+		result, _ := current.Float64()
+		return result
 	}
 	return 0
 }

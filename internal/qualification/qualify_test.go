@@ -80,6 +80,9 @@ func TestQualificationPipelineAndReport(t *testing.T) {
 	if result.Report.Sources["two"].Retained != 1 || result.Report.Sources["one"].Qualified != 1 {
 		t.Fatalf("unexpected sources: %#v", result.Report.Sources)
 	}
+	if result.Metrics["C"].DelayMS != 200 || result.Metrics["C"].SpeedMbps != 22.4 || result.Metrics["C"].StabilityRatio < 0.93 {
+		t.Fatalf("unexpected retained metrics: %#v", result.Metrics["C"])
+	}
 }
 
 func TestQualificationUsesTenPercentOfWANBaseline(t *testing.T) {

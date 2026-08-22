@@ -87,8 +87,15 @@ type Report struct {
 }
 
 type Result struct {
-	Proxies []map[string]any `json:"proxies"`
-	Report  Report           `json:"report"`
+	Proxies []map[string]any       `json:"proxies"`
+	Report  Report                 `json:"report"`
+	Metrics map[string]NodeMetrics `json:"metrics,omitempty"`
+}
+
+type NodeMetrics struct {
+	DelayMS        int     `json:"delay_ms,omitempty"`
+	SpeedMbps      float64 `json:"speed_mbps,omitempty"`
+	StabilityRatio float64 `json:"stability_ratio,omitempty"`
 }
 
 type rankedProxy struct {
@@ -145,6 +152,11 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	sort.Strings(excludedList)
 
 	sourceReports := map[string]*SourceReport{}
+	metrics := map[string]NodeMetrics{}
+	proxyName := func(proxy map[string]any) string {
+		name, _ := proxy["name"].(string)
+		return name
+	}
 	sourceID := func(proxy map[string]any) string {
 		name, _ := proxy["name"].(string)
 		if source, ok := sourceByNode[name]; ok && source.ID != "" {
@@ -173,6 +185,9 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	tcpAlive := []rankedProxy{}
 	for index, result := range tcpResults {
 		if result.Alive {
+			current := metrics[proxyName(proxies[index])]
+			current.DelayMS = int(math.Round(result.Seconds * 1000))
+			metrics[proxyName(proxies[index])] = current
 			tcpAlive = append(tcpAlive, rankedProxy{result.Seconds, proxies[index]})
 		}
 	}
@@ -196,6 +211,9 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	urlAlive := []rankedProxy{}
 	for index, result := range urlResults {
 		if result.Alive {
+			current := metrics[proxyName(urlProxies[index])]
+			current.DelayMS = int(math.Round(result.Seconds * 1000))
+			metrics[proxyName(urlProxies[index])] = current
 			urlAlive = append(urlAlive, rankedProxy{result.Seconds, urlProxies[index]})
 		}
 	}
@@ -227,6 +245,17 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	fastest := float64(0)
 	for index, measurement := range measurements {
 		proxy := speedProxies[index]
+		current := metrics[proxyName(proxy)]
+		if measurement.BytesPerSecond > 0 {
+			current.SpeedMbps = math.Round(measurement.BytesPerSecond*8/1_000_000*100) / 100
+		}
+		if len(evidence[index].Downloads) == 2 {
+			first, second := evidence[index].Downloads[0].BytesPerSecond, evidence[index].Downloads[1].BytesPerSecond
+			if first > 0 && second > 0 {
+				current.StabilityRatio = math.Round(math.Min(first, second)/math.Max(first, second)*10000) / 10000
+			}
+		}
+		metrics[proxyName(proxy)] = current
 		outcomes[measurement.Status]++
 		if measurement.Status == "country_excluded" && measurement.Country != "" {
 			excludedCounts[measurement.Country]++
@@ -263,7 +292,7 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		FastestObservedMbps: math.Round(fastest*8/1_000_000*100) / 100,
 		Outcomes:            outcomes, Sources: sourceReports,
 	}
-	return Result{Proxies: qualified, Report: report}, nil
+	return Result{Proxies: qualified, Report: report, Metrics: metrics}, nil
 }
 
 func EvaluateSpeed(evidence SpeedEvidence, threshold int, stabilityRatio float64, excluded map[string]bool) Measurement {
