@@ -111,13 +111,14 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		now = time.Now
 	}
 	started := now().Unix()
+	skipSpeed, _ := valueOr(settings, "skip_speed", false).(bool)
 	minimumMbps, err := valueFloat(settings["min_speed_mbps"])
 	if err != nil {
 		return Result{}, validation("invalid_min_speed_mbps")
 	}
 	thresholdSource := "configured_fallback"
 	baselineMbps := float64(0)
-	if provider, ok := backend.(BaselineBackend); ok {
+	if provider, ok := backend.(BaselineBackend); ok && !skipSpeed {
 		if baseline, baselineErr := provider.Baseline(ctx); baselineErr == nil && baseline.OK && baseline.BytesPerSecond > 0 {
 			baselineMbps = baseline.BytesPerSecond * 8 / 1_000_000
 			minimumMbps = baselineMbps * BaselineRatio
@@ -220,6 +221,27 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	sort.SliceStable(urlAlive, func(i, j int) bool { return urlAlive[i].value < urlAlive[j].value })
 	for _, item := range urlAlive {
 		getSourceReport(item.proxy).URLAlive++
+	}
+
+	if skipSpeed {
+		retained := urlAlive
+		if keep > 0 && len(retained) > keep {
+			retained = retained[:keep]
+		}
+		qualified := proxiesFromRanked(retained)
+		for _, item := range urlAlive {
+			getSourceReport(item.proxy).Qualified++
+		}
+		for _, proxy := range qualified {
+			getSourceReport(proxy).Retained++
+		}
+		return Result{Proxies: qualified, Metrics: metrics, Report: Report{
+			Pool: pool, StartedAt: started, FinishedAt: now().Unix(), Input: len(proxies), TCPAlive: len(tcpAlive), URLAlive: len(urlAlive),
+			GeoEnabled: false, ExcludedCountries: []string{}, ExcludedByCountry: map[string]int{},
+			SpeedRuns: 0, SpeedTested: 0, Qualified: len(urlAlive), Retained: len(qualified),
+			ThresholdMbps: 0, ThresholdSource: "skipped", StabilityRatio: stabilityRatio,
+			Outcomes: map[string]int{"url_qualified": len(urlAlive)}, Sources: sourceReports,
+		}}, nil
 	}
 
 	speedSource := urlAlive

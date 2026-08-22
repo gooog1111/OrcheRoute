@@ -7,9 +7,10 @@ import (
 )
 
 type fakeBackend struct {
-	tcp   []Latency
-	url   []Latency
-	speed []SpeedEvidence
+	tcp        []Latency
+	url        []Latency
+	speed      []SpeedEvidence
+	speedCalls int
 }
 
 type baselineBackend struct {
@@ -27,7 +28,9 @@ func (backend fakeBackend) TCP(context.Context, []map[string]any) ([]Latency, er
 func (backend fakeBackend) URL(context.Context, []map[string]any) ([]Latency, error) {
 	return backend.url, nil
 }
-func (backend fakeBackend) Speed(context.Context, []map[string]any, bool) ([]SpeedEvidence, error) {
+
+func (backend *fakeBackend) Speed(context.Context, []map[string]any, bool) ([]SpeedEvidence, error) {
+	backend.speedCalls++
 	return backend.speed, nil
 }
 
@@ -56,7 +59,7 @@ func TestEvaluateSpeed(t *testing.T) {
 
 func TestQualificationPipelineAndReport(t *testing.T) {
 	proxies := []map[string]any{{"name": "A"}, {"name": "B"}, {"name": "C"}}
-	backend := fakeBackend{
+	backend := &fakeBackend{
 		tcp: []Latency{{Alive: true, Seconds: .3}, {Alive: false}, {Alive: true, Seconds: .1}},
 		url: []Latency{{Alive: true, Seconds: .2}, {Alive: true, Seconds: .1}},
 		speed: []SpeedEvidence{
@@ -95,7 +98,7 @@ func TestQualificationUsesTenPercentOfWANBaseline(t *testing.T) {
 		baseline: Download{OK: true, HTTPCode: 200, Bytes: SpeedBytes, BytesPerSecond: 12_500_000},
 	}
 	settings := map[string]any{"min_speed_mbps": float64(1), "stability_ratio": .65, "excluded_countries": []any{}, "url_limit": float64(0), "speed_candidates": float64(0), "keep": float64(0)}
-	result, err := Qualify(context.Background(), "primary", []map[string]any{{"name": "A"}}, settings, nil, backend, time.Now)
+	result, err := Qualify(context.Background(), "primary", []map[string]any{{"name": "A"}}, settings, nil, &backend, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,5 +107,30 @@ func TestQualificationUsesTenPercentOfWANBaseline(t *testing.T) {
 	}
 	if result.Report.Qualified != 0 || result.Report.Outcomes["slow"] != 1 {
 		t.Fatalf("candidate should be below the dynamic threshold: %#v", result.Report)
+	}
+}
+
+func TestQualificationCanSkipSpeedForAllowlist(t *testing.T) {
+	backend := &fakeBackend{
+		tcp: []Latency{{Alive: true, Seconds: .2}, {Alive: true, Seconds: .1}},
+		url: []Latency{{Alive: true, Seconds: .3}, {Alive: false}},
+	}
+	settings := map[string]any{
+		"min_speed_mbps": float64(10), "stability_ratio": .65,
+		"excluded_countries": []any{"RU"}, "url_limit": float64(0),
+		"speed_candidates": float64(0), "keep": float64(0), "skip_speed": true,
+	}
+	result, err := Qualify(context.Background(), "whitelist", []map[string]any{{"name": "A"}, {"name": "B"}}, settings, nil, backend, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backend.speedCalls != 0 {
+		t.Fatalf("speed backend was called %d times", backend.speedCalls)
+	}
+	if len(result.Proxies) != 1 || result.Proxies[0]["name"] != "B" {
+		t.Fatalf("unexpected retained proxies: %#v", result.Proxies)
+	}
+	if result.Report.SpeedRuns != 0 || result.Report.Qualified != 1 || result.Report.ThresholdSource != "skipped" {
+		t.Fatalf("unexpected allowlist report: %#v", result.Report)
 	}
 }
