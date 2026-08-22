@@ -140,6 +140,8 @@ QR-кода.
 
 ## Документация для разработки
 
+- [docs/ANDROID_SERVER_FUNCTIONALITY.md](docs/ANDROID_SERVER_FUNCTIONALITY.md) —
+  функциональный контракт Android и его перенос в Server;
 - [API.md](API.md) — локальный HTTP API;
 - [BUILD.md](BUILD.md) — единая локальная сборка и проверки;
 - [android/README.md](android/README.md) — Android-сборка;
