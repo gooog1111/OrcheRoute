@@ -239,7 +239,83 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 		}
 		return 200, map[string]any{"deleted": true, "id": id}
 	}
+	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/nodes/") {
+		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/nodes/"))
+		return runtime.deletePoolNode(ctx, id)
+	}
 	return 404, map[string]any{"error": "not_found"}
+}
+
+func (runtime *Runtime) deletePoolNode(ctx context.Context, id string) (int, any) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return 400, map[string]any{"error": "node_id_required"}
+	}
+	nodes, _, err := runtime.liveNodes(ctx)
+	if err != nil {
+		return 503, map[string]any{"error": "mihomo_api_unavailable"}
+	}
+	var target *PublicNode
+	for index := range nodes {
+		if nodes[index].ID == id {
+			copy := nodes[index]
+			target = &copy
+			break
+		}
+	}
+	if target == nil {
+		return 404, map[string]any{"error": "node_not_found"}
+	}
+	if target.Pool == whitelist.Pool {
+		result, transitionErr := runtime.whitelistTransition(whitelist.Command{Operation: "remove_node", NodeID: id})
+		if transitionErr != nil {
+			return backendError(transitionErr)
+		}
+		return 200, map[string]any{"deleted": result.Changed, "id": id, "pool": target.Pool, "temporary": true, "remaining": len(result.State.Nodes)}
+	}
+	if target.Pool != "primary" && target.Pool != "emergency" {
+		return 400, map[string]any{"error": "invalid_node_pool"}
+	}
+	providerPath := filepath.Join(runtime.Config.StateDirectory, "providers", target.Pool+".json")
+	provider := map[string]any{}
+	if err := readJSON(providerPath, &provider); err != nil {
+		return backendError(err)
+	}
+	raw, _ := provider["proxies"].([]any)
+	filtered := make([]any, 0, len(raw))
+	deleted := false
+	for _, item := range raw {
+		proxy, _ := item.(map[string]any)
+		if !deleted && stringValue(proxy["name"]) == target.FullName {
+			deleted = true
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	if !deleted {
+		return 404, map[string]any{"error": "node_not_found"}
+	}
+	provider["proxies"] = filtered
+	if err := atomicJSON(providerPath, provider); err != nil {
+		return backendError(err)
+	}
+	metadataPath := filepath.Join(runtime.Config.StateDirectory, "providers", target.Pool+".sources.json")
+	metadata := map[string]any{}
+	if readJSON(metadataPath, &metadata) == nil {
+		if values, ok := metadata["nodes"].(map[string]any); ok {
+			delete(values, target.FullName)
+			_ = atomicJSON(metadataPath, metadata)
+		}
+	}
+	response := map[string]any{"deleted": true, "id": id, "pool": target.Pool, "temporary": true, "remaining": len(filtered)}
+	if _, reloadErr := runtime.mihomo(ctx, http.MethodPut, "/providers/proxies/"+target.Pool, nil); reloadErr != nil {
+		response["applied"] = false
+		response["apply_pending"] = true
+		response["reload_error"] = reloadErr.Error()
+	} else {
+		response["applied"] = true
+	}
+	return 200, response
 }
 
 func (runtime *Runtime) getStatus(ctx context.Context) (int, any) {
