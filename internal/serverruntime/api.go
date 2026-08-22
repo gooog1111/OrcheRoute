@@ -150,6 +150,16 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.startUpdate(nil, "fetch")
 		case path == "/v1/subscriptions/check":
 			return runtime.startUpdate(nil, "check")
+		case path == "/v1/whitelist/scan":
+			ids := []string{}
+			if raw, ok := body["subscription_ids"].([]any); ok {
+				for _, value := range raw {
+					if id := strings.TrimSpace(stringValue(value)); id != "" {
+						ids = append(ids, id)
+					}
+				}
+			}
+			return runtime.startWhitelistScan(ids)
 		case path == "/v1/operations/subscription-update/cancel":
 			return runtime.cancelSubscriptionUpdate()
 		case strings.HasPrefix(path, "/v1/subscriptions/") && strings.HasSuffix(path, "/refresh"):

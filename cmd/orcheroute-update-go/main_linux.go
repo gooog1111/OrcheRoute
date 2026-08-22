@@ -62,6 +62,7 @@ func main() {
 	stateDirectory := flag.String("state-dir", "/var/lib/orcheroute", "state directory")
 	outputStateDirectory := flag.String("output-state-dir", "", "isolated output directory (defaults to state-dir)")
 	operationPath := flag.String("operation-path", "", "operation status file override")
+	whitelistResult := flag.String("whitelist-result", "", "write cached allowlist scan result and skip normal update")
 	cancelPath := flag.String("cancel-path", "", "cooperative cancellation request file")
 	activeProfile := flag.String("network-profile", "/var/lib/orcheroute/network-active.json", "active network profile")
 	policyPath := flag.String("policy", "/var/lib/orcheroute/qualification-policy.json", "qualification policy")
@@ -78,7 +79,7 @@ func main() {
 	}
 	ctx, stop := operationcancel.Watch(context.Background(), *cancelPath, 100*time.Millisecond)
 	defer stop()
-	if err := run(ctx, options{StateDirectory: *stateDirectory, OutputStateDirectory: outputDirectory, OperationPath: *operationPath, ActiveProfile: *activeProfile, PolicyPath: *policyPath, Mihomo: *mihomo, Force: *force, CachedOnly: *cachedOnly, FetchOnly: *fetchOnly, Groups: groups, SubscriptionIDs: subscriptionIDs}); err != nil {
+	if err := run(ctx, options{StateDirectory: *stateDirectory, OutputStateDirectory: outputDirectory, OperationPath: *operationPath, WhitelistResult: *whitelistResult, ActiveProfile: *activeProfile, PolicyPath: *policyPath, Mihomo: *mihomo, Force: *force, CachedOnly: *cachedOnly, FetchOnly: *fetchOnly, Groups: groups, SubscriptionIDs: subscriptionIDs}); err != nil {
 		if ctx.Err() != nil {
 			return
 		}
@@ -88,10 +89,10 @@ func main() {
 }
 
 type options struct {
-	StateDirectory, OutputStateDirectory, OperationPath, ActiveProfile, PolicyPath, Mihomo string
-	Force, CachedOnly, FetchOnly                                                           bool
-	Groups                                                                                 []string
-	SubscriptionIDs                                                                        []string
+	StateDirectory, OutputStateDirectory, OperationPath, WhitelistResult, ActiveProfile, PolicyPath, Mihomo string
+	Force, CachedOnly, FetchOnly                                                                            bool
+	Groups                                                                                                  []string
+	SubscriptionIDs                                                                                         []string
 }
 
 func run(ctx context.Context, options options) error {
@@ -220,6 +221,22 @@ func run(ctx context.Context, options options) error {
 	dependencies.UpdateStatus = database.UpdateSubscriptionStatus
 	dependencies.RecordEvent = func(ctx context.Context, eventType, severity, pool, reason string, details map[string]any) error {
 		return database.AddEvent(ctx, serverstate.EventInput{EventType: eventType, Severity: severity, Pool: stringPointer(pool), Reason: stringPointer(reason), Details: details})
+	}
+	if options.WhitelistResult != "" {
+		policy, policyErr := qualification.Effective(validatedPolicy, string(subscriptions.Primary))
+		if policyErr != nil {
+			return policyErr
+		}
+		result, scanErr := updater.RunWhitelist(ctx, dependencies, updater.WhitelistRequest{SubscriptionIDs: requestedIDs, Policy: policy})
+		if writeErr := writeAtomicJSON(options.WhitelistResult, result); writeErr != nil {
+			return writeErr
+		}
+		if scanErr != nil {
+			return scanErr
+		}
+		payload, _ := json.Marshal(result)
+		fmt.Println(string(payload))
+		return nil
 	}
 	result, err := updater.Run(ctx, dependencies, updater.Request{Groups: selected, RequestedGroups: requestedGroups, SubscriptionIDs: requestedIDs, Force: options.Force || request.Force, FetchOnly: options.FetchOnly, SkipFetch: options.CachedOnly, Policies: policies})
 	status := "success"

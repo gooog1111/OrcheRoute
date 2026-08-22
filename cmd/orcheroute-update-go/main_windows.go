@@ -57,10 +57,10 @@ func (unavailableFetcher) Fetch(context.Context, subscriptions.Subscription) ([]
 }
 
 type options struct {
-	StateDirectory, OutputStateDirectory, OperationPath, ActiveProfile, PolicyPath, Mihomo string
-	Force, CachedOnly, FetchOnly                                                           bool
-	Groups                                                                                 []string
-	SubscriptionIDs                                                                        []string
+	StateDirectory, OutputStateDirectory, OperationPath, WhitelistResult, ActiveProfile, PolicyPath, Mihomo string
+	Force, CachedOnly, FetchOnly                                                                            bool
+	Groups                                                                                                  []string
+	SubscriptionIDs                                                                                         []string
 }
 
 func main() {
@@ -74,6 +74,7 @@ func main() {
 	stateDirectory := flag.String("state-dir", filepath.Join(root, "state"), "state directory")
 	outputStateDirectory := flag.String("output-state-dir", "", "isolated output directory")
 	operationPath := flag.String("operation-path", "", "operation status file override")
+	whitelistResult := flag.String("whitelist-result", "", "write cached allowlist scan result and skip normal update")
 	cancelPath := flag.String("cancel-path", "", "cooperative cancellation request file")
 	activeProfile := flag.String("network-profile", filepath.Join(root, "state", "network-active.json"), "active network profile")
 	policyPath := flag.String("policy", filepath.Join(root, "state", "qualification-policy.json"), "qualification policy")
@@ -89,7 +90,7 @@ func main() {
 		output = *stateDirectory
 	}
 	current := options{StateDirectory: *stateDirectory, OutputStateDirectory: output, OperationPath: *operationPath, ActiveProfile: *activeProfile,
-		PolicyPath: *policyPath, Mihomo: *mihomo, Force: *force, CachedOnly: *cachedOnly, FetchOnly: *fetchOnly, Groups: groups, SubscriptionIDs: subscriptionIDs}
+		WhitelistResult: *whitelistResult, PolicyPath: *policyPath, Mihomo: *mihomo, Force: *force, CachedOnly: *cachedOnly, FetchOnly: *fetchOnly, Groups: groups, SubscriptionIDs: subscriptionIDs}
 	ctx, stop := operationcancel.Watch(context.Background(), *cancelPath, 100*time.Millisecond)
 	defer stop()
 	if err := run(ctx, current); err != nil {
@@ -222,6 +223,22 @@ func run(ctx context.Context, options options) error {
 	dependencies.UpdateStatus = database.UpdateSubscriptionStatus
 	dependencies.RecordEvent = func(ctx context.Context, eventType, severity, pool, reason string, details map[string]any) error {
 		return database.AddEvent(ctx, serverstate.EventInput{EventType: eventType, Severity: severity, Pool: stringPointer(pool), Reason: stringPointer(reason), Details: details})
+	}
+	if options.WhitelistResult != "" {
+		policy, policyErr := qualification.Effective(validatedPolicy, string(subscriptions.Primary))
+		if policyErr != nil {
+			return policyErr
+		}
+		result, scanErr := updater.RunWhitelist(ctx, dependencies, updater.WhitelistRequest{SubscriptionIDs: requestedIDs, Policy: policy})
+		if writeErr := writeAtomicJSON(options.WhitelistResult, result); writeErr != nil {
+			return writeErr
+		}
+		if scanErr != nil {
+			return scanErr
+		}
+		payload, _ := json.Marshal(result)
+		fmt.Println(string(payload))
+		return nil
 	}
 	result, err := updater.Run(ctx, dependencies, updater.Request{Groups: selected, RequestedGroups: requestedGroups, SubscriptionIDs: requestedIDs,
 		Force: options.Force || request.Force, FetchOnly: options.FetchOnly, SkipFetch: options.CachedOnly, Policies: policies})
