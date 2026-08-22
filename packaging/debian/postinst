@@ -16,15 +16,18 @@ if [ -n "$credentials" ]; then
     echo "OrcheRoute WebUI credentials:"
     printf '%s\n' "$credentials"
     echo "Saved in /etc/orcheroute/initial-credentials"
+else
+    # A file from an earlier bootstrap must never advertise credentials that
+    # no longer match runtime.env.
+    rm -f /etc/orcheroute/initial-credentials
 fi
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable orcheroute-go.service >/dev/null
 systemctl restart orcheroute-go.service
 systemctl enable --now orcheroute-update.timer orcheroute-geo.timer
-systemctl start --no-block orcheroute-update.service >/dev/null 2>&1 || true
-if [ -n "${2:-}" ] && [ "$core_was_active" -eq 1 ]; then
-    # Upgrade only what was running before dpkg replaced the files. A clean
-    # install and an intentionally stopped VPN remain stopped.
+if [ "$core_was_active" -eq 1 ]; then
+    # Preserve the running state even when converting a manual installation
+    # into a dpkg-managed one. A clean install remains stopped.
     systemctl enable orcheroute-routing.service orcheroute-core.service >/dev/null 2>&1 || true
     systemctl restart orcheroute-routing.service orcheroute-core.service
 fi

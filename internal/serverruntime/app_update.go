@@ -13,7 +13,9 @@ func (r *Runtime) RunAppUpdateMonitor(ctx context.Context) {
 	if runtime.GOOS != "linux" {
 		return
 	}
-	timer := time.NewTimer(20 * time.Second)
+	_, initial := r.getAppUpdate()
+	current := initial.(map[string]any)
+	timer := time.NewTimer(nextAppUpdateCheck(intValue(current["updated_at"]), time.Now()))
 	defer timer.Stop()
 	for {
 		select {
@@ -28,6 +30,18 @@ func (r *Runtime) RunAppUpdateMonitor(ctx context.Context) {
 			timer.Reset(6 * time.Hour)
 		}
 	}
+}
+
+func nextAppUpdateCheck(updatedAt int, now time.Time) time.Duration {
+	const interval = 6 * time.Hour
+	if updatedAt <= 0 {
+		return 20 * time.Second
+	}
+	remaining := interval - now.Sub(time.Unix(int64(updatedAt), 0))
+	if remaining < 20*time.Second {
+		return 20 * time.Second
+	}
+	return remaining
 }
 
 func (r *Runtime) getAppUpdate() (int, any) {

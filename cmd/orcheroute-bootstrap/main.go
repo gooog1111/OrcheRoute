@@ -66,7 +66,7 @@ func readEnv(path string) map[string]string {
 			continue
 		}
 		parts := strings.SplitN(line, "=", 2)
-		result[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+		result[strings.ToLower(strings.TrimSpace(parts[0]))] = strings.TrimSpace(parts[1])
 	}
 	return result
 }

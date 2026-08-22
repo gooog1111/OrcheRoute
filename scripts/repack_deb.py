@@ -138,6 +138,29 @@ def ensure_parent_directories(members: dict[str, tuple[tarfile.TarInfo, bytes | 
         members[name] = directory(name)
 
 
+def relocate_systemd_units(members: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
+    """Keep packages safe on merged-/usr systems.
+
+    A raw extraction of a package containing a top-level ``lib`` directory can
+    replace the host's ``/lib -> usr/lib`` symlink. Native systemd units belong
+    under /usr/lib, which is also accepted by Debian, Astra and Ubuntu.
+    """
+    source = "lib/systemd/system"
+    target = "usr/lib/systemd/system"
+    moved: dict[str, tuple[tarfile.TarInfo, bytes | None]] = {}
+    for name in list(members):
+        if name == source or name.startswith(source + "/"):
+            suffix = name[len(source):].lstrip("/")
+            destination = target + (("/" + suffix) if suffix else "")
+            info, payload = members.pop(name)
+            info.name = destination
+            moved[destination] = (info, payload)
+    members.update(moved)
+    for name in ("lib/systemd", "lib"):
+        if name in members and not any(item.startswith(name + "/") for item in members):
+            del members[name]
+
+
 def tar_xz(members: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> bytes:
     ensure_parent_directories(members)
     if "" in members:
@@ -165,6 +188,7 @@ def main() -> None:
     data_name = next(name for name in source if name.startswith("data.tar"))
     control = read_tar(source[control_name])
     data = read_tar(source[data_name])
+    relocate_systemd_units(data)
     # Templates from early manual builds may contain debug copies such as
     # r11-postinst. They are not package metadata and must not leak forward.
     allowed_control = {"control", "preinst", "postinst", "prerm", "postrm", "conffiles", "md5sums"}
