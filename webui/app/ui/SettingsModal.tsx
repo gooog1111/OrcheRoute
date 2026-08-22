@@ -197,8 +197,10 @@ export function SettingsModal({
   );
   const [operationCancellable, setOperationCancellable] = useState(false);
   const [operationCancelling, setOperationCancelling] = useState(false);
+  const [navEdges, setNavEdges] = useState({ left: false, right: false });
   const desktopMode = isEmbeddedRuntime();
   const touchStart = useRef<{ x: number; y: number; interactive: boolean } | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
   const tabs = useMemo<SettingsTab[]>(
     () => desktopMode
       ? ["general", "network", "routes", "sources", "qualification", "components"]
@@ -214,6 +216,32 @@ export function SettingsModal({
     }, 2600);
     return () => window.clearTimeout(timer);
   }, [operationView?.state]);
+
+  const updateNavEdges = useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const max = Math.max(0, nav.scrollWidth - nav.clientWidth);
+    setNavEdges({ left: nav.scrollLeft > 3, right: nav.scrollLeft < max - 3 });
+  }, []);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const frame = window.requestAnimationFrame(updateNavEdges);
+    nav.addEventListener("scroll", updateNavEdges, { passive: true });
+    window.addEventListener("resize", updateNavEdges);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      nav.removeEventListener("scroll", updateNavEdges);
+      window.removeEventListener("resize", updateNavEdges);
+    };
+  }, [tabs.length, updateNavEdges]);
+
+  const scrollNavigation = (direction: -1 | 1) => {
+    const nav = navRef.current;
+    if (!nav) return;
+    nav.scrollBy({ left: direction * Math.max(120, nav.clientWidth * 0.65), behavior: "smooth" });
+  };
 
   useEffect(() => {
     if (!busy) return;
@@ -478,7 +506,7 @@ export function SettingsModal({
     data.network.apply.revision === data.network.desired.revision &&
     ["failed", "blocked"].includes(data.network.apply.status ?? ""),
   );
-  const baseOperation: OperationView = lastApplyFailed
+  const baseOperation: OperationView | null = lastApplyFailed
     ? {
         state: "error",
         title: "Не удалось применить настройки",
@@ -497,13 +525,7 @@ export function SettingsModal({
           step: 0,
           steps: [],
         }
-      : {
-          state: "idle",
-          title: "Настройки применены",
-          detail: "Сохранённый сетевой профиль совпадает с действующим.",
-          step: 0,
-          steps: [],
-        };
+      : null;
   const displayedOperation = operationView ?? baseOperation;
   const applyNetwork = () => {
     if (!data?.network || data.network.in_sync) return;
@@ -574,7 +596,7 @@ export function SettingsModal({
           inert={busy ? true : undefined}
         >
           <div className="settings-nav-scroll">
-          <nav className="settings-nav" aria-label="Разделы настроек">
+          <nav ref={navRef} className="settings-nav" aria-label="Разделы настроек">
             <Tab
               active={activeTab === "general"}
               onClick={() => onTab("general")}
@@ -613,7 +635,12 @@ export function SettingsModal({
               label="Обновления"
             />
           </nav>
-          <span className="settings-nav-swipe-hint" aria-hidden="true">↔</span>
+          {navEdges.left && (
+            <button className="settings-nav-edge left" type="button" onClick={() => scrollNavigation(-1)} aria-label="Предыдущие разделы">‹</button>
+          )}
+          {navEdges.right && (
+            <button className="settings-nav-edge right" type="button" onClick={() => scrollNavigation(1)} aria-label="Следующие разделы">›</button>
+          )}
           </div>
           <div className="settings-content" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
             {activeTab === "general" && (

@@ -276,8 +276,15 @@ test("qualification UI exposes connectivity anchors and emergency per-source top
   assert.match(settings, /nodes\.slice\(0, 5\)/);
   assert.match(settings, /className={`node-list-toggle/);
   assert.match(settings, /aria-expanded={expanded}/);
-  assert.match(settings, /settings-nav-swipe-hint/);
-  assert.match(styles, /\.settings-nav-swipe-hint/);
+  assert.doesNotMatch(settings, /settings-nav-swipe-hint/);
+  assert.match(settings, /settings-nav-edge left/);
+  assert.match(settings, /settings-nav-edge right/);
+  assert.match(settings, /scrollNavigation\(-1\)/);
+  assert.match(settings, /scrollNavigation\(1\)/);
+  assert.match(styles, /\.settings-nav-edge\.left/);
+  assert.match(styles, /\.settings-nav-edge\.right/);
+  assert.match(settings, /const baseOperation: OperationView \| null/);
+  assert.match(settings, /: null;\s*const displayedOperation/);
   assert.match(styles, /overflow-x: auto/);
 });
 
