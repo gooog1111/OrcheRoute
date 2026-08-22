@@ -476,7 +476,11 @@ final class MobileRepository {
 
     synchronized void setAuto() throws JSONException {
         root.put("mode", "auto");
-        if (findNode(root.optString("selected_node", "")) == null) selectBestLocked();
+		// Manual mode pins exactly the node chosen by the user. Returning to
+		// automatic mode must discard that pin, otherwise an emergency or a
+		// lower-ranked primary node remains selected indefinitely.
+		root.remove("selected_node");
+		selectBestLocked();
         save();
     }
 

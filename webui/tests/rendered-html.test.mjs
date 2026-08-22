@@ -67,11 +67,13 @@ test("uses an embedded subscription delete confirmation", async () => {
 
 test("renders automatic/manual modes and an emergency-only option", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
   assert.match(settings, /proxy\.mode === "auto" \? "selected"/);
   assert.match(settings, /checked=\{data\?\.status\.proxy\.mode === "emergency"\}/);
   assert.match(settings, /В автоматическом режиме аварийный список серверов и так используется/);
   assert.match(settings, /<strong>Ручной режим<\/strong>/);
   assert.doesNotMatch(settings, /<strong>Ручной сервер<\/strong>/);
+  assert.match(repository, /void setAuto\(\)[\s\S]*root\.remove\("selected_node"\);[\s\S]*selectBestLocked\(\);[\s\S]*save\(\);/);
 });
 
 test("android qualification checks the complete parsed set in ordered stages", async () => {
