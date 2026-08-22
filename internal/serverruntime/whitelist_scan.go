@@ -7,9 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/mobile/connectivity"
+	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"github.com/gooog1111/orcheroute/internal/updater"
 	"github.com/gooog1111/orcheroute/internal/whitelist"
 )
@@ -35,7 +37,7 @@ func (runtime *Runtime) startWhitelistScan(ids []string) (int, any) {
 	resultPath := filepath.Join(runtime.Config.StateDirectory, "whitelist-scan-result.json")
 	_ = os.Remove(cancelPath)
 	_ = os.Remove(resultPath)
-	_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": "running", "phase": "whitelist", "message": "Формируем список серверов для белых списков", "updated_at": time.Now().Unix()})
+	_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": "running", "phase": "whitelist", "message": "Формируем список серверов для белых списков", "allowlist_scan": true, "connectivity": "allowlist", "updated_at": time.Now().Unix()})
 	go runtime.runWhitelistScan(ids, operation, cancelPath, resultPath)
 	return http.StatusAccepted, map[string]any{"accepted": true, "mode": "allowlist", "system_mutated": true}
 }
@@ -61,12 +63,17 @@ func (runtime *Runtime) runWhitelistScan(ids []string, operation, cancelPath, re
 		cancelled = true
 		_ = os.Remove(cancelPath)
 	}
+	connected := false
 	if transitionErr == nil && len(transition.State.Nodes) > 0 {
 		if control, err := runtime.Store.Control(context.Background()); err == nil && control.Enabled {
 			if err := platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, true); err == nil {
-				_ = runtime.selectWhitelistCandidate(transition.State)
+				connected = runtime.selectWhitelistCandidate(transition.State) == nil
 			}
 		}
+	}
+	if connected && len(ids) == 0 && !cancelled && commandErr == nil {
+		runtime.refreshWhitelistSubscriptions(operation, cancelPath)
+		transition.State = runtime.whitelistState()
 	}
 	status, message := "success", fmt.Sprintf("Список для белых списков готов: %d серверов", len(transition.State.Nodes))
 	if cancelled {
@@ -77,7 +84,72 @@ func (runtime *Runtime) runWhitelistScan(ids []string, operation, cancelPath, re
 		status, message = "warning", "Доступных серверов для белых списков нет"
 	}
 	_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": status, "phase": "complete", "message": message,
-		"failures": result.Failures, "output": truncate(string(output), 4000), "updated_at": time.Now().Unix()})
+		"allowlist_scan": true, "connectivity": "allowlist", "failures": result.Failures, "output": truncate(string(output), 4000), "updated_at": time.Now().Unix()})
+}
+
+func (runtime *Runtime) refreshWhitelistSubscriptions(operation, cancelPath string) {
+	items, err := runtime.Store.List(context.Background(), false)
+	if err != nil {
+		return
+	}
+	cache := subscriptions.FileCache{Directory: filepath.Join(runtime.Config.StateDirectory, "subscription-cache")}
+	enabled := make([]subscriptions.Subscription, 0, len(items))
+	for _, item := range items {
+		if item.Enabled {
+			enabled = append(enabled, item)
+		}
+	}
+	internalOperation := filepath.Join(runtime.Config.StateDirectory, "whitelist-followup-operation.json")
+	for index, item := range enabled {
+		if _, err := os.Stat(cancelPath); err == nil {
+			return
+		}
+		_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": "running", "phase": "whitelist_subscriptions",
+			"message": fmt.Sprintf("Обновляем подписку %d/%d · «%s»", index+1, len(enabled), item.Name),
+			"current": index, "total": len(enabled), "allowlist_scan": true, "connectivity": "allowlist", "updated_at": time.Now().Unix()})
+		before, _ := cache.Read(context.Background(), item.ID)
+		fetchArgs := runtime.updateArguments(internalOperation, cancelPath, "--force", "--fetch-only", "--subscription-id", item.ID)
+		if output, fetchErr := exec.Command(runtime.Config.UpdateBinary, fetchArgs...).CombinedOutput(); fetchErr != nil {
+			_ = output
+			continue
+		}
+		after, _ := cache.Read(context.Background(), item.ID)
+		if reflect.DeepEqual(before, after) {
+			continue
+		}
+		resultPath := filepath.Join(runtime.Config.StateDirectory, "whitelist-followup-"+item.ID+".json")
+		_ = os.Remove(resultPath)
+		scanArgs := runtime.updateArguments(internalOperation, cancelPath, "--whitelist-result", resultPath, "--subscription-id", item.ID)
+		_, scanErr := exec.Command(runtime.Config.UpdateBinary, scanArgs...).CombinedOutput()
+		partial := updater.WhitelistResult{}
+		if readJSON(resultPath, &partial) == nil {
+			_ = runtime.applyWhitelistResult(partial)
+		}
+		_ = os.Remove(resultPath)
+		if scanErr != nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_, _ = runtime.mihomo(ctx, http.MethodPut, "/providers/proxies/whitelist", nil)
+		cancel()
+		state := runtime.whitelistState()
+		if len(state.Nodes) == 0 {
+			_ = platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, false)
+			return
+		}
+		if state.SelectedNode == "" {
+			_ = runtime.selectWhitelistCandidate(state)
+		}
+	}
+	_ = os.Remove(internalOperation)
+}
+
+func (runtime *Runtime) updateArguments(operation, cancelPath string, extra ...string) []string {
+	arguments := []string{"--state-dir", runtime.Config.ProductionState, "--output-state-dir", runtime.Config.StateDirectory,
+		"--operation-path", operation, "--cancel-path", cancelPath,
+		"--network-profile", filepath.Join(runtime.Config.StateDirectory, "network-active.json"),
+		"--policy", filepath.Join(runtime.Config.StateDirectory, "qualification-policy.json"), "--mihomo", runtime.Config.MihomoBinary}
+	return append(arguments, extra...)
 }
 
 func (runtime *Runtime) applyWhitelistResult(result updater.WhitelistResult) error {

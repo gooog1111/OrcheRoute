@@ -207,7 +207,8 @@ func run(ctx context.Context, options options) error {
 			return
 		}
 		lastProgress = now
-		_ = writeAtomicJSON(operationPath, map[string]any{"kind": "subscription_update", "status": "running", "updated_at": now.Unix(), "phase": progress.Phase, "message": progress.Message, "current": progress.Current, "total": progress.Total, "pool": progress.Pool})
+		_ = writeAtomicJSON(operationPath, map[string]any{"kind": "subscription_update", "status": "running", "updated_at": now.Unix(), "phase": progress.Phase, "message": progress.Message, "current": progress.Current, "total": progress.Total, "pool": progress.Pool,
+			"allowlist_scan": options.WhitelistResult != "", "connectivity": map[bool]string{true: "allowlist", false: "normal"}[options.WhitelistResult != ""]})
 	}
 	qualifier := updater.PipelineQualifier{Backend: probeBackend, Progress: func(pool, stage string, current, total int) {
 		labels := map[string]string{"baseline": "Скорость прямого соединения", "tcp": "TCP-проверка", "url_test": "URL-test", "speed_test": "Speed-test"}
