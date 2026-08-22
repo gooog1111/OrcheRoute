@@ -6,8 +6,26 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"time"
 )
+
+var installedVersionOnce sync.Once
+var installedVersion string
+
+func currentPackageVersion() string {
+	installedVersionOnce.Do(func() {
+		if runtime.GOOS != "linux" {
+			return
+		}
+		output, err := exec.Command("dpkg-query", "-W", "-f=${Version}", "orcheroute").Output()
+		if err == nil {
+			installedVersion = strings.TrimSpace(string(output))
+		}
+	})
+	return installedVersion
+}
 
 func (r *Runtime) RunAppUpdateMonitor(ctx context.Context) {
 	if runtime.GOOS != "linux" {
@@ -47,6 +65,9 @@ func nextAppUpdateCheck(updatedAt int, now time.Time) time.Duration {
 func (r *Runtime) getAppUpdate() (int, any) {
 	v := map[string]any{"state": "idle", "message": "Обновления не проверялись", "active": false, "updated_at": 0, "supported": runtime.GOOS == "linux", "beta_enabled": false}
 	_ = readJSON(filepath.Join(r.Config.StateDirectory, "app-update.json"), &v)
+	if version := currentPackageVersion(); version != "" {
+		v["current_version"] = version
+	}
 	v["active"] = containsString([]string{"checking", "downloading", "installing"}, stringValue(v["state"]))
 	return 200, v
 }

@@ -86,7 +86,7 @@ func Targets(config Config) ([]Target, error) {
 	return []Target{
 		{Name: "allowlist", URL: allowlistURL},
 		{Name: "open_internet", URL: openURL, OpenInternet: true, ExpectNoContent: isGenerate204(openURL)},
-		{Name: "open_anchor_github", URL: "https://api.github.com/zen", OpenInternet: true},
+		{Name: "open_anchor_github", URL: "https://raw.githubusercontent.com/gooog1111/OrcheRoute/main/README.md", OpenInternet: true},
 		{Name: "open_anchor_mozilla", URL: "https://www.mozilla.org/robots.txt", OpenInternet: true},
 	}, nil
 }

@@ -17,11 +17,11 @@ func (r rewrite) RoundTrip(q *http.Request) (*http.Response, error) {
 }
 func TestLatestSelectsDigestedServerDeb(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"tag_name":"v1.2.3","assets":[{"name":"OrcheRoute-Linux-Server-1.2.3-amd64.deb","browser_download_url":"https://github.com/x","digest":"sha256:abcd","size":42}]}`))
+		w.Write([]byte(`{"version":"1.2.3","prerelease":false,"page_url":"https://github.com/x/release","assets":{"amd64":{"name":"OrcheRoute-Linux-Server-1.2.3-amd64.deb","url":"https://github.com/x","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":42}}}`))
 	}))
 	defer s.Close()
 	got, err := Latest(context.Background(), &http.Client{Transport: rewrite{s.URL}}, false, "amd64")
-	if err != nil || got.Version != "1.2.3" || got.Asset.Digest != "abcd" {
+	if err != nil || got.Version != "1.2.3" || got.Asset.Digest != strings.Repeat("a", 64) {
 		t.Fatalf("got=%#v err=%v", got, err)
 	}
 }

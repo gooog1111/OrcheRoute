@@ -65,10 +65,26 @@ type Backend struct {
 	baselineMu sync.Mutex
 	baseline   qualification.Download
 	baselineAt time.Time
+	speedBytes int64
 }
 
 func (backend *Backend) SetProgress(progress func(stage string, current, total int)) {
 	backend.Progress = progress
+}
+
+func (backend *Backend) SetSpeedBytes(value int64) {
+	backend.baselineMu.Lock()
+	backend.speedBytes = value
+	backend.baselineMu.Unlock()
+}
+
+func (backend *Backend) currentSpeedBytes() int64 {
+	backend.baselineMu.Lock()
+	defer backend.baselineMu.Unlock()
+	if backend.speedBytes <= 0 {
+		return qualification.MinSpeedSampleBytes
+	}
+	return backend.speedBytes
 }
 
 func (backend *Backend) TCP(ctx context.Context, proxies []map[string]any) ([]qualification.Latency, error) {
@@ -109,7 +125,7 @@ func (backend *Backend) Baseline(ctx context.Context) (qualification.Download, e
 	}
 	client, closeClient := directClient(config)
 	defer closeClient()
-	download := downloadSpeed(ctx, client, config.SpeedURL)
+	download := downloadSpeed(ctx, client, config.SpeedURL, qualification.SpeedBytes)
 	if !download.OK || download.BytesPerSecond <= 0 {
 		return qualification.Download{}, fmt.Errorf("direct_speed_baseline_failed")
 	}
@@ -119,6 +135,7 @@ func (backend *Backend) Baseline(ctx context.Context) (qualification.Download, e
 
 func (backend *Backend) Speed(ctx context.Context, proxies []map[string]any, geoEnabled bool) ([]qualification.SpeedEvidence, error) {
 	config := backend.normalized()
+	speedBytes := backend.currentSpeedBytes()
 	return parallel(proxies, config.SpeedWorkers, func(_ int, item map[string]any) qualification.SpeedEvidence {
 		evidence := qualification.SpeedEvidence{}
 		err := withCore(ctx, item, config, func(client *http.Client) error {
@@ -131,7 +148,7 @@ func (backend *Backend) Speed(ctx context.Context, proxies []map[string]any, geo
 				}
 			}
 			for index := 0; index < 2; index++ {
-				evidence.Downloads = append(evidence.Downloads, downloadSpeed(ctx, client, config.SpeedURL))
+				evidence.Downloads = append(evidence.Downloads, downloadSpeed(ctx, client, config.SpeedURL, speedBytes))
 			}
 			return nil
 		})
@@ -358,17 +375,18 @@ func interfaceIPv4(name string) net.IP {
 	return nil
 }
 
-func downloadSpeed(ctx context.Context, client *http.Client, address string) qualification.Download {
+func downloadSpeed(ctx context.Context, client *http.Client, address string, limit int64) qualification.Download {
 	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	request.Header.Set("Range", fmt.Sprintf("bytes=0-%d", limit-1))
 	started := time.Now()
 	response, err := client.Do(request)
 	if err != nil {
 		return qualification.Download{}
 	}
 	defer response.Body.Close()
-	written, err := io.Copy(io.Discard, io.LimitReader(response.Body, qualification.SpeedBytes))
+	written, err := io.Copy(io.Discard, io.LimitReader(response.Body, limit))
 	elapsed := time.Since(started).Seconds()
-	return qualification.Download{OK: err == nil && response.StatusCode == http.StatusOK && written > 0, HTTPCode: response.StatusCode, Bytes: written, BytesPerSecond: float64(written) / elapsed}
+	return qualification.Download{OK: err == nil && (response.StatusCode == http.StatusOK || response.StatusCode == http.StatusPartialContent) && written == limit, HTTPCode: response.StatusCode, Bytes: written, BytesPerSecond: float64(written) / elapsed, ExpectedBytes: limit}
 }
 
 func traceCountry(ctx context.Context, client *http.Client, address string) (string, string) {

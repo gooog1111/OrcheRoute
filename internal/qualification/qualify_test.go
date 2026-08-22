@@ -134,3 +134,20 @@ func TestQualificationCanSkipSpeedForAllowlist(t *testing.T) {
 		t.Fatalf("unexpected allowlist report: %#v", result.Report)
 	}
 }
+
+func TestAdaptiveSpeedBytes(t *testing.T) {
+	tests := []struct {
+		speed float64
+		want  int64
+	}{
+		{100_000, MinSpeedSampleBytes},
+		{1_250_000, 625_000},
+		{3_750_000, 1_875_000},
+		{100_000_000, MaxSpeedSampleBytes},
+	}
+	for _, test := range tests {
+		if got := AdaptiveSpeedBytes(test.speed); got != test.want {
+			t.Fatalf("AdaptiveSpeedBytes(%v)=%d want %d", test.speed, got, test.want)
+		}
+	}
+}

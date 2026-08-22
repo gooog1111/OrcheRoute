@@ -81,6 +81,11 @@ func TestStatusUsesPhysicalConnectivitySnapshot(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := atomicJSON(runtime.identityPath(), IdentitySnapshot{
+		Direct: &mobileconnectivity.Identity{IP: "198.51.100.10", CountryCode: "US", Region: "USA", Flag: "🇺🇸"},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	status, payload := runtime.getStatus(context.Background())
 	if status != 200 {
 		t.Fatalf("status=%d payload=%#v", status, payload)
@@ -88,6 +93,10 @@ func TestStatusUsesPhysicalConnectivitySnapshot(t *testing.T) {
 	wan := payload.(map[string]any)["wan"].(map[string]any)
 	if wan["mode"] != mobileconnectivity.Allowlist || wan["available"] != true {
 		t.Fatalf("wan=%#v", wan)
+	}
+	identity := wan["identity"].(*mobileconnectivity.Identity)
+	if identity.IP != "198.51.100.10" || identity.CountryCode != "US" {
+		t.Fatalf("identity=%#v", identity)
 	}
 }
 

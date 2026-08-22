@@ -9,7 +9,11 @@ import (
 	"time"
 )
 
-const SpeedBytes = 10_485_760
+// SpeedBytes is used only for the cached physical-link baseline. Per-node
+// samples are deliberately much smaller and scale with that baseline.
+const SpeedBytes int64 = 10_485_760
+const MinSpeedSampleBytes int64 = 256 << 10
+const MaxSpeedSampleBytes int64 = 2 << 20
 const BaselineRatio = 0.10
 
 type Source struct {
@@ -27,6 +31,7 @@ type Download struct {
 	HTTPCode       int     `json:"http_code"`
 	Bytes          int64   `json:"bytes"`
 	BytesPerSecond float64 `json:"bytes_per_second"`
+	ExpectedBytes  int64   `json:"expected_bytes,omitempty"`
 }
 
 type SpeedEvidence struct {
@@ -50,6 +55,24 @@ type Backend interface {
 
 type BaselineBackend interface {
 	Baseline(ctx context.Context) (Download, error)
+}
+
+type SpeedSizer interface {
+	SetSpeedBytes(int64)
+}
+
+// AdaptiveSpeedBytes targets roughly half a second per run. Two runs are
+// retained for stability assessment, while the bounds keep slow links and
+// very fast links predictable.
+func AdaptiveSpeedBytes(bytesPerSecond float64) int64 {
+	value := int64(bytesPerSecond * 0.5)
+	if value < MinSpeedSampleBytes {
+		return MinSpeedSampleBytes
+	}
+	if value > MaxSpeedSampleBytes {
+		return MaxSpeedSampleBytes
+	}
+	return value
 }
 
 type SourceReport struct {
@@ -123,6 +146,9 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 			baselineMbps = baseline.BytesPerSecond * 8 / 1_000_000
 			minimumMbps = baselineMbps * BaselineRatio
 			thresholdSource = "wan_baseline"
+			if sizer, ok := backend.(SpeedSizer); ok {
+				sizer.SetSpeedBytes(AdaptiveSpeedBytes(baseline.BytesPerSecond))
+			}
 		}
 	}
 	stabilityRatio, err := valueFloat(settings["stability_ratio"])
@@ -339,7 +365,11 @@ func EvaluateSpeed(evidence SpeedEvidence, threshold int, stabilityRatio float64
 		if !download.OK {
 			return Measurement{Status: "speed_failed", BytesPerSecond: fastest, Country: country}
 		}
-		if download.HTTPCode != 200 || download.Bytes < SpeedBytes {
+		expected := download.ExpectedBytes
+		if expected <= 0 {
+			expected = SpeedBytes
+		}
+		if (download.HTTPCode != 200 && download.HTTPCode != 206) || download.Bytes < expected {
 			return Measurement{Status: "speed_incomplete", BytesPerSecond: fastest, Country: country}
 		}
 		if math.IsNaN(download.BytesPerSecond) || math.IsInf(download.BytesPerSecond, 0) {

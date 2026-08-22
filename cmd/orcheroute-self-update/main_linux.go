@@ -47,7 +47,7 @@ func run(action, dir string, beta bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	current := installed()
-	write(dir, status{State: "checking", Message: "Проверяем GitHub Releases", CurrentVersion: current, Active: true, UpdatedAt: time.Now().Unix(), Beta: beta})
+	write(dir, status{State: "checking", Message: "Проверяем манифест обновлений", CurrentVersion: current, Active: true, UpdatedAt: time.Now().Unix(), Beta: beta})
 	rel, err := selfupdate.Latest(ctx, nil, beta, "amd64")
 	if err != nil {
 		return err

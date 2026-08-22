@@ -101,6 +101,7 @@ func runServer(ctx context.Context, config serverruntime.Config) error {
 	defer runtime.Close()
 	go runtime.RunController(ctx)
 	go runtime.RunConnectivityMonitor(ctx)
+	go runtime.RunIdentityMonitor(ctx)
 	go runtime.RunAppUpdateMonitor(ctx)
 
 	api := newHTTPServer(config.Listen, runtime.APIHandler())
