@@ -126,16 +126,21 @@ test("android settings expose a signed GitHub release updater without transport 
   assert.match(updater, /Сертификат подписи APK не совпадает/);
 });
 
-test("android updater exposes an explicit prerelease channel with a warning", async () => {
+test("android updater selects a persistent prerelease channel with a stable-to-beta warning", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const updater = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/AppUpdater.java", import.meta.url), "utf8");
   const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
-  assert.match(settings, /Обновиться до Beta/);
+  assert.doesNotMatch(settings, /Обновиться до Beta/);
+  assert.match(settings, /<strong>Beta-версии<\/strong>/);
+  assert.match(settings, /appUpdate\?\.current_prerelease/);
   assert.match(settings, /Это тестовая сборка с непроверенными изменениями VPN-автоматики/);
-  assert.match(settings, /Понимаю риск, установить Beta/);
+  assert.match(settings, /Понимаю риск, включить Beta/);
 	assert.match(updater, /releases\/download\/android-beta\/android-update\.json/);
 	assert.match(updater, /Канал manifest не совпадает/);
-  assert.match(activity, /installBetaAppUpdate/);
+  assert.match(updater, /preferences\.getBoolean\(BETA_ENABLED, currentVersion\.contains\("-"\)\)/);
+  assert.match(updater, /loadManifest\(beta\)/);
+  assert.doesNotMatch(activity, /installBetaAppUpdate/);
+  assert.match(activity, /setAppUpdateBetaEnabled/);
 });
 
 test("android prerelease builds use the red interface accent without changing stable colors", async () => {

@@ -290,7 +290,7 @@ type AndroidRuntimeBridge = {
   appUpdateStatus?: () => string;
   checkAppUpdate?: () => boolean;
   installAppUpdate?: () => boolean;
-	installBetaAppUpdate?: () => boolean;
+	setAppUpdateBetaEnabled?: (enabled: boolean) => boolean;
 };
 
 export type AndroidAppUpdateStatus = {
@@ -304,6 +304,8 @@ export type AndroidAppUpdateStatus = {
   total?: number;
   error?: string;
   active: boolean;
+	current_prerelease: boolean;
+	beta_enabled: boolean;
 	channel?: "stable" | "beta";
 };
 
@@ -361,9 +363,9 @@ export function installAndroidAppUpdate() {
   return typeof bridge?.installAppUpdate === "function" && bridge.installAppUpdate();
 }
 
-export function installAndroidBetaUpdate() {
+export function setAndroidAppUpdateBetaEnabled(enabled: boolean) {
 	const bridge = androidBridge();
-	return typeof bridge?.installBetaAppUpdate === "function" && bridge.installBetaAppUpdate();
+	return typeof bridge?.setAppUpdateBetaEnabled === "function" && bridge.setAppUpdateBetaEnabled(enabled);
 }
 
 export function isEmbeddedRuntime() {

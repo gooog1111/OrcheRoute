@@ -18,13 +18,13 @@ import {
   checkAndroidAppUpdate,
   getAndroidAppUpdateStatus,
   installAndroidAppUpdate,
-	installAndroidBetaUpdate,
   isEmbeddedRuntime,
   isAndroidRuntime,
   loadOperations,
   openTextFile,
   saveTextFile,
   scanQr,
+	setAndroidAppUpdateBetaEnabled,
   type DashboardData,
   type DnsConfig,
   type NetworkProfile,
@@ -3128,6 +3128,28 @@ function ComponentsForm({
               <small>{Math.round(((appUpdate.current ?? 0) / appUpdate.total) * 100)}%</small>
             </div>
           ) : null}
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={Boolean(appUpdate?.beta_enabled)}
+              disabled={Boolean(appUpdate?.active)}
+              onChange={(event) => {
+                if (!event.target.checked) {
+                  setAndroidAppUpdateBetaEnabled(false);
+                  return;
+                }
+                if (appUpdate?.current_prerelease) {
+                  setAndroidAppUpdateBetaEnabled(true);
+                  return;
+                }
+                setBetaWarning(true);
+              }}
+            />
+            <span>
+              <strong>Beta-версии</strong>
+              <small>Проверять обновления в тестовом канале</small>
+            </span>
+          </label>
           <ActionBar>
             <span>
               Установлена {appUpdate?.current_version ?? "—"}
@@ -3149,14 +3171,6 @@ function ComponentsForm({
             >
               Скачать и установить
             </button>
-			<button
-				className="secondary-button"
-				type="button"
-				disabled={Boolean(appUpdate?.active)}
-				onClick={() => setBetaWarning(true)}
-			>
-				Обновиться до Beta
-			</button>
           </ActionBar>
         </div>
       )}
@@ -3169,11 +3183,12 @@ function ComponentsForm({
 			aria-labelledby="beta-update-title"
 			onClick={(event) => event.stopPropagation()}
 		  >
-			<strong id="beta-update-title">Установить Beta-версию?</strong>
+			<strong id="beta-update-title">Включить Beta-версии?</strong>
 			<p className="route-help">
 			  Это тестовая сборка с непроверенными изменениями VPN-автоматики. Возможны
 			  обрывы соединения и ошибки переключения сети. Перед установкой рекомендуется
-			  сохранить важные подписки и маршруты.
+			  сохранить важные подписки и маршруты. После подтверждения используйте
+			  обычные кнопки проверки и установки обновления.
 			</p>
 			<ActionBar>
 			  <button className="secondary-button" type="button" onClick={() => setBetaWarning(false)}>
@@ -3184,10 +3199,10 @@ function ComponentsForm({
 				type="button"
 				onClick={() => {
 				  setBetaWarning(false);
-				  installAndroidBetaUpdate();
+				  setAndroidAppUpdateBetaEnabled(true);
 				}}
 			  >
-				Понимаю риск, установить Beta
+				Понимаю риск, включить Beta
 			  </button>
 			</ActionBar>
 		  </div>

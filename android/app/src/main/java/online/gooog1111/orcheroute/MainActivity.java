@@ -422,13 +422,13 @@ public final class MainActivity extends ComponentActivity {
         }
 
         @JavascriptInterface
-        public boolean installAppUpdate() {
-            return appUpdater.downloadAndInstall();
-        }
+		public boolean installAppUpdate() {
+			return appUpdater.downloadAndInstall();
+		}
 
 		@JavascriptInterface
-		public boolean installBetaAppUpdate() {
-			return appUpdater.downloadAndInstallBeta();
+		public boolean setAppUpdateBetaEnabled(boolean enabled) {
+			return appUpdater.setBetaEnabled(enabled);
 		}
     }
 

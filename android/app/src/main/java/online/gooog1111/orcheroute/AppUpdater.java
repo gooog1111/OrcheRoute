@@ -2,6 +2,7 @@ package online.gooog1111.orcheroute;
 
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
@@ -32,15 +33,19 @@ import java.util.regex.Pattern;
 final class AppUpdater {
 	private static final String STABLE_MANIFEST_URL = "https://github.com/gooog1111/OrcheRoute/releases/latest/download/android-update.json";
 	private static final String BETA_MANIFEST_URL = "https://github.com/gooog1111/OrcheRoute/releases/download/android-beta/android-update.json";
+	private static final String PREFERENCES = "orcheroute_app_update";
+	private static final String BETA_ENABLED = "beta_enabled";
     private static final Pattern VERSION_CODE_PATTERN = Pattern.compile("(?:code|vc)([0-9]+)", Pattern.CASE_INSENSITIVE);
     private static final long MAX_APK_BYTES = 256L * 1024L * 1024L;
     private final MainActivity activity;
+	private final SharedPreferences preferences;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final String currentVersion;
     private final long currentVersionCode;
     private String state = "idle", message = "Обновление приложения ещё не проверялось", error = "";
     private String latestVersion = "", downloadURL = "", expectedSHA256 = "";
 	private String channel = "stable";
+	private boolean betaEnabled;
     private int latestVersionCode;
     private long current, total;
     private boolean active;
@@ -55,6 +60,9 @@ final class AppUpdater {
             code = installed.getLongVersionCode();
         } catch (PackageManager.NameNotFoundException ignored) { }
         currentVersion = version; currentVersionCode = code;
+		preferences = activity.getSharedPreferences(PREFERENCES, 0);
+		betaEnabled = preferences.getBoolean(BETA_ENABLED, currentVersion.contains("-"));
+		channel = betaEnabled ? "beta" : "stable";
     }
 
     synchronized String status() {
@@ -62,7 +70,9 @@ final class AppUpdater {
             JSONObject result = new JSONObject()
                     .put("state", state).put("message", message).put("active", active)
                     .put("current_version", currentVersion)
-                    .put("current_version_code", currentVersionCode)
+					.put("current_version_code", currentVersionCode)
+					.put("current_prerelease", currentVersion.contains("-"))
+					.put("beta_enabled", betaEnabled)
 					.put("channel", channel)
                     .put("current", current).put("total", total);
             if (!latestVersion.isEmpty()) result.put("latest_version", latestVersion).put("latest_version_code", latestVersionCode);
@@ -73,20 +83,34 @@ final class AppUpdater {
 
     synchronized boolean check() {
         if (active) return false;
-        set("checking", "Проверяем доступную версию OrcheRoute", "", true, 0, 0);
+		final boolean beta = betaEnabled;
+		channel = beta ? "beta" : "stable";
+        set("checking", beta ? "Проверяем обновления Beta" : "Проверяем обновления Stable", "", true, 0, 0);
         worker.execute(() -> {
-			try { loadManifest(false); }
+			try { loadManifest(beta); }
             catch (Throwable failure) { fail(failure); }
         });
         return true;
     }
 
     synchronized boolean downloadAndInstall() {
-		return downloadAndInstall(false);
+		return downloadAndInstall(betaEnabled);
 	}
 
-	synchronized boolean downloadAndInstallBeta() {
-		return downloadAndInstall(true);
+	synchronized boolean setBetaEnabled(boolean enabled) {
+		if (active) return false;
+		betaEnabled = enabled;
+		channel = enabled ? "beta" : "stable";
+		preferences.edit().putBoolean(BETA_ENABLED, enabled).apply();
+		latestVersion = "";
+		latestVersionCode = 0;
+		downloadURL = "";
+		expectedSHA256 = "";
+		current = 0;
+		total = 0;
+		pendingAPK = null;
+		set("idle", enabled ? "Выбраны обновления Beta" : "Выбраны обновления Stable", "", false, 0, 0);
+		return true;
 	}
 
 	private synchronized boolean downloadAndInstall(boolean beta) {
