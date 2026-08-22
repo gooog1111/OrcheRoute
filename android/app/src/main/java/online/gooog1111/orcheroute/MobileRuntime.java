@@ -220,7 +220,7 @@ final class MobileRuntime {
                 allowlistRouteOverride = true;
                 allowlistWorkingFound = repository.whitelistCount() > 0;
                 allowlistLastScanAt = 0;
-                message = "Вручную формируем пул серверов для белых списков";
+                message = "Вручную формируем список серверов для белых списков";
                 return response(202, scheduleRefresh(null, true, null, true, false, false));
             }
             if ("GET".equals(verb) && "/v1/qualification".equals(path)) return response(200, qualification());
@@ -429,7 +429,7 @@ final class MobileRuntime {
     synchronized EngineProfile engineProfile() throws Exception {
         JSONObject node = repository.activeNode(allowlistRouteOverride);
         if (node == null) {
-            if (allowlistRouteOverride) throw new IllegalStateException("Формируется пул серверов для белых списков");
+            if (allowlistRouteOverride) throw new IllegalStateException("Формируется список серверов для белых списков");
             return new EngineProfile(null, null, null, null);
         }
         JSONObject built = new JSONObject(Mobilecore.buildMobileProxyConfigWithNetwork(
@@ -678,7 +678,7 @@ final class MobileRuntime {
 					return;
                 }
                 allowlistWorkingFound = true;
-                updateRefresh("running", "whitelist_pool", "Пул белых списков сформирован: " + working + " серверов", items.length(), items.length(), "");
+                updateRefresh("running", "whitelist_pool", "Список для белых списков сформирован: " + working + " серверов", items.length(), items.length(), "");
                 if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
                 boolean connectionConfirmed = awaitWhitelistConnection(30_000);
                 ensureRefreshContinues(true);
@@ -692,7 +692,7 @@ final class MobileRuntime {
                         if (repository.whitelistCount() > 0) restartIfEnabled();
                     }
                 }
-                updateRefresh("success", "complete", "Пул белых списков готов: " + repository.whitelistCount() + " серверов", items.length(), items.length(), "");
+                updateRefresh("success", "complete", "Список для белых списков готов: " + repository.whitelistCount() + " серверов", items.length(), items.length(), "");
 			} else if (primaryRecoveryActive && success > 0) {
 				if (repository.preferPrimaryIfAvailable(primaryRecoveryStartedAt)) restartIfEnabled();
 			} else if (checkOnly && success > 0) {
@@ -771,8 +771,8 @@ final class MobileRuntime {
         String current = connectivityState();
         if (!"allowlist".equals(current) || !isAllowlistModeActive()) {
             String message = "normal".equals(current)
-                    ? "Обычный интернет восстановлен. Формирование пула белых списков остановлено."
-                    : "Состояние ограниченной сети изменилось. Формирование пула остановлено.";
+                    ? "Обычный интернет восстановлен. Формирование списка серверов остановлено."
+                    : "Состояние ограниченной сети изменилось. Формирование списка остановлено.";
             throw new RefreshStopped(message);
         }
     }
@@ -896,7 +896,7 @@ final class MobileRuntime {
 		state = "waiting_network";
 		message = allowlistLastScanAt > 0 && now() - allowlistLastScanAt < 300
 				? "В белых списках нет доступных серверов. Повтор через 5 минут"
-				: "Формируем пул серверов для белых списков";
+				: "Формируем список серверов для белых списков";
 		if (!refreshActive && (allowlistLastScanAt == 0 || now() - allowlistLastScanAt >= 300)) {
 			try { scheduleRefresh(null, true, null, true); }
 			catch (JSONException error) { refreshError = readable(error); }
@@ -916,7 +916,7 @@ final class MobileRuntime {
         whitelistConnectPending = true;
 		setDesiredEnabled(true);
         state = "starting";
-        message = "Подключаемся через " + candidate.optString("display_name") + " из пула белых списков";
+        message = "Подключаемся через " + candidate.optString("display_name") + " из списка для белых списков";
         return true;
     }
 
@@ -960,7 +960,7 @@ final class MobileRuntime {
 					enterAllowlistMode();
 					scheduleRefresh(null, true, null, true);
 					state = "waiting_network";
-					message = "Формируем пул серверов для белых списков";
+					message = "Формируем список серверов для белых списков";
 					OrcheRouteVpnService.pauseForNetwork(context);
 				}
 				case "wait_whitelist_scan", "wait_whitelist_retry" -> {
@@ -969,7 +969,7 @@ final class MobileRuntime {
 					state = "waiting_network";
 					message = "wait_whitelist_retry".equals(action)
 							? "В белых списках нет доступных серверов. Повтор через 5 минут"
-							: "Продолжаем формирование пула белых списков";
+							: "Продолжаем формирование списка серверов";
 					if (!alreadyWaiting) OrcheRouteVpnService.pauseForNetwork(context);
 				}
 				default -> { }
@@ -1019,13 +1019,13 @@ final class MobileRuntime {
             whitelistConnectPending = true;
 			setDesiredEnabled(true);
             state = "starting";
-            message = "Переключаемся на следующий сервер из пула белых списков";
+            message = "Переключаемся на следующий сервер из списка для белых списков";
             return next.optString("display_name");
         }
         allowlistWorkingFound = false;
 		if (refreshActive) {
 			state = "waiting_network";
-			message = "Текущий сервер белых списков недоступен. Продолжаем формирование пула";
+			message = "Текущий сервер белых списков недоступен. Продолжаем формирование списка";
 			OrcheRouteVpnService.pauseForNetwork(context);
 		} else {
 			onWhitelistPoolEmpty();
@@ -1259,7 +1259,7 @@ final class MobileRuntime {
                 } else {
                     allowlistWorkingFound = false;
                     onWhitelistPoolEmpty();
-                    refreshError = "Пул белого списка пуст после удаления сервера";
+                    refreshError = "Список серверов для белых списков пуст после удаления";
                     OrcheRouteVpnService.stopWithError(context);
                 }
             } else {

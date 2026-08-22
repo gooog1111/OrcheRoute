@@ -240,7 +240,7 @@ public final class OrcheRouteVpnService extends VpnService {
             if (runtime.isWhitelistPoolBuilding()) {
                 notificationNode = "Белые списки";
                 NotificationManager manager = getSystemService(NotificationManager.class);
-                manager.notify(NOTIFICATION_ID, notification("Проверяем все серверы и формируем рабочий пул…"));
+                manager.notify(NOTIFICATION_ID, notification("Проверяем серверы и формируем рабочий список серверов…"));
                 return;
             }
             if (runtime.isAllowlistModeActive()) {
@@ -495,7 +495,7 @@ public final class OrcheRouteVpnService extends VpnService {
                 ? new Notification.Builder(this, CHANNEL_ID)
                 : new Notification.Builder(this);
         return builder
-                .setSmallIcon(android.R.drawable.stat_sys_warning)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(notificationNode.isEmpty() ? "OrcheRoute" : "OrcheRoute · " + notificationNode)
                 .setContentText(text)
                 .setContentIntent(contentIntent())

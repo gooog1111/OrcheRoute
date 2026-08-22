@@ -11,11 +11,11 @@ test("exports the OrcheRoute dashboard", async () => {
   assert.match(html, /Управление маршрутизацией и VPN на сервере/i);
 });
 
-test("dashboard server count belongs to the pool named below it", async () => {
+test("dashboard server count belongs to the server list named below it", async () => {
   const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
   assert.match(dashboard, /const aliveNodes = activePool\?\.alive \?\? allAliveNodes/);
   assert.match(dashboard, /const totalNodes = activePool\?\.total \?\? allTotalNodes/);
-  assert.match(dashboard, /: "Все пулы"/);
+  assert.match(dashboard, /: "Все списки серверов"/);
 });
 
 test("android persists a successful node switch and displays its date and time", async () => {
@@ -55,7 +55,7 @@ test("exposes separate subscription refresh and cached server checks", async () 
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(api, /\/v1\/subscriptions\/check/);
   assert.match(settings, /Проверить серверы/);
-  assert.match(settings, /Только аварийный пул/);
+  assert.match(settings, /Только аварийный список серверов/);
 });
 
 test("uses an embedded subscription delete confirmation", async () => {
@@ -69,7 +69,7 @@ test("renders automatic/manual modes and an emergency-only option", async () => 
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(settings, /proxy\.mode === "auto" \? "selected"/);
   assert.match(settings, /checked=\{data\?\.status\.proxy\.mode === "emergency"\}/);
-  assert.match(settings, /В автоматическом режиме аварийный пул и так используется/);
+  assert.match(settings, /В автоматическом режиме аварийный список серверов и так используется/);
   assert.match(settings, /<strong>Ручной режим<\/strong>/);
   assert.doesNotMatch(settings, /<strong>Ручной сервер<\/strong>/);
 });
@@ -200,6 +200,27 @@ test("android dashboard follows live VPN state and shows direct and proxy identi
   assert.match(service, /Mobilecore\.parseConnectionIdentity/);
   assert.match(runtime, /\.put\("identity", new JSONObject\(directIdentity\.toString\(\)\)\)/);
   assert.match(runtime, /\.put\("identity", new JSONObject\(proxyIdentity\.toString\(\)\)\)/);
+});
+
+test("android uses OrcheRoute notification glyph and user-facing server-list terminology", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
+  const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
+  const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
+  const icon = await readFile(new URL("../../android/app/src/main/res/drawable/ic_notification.xml", import.meta.url), "utf8");
+  assert.match(service, /setSmallIcon\(R\.drawable\.ic_notification\)/);
+  assert.doesNotMatch(service, /stat_sys_warning/);
+  assert.match(icon, /M4,14h4v6H4zM10,4h4v16h-4zM16,9h4v11h-4z/);
+  assert.doesNotMatch(icon, /M0,0h24v24/);
+  assert.doesNotMatch(`${dashboard}\n${settings}\n${runtime}`, /пул/iu);
+  assert.match(settings, /Встроенный аварийный список серверов/);
+  assert.doesNotMatch(settings, /subscription\.description/);
+  assert.match(repository, /addDefault\("ebrasha-public", "EbraSha"/);
+  assert.match(repository, /addDefault\("default-au1rxx", "Au1rxx"/);
+  assert.match(repository, /existing\.put\("name", name\).*\.put\("description", description\)/s);
+  assert.doesNotMatch(repository, /Обновляемый универсальный аварийный список/);
+  assert.doesNotMatch(repository, /Умеренный V2Ray\/Base64-набор/);
 });
 
 test("qualification UI exposes connectivity anchors and emergency per-source top", async () => {

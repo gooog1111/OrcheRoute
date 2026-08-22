@@ -14,8 +14,8 @@ const statusText: Record<string, string> = {
   proxy_degraded: "Соединение нестабильно",
   manual_proxy_degraded: "Ручной узел нестабилен",
   manual_target_unavailable: "Узел недоступен",
-  emergency_proxy_ok: "Подключено · аварийный пул",
-  emergency_proxy_degraded: "Аварийный пул недоступен",
+  emergency_proxy_ok: "Подключено · аварийный список серверов",
+  emergency_proxy_degraded: "Аварийный список серверов недоступен",
   internet_down: "Нет интернета",
   recovery_grace: "Восстановление соединения",
   starting: "Запуск",
@@ -126,12 +126,12 @@ export function Dashboard() {
   const whitelistOperation: OperationView | null = whitelistScanning
     ? {
         state: "running",
-        title: "Формируем пул белых списков",
+        title: "Формируем список серверов для белых списков",
         detail: stoppingWhitelist
           ? "Останавливаем после завершения текущей группы тестов…"
           : whitelistUpdate?.message ?? "Перепроверяем сохранённые серверы в ограниченной сети…",
         step: 1,
-        steps: ["Определяем режим сети", "Проверяем все серверы", "Формируем устойчивый пул"],
+        steps: ["Определяем режим сети", "Проверяем все серверы", "Формируем устойчивый список"],
         progress:
           typeof whitelistUpdate?.current === "number" &&
           typeof whitelistUpdate?.total === "number" &&
@@ -164,7 +164,7 @@ export function Dashboard() {
       await actions.scanWhitelistPool();
       await refresh(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось запустить формирование пула");
+      setError(reason instanceof Error ? reason.message : "Не удалось сформировать список серверов");
     }
   };
   const stateLabel = enabled ? (statusText[data?.status.connectivity ?? "starting"] ?? "Проверка") : "Готов к запуску";
@@ -256,7 +256,7 @@ export function Dashboard() {
 
         <div className="metrics-grid" aria-label="Состояние системы">
           <Metric icon={<GlobeIcon />} label="Интернет" value={data?.status.wan.mode === "allowlist" ? "Белые списки" : data?.status.wan.available === true ? "Доступен" : data?.status.wan.available === false ? "Недоступен" : "Проверка"} detail={data?.status.wan.interface ?? "—"} tone={data?.status.wan.mode === "allowlist" ? "neutral" : data?.status.wan.available === true ? "good" : "neutral"} />
-          <Metric icon={<ServerIcon />} label="Серверы" value={`${aliveNodes} из ${totalNodes}`} detail={activePool?.id === "primary" ? "Основной пул" : activePool?.id === "emergency" ? "Аварийный пул" : activePool?.id === "whitelist" ? "Пул белых списков" : "Все пулы"} tone={aliveNodes > 0 ? "good" : "neutral"} />
+          <Metric icon={<ServerIcon />} label="Серверы" value={`${aliveNodes} из ${totalNodes}`} detail={activePool?.id === "primary" ? "Основной список серверов" : activePool?.id === "emergency" ? "Аварийный список серверов" : activePool?.id === "whitelist" ? "Список серверов для белых списков" : "Все списки серверов"} tone={aliveNodes > 0 ? "good" : "neutral"} />
           <Metric icon={<RouteIcon />} label="Маршруты" value={String(routeCount(data))} detail="direct · proxy · block" tone="neutral" />
           <Metric icon={<SettingsIcon />} label="Управление" value={data?.status.proxy.mode === "manual" ? "Ручное" : data?.status.proxy.mode === "emergency" ? "Только аварийный" : "Автоматически"} detail={<>Переключение<time>{formatTime(data?.status.proxy.last_switch ?? 0)}</time></>} tone="neutral" />
         </div>
@@ -264,7 +264,7 @@ export function Dashboard() {
           <div className={`whitelist-strip ${whitelistScanning ? "is-scanning" : ""}`}>
             <span className="status-dot" />
             <div>
-              <strong>{whitelistScanning ? "Формируется пул белых списков" : "Пул белых списков"}</strong>
+              <strong>{whitelistScanning ? "Формируется список серверов" : "Серверы для белых списков"}</strong>
               <small>
                 {whitelistScanning
                   ? whitelistUpdate?.message ?? "Проверяем все сохранённые серверы"
@@ -362,14 +362,14 @@ function GeneralSettings({ data, nodesByPool, busy, onAction }: {
   onAction: (action: () => Promise<unknown>) => Promise<void>;
 }) {
   return <div className="settings-section">
-    <div className="section-heading"><span>Переключение</span><h3>Как выбирать сервер</h3><p>Автоматический режим держит текущий узел до отказа и возвращается в основной пул после стабильной проверки.</p></div>
+    <div className="section-heading"><span>Переключение</span><h3>Как выбирать сервер</h3><p>Автоматический режим держит текущий узел до отказа и возвращается в основной список серверов после стабильной проверки.</p></div>
     <label className="choice-row">
       <input type="radio" name="control-mode" checked={data?.status.proxy.mode !== "manual"} disabled={busy} onChange={() => void onAction(actions.setAuto)} />
       <span><strong>Автоматически</strong><small>Рекомендуемый режим для сервера</small></span>
     </label>
     {(["primary", "emergency"] as const).map((pool) => (
       <div className="node-group" key={pool}>
-        <span className="field-label">{pool === "primary" ? "Основной пул" : "Аварийный пул"}</span>
+        <span className="field-label">{pool === "primary" ? "Основной список серверов" : "Аварийный список серверов"}</span>
         <div className="node-list">
           {nodesByPool[pool].map((node) => (
             <button type="button" className={`node-row ${node.selected ? "selected" : ""}`} key={node.id} disabled={!node.alive || busy} onClick={() => void onAction(() => actions.setManual(node.id))}>
@@ -378,7 +378,7 @@ function GeneralSettings({ data, nodesByPool, busy, onAction }: {
               <em>{node.delay_ms ? `${node.delay_ms} мс` : "—"}</em>
             </button>
           ))}
-          {!nodesByPool[pool].length && <p className="empty-state">В пуле пока нет серверов.</p>}
+          {!nodesByPool[pool].length && <p className="empty-state">В списке пока нет серверов.</p>}
         </div>
       </div>
     ))}

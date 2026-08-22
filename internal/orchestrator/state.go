@@ -128,7 +128,7 @@ func Transition(input State, event Event) (Result, error) {
 			if old == Allowlist {
 				pool, _ := whitelist.Transition(state.Whitelist, whitelist.Command{Operation: "deactivate"})
 				state.Whitelist = pool.State
-				action = Action{Type: "restore_normal", Message: "Возвращаем пользовательские маршруты и основной пул"}
+				action = Action{Type: "restore_normal", Message: "Возвращаем пользовательские маршруты и основной список серверов"}
 			}
 		}
 	case "add_source", "replace_source":
@@ -148,7 +148,7 @@ func Transition(input State, event Event) (Result, error) {
 		pool, _ := whitelist.Transition(state.Whitelist, whitelist.Command{Operation: "confirm", NodeID: event.NodeID})
 		state.Whitelist = pool.State
 		state.Connected, state.LastError = true, ""
-		action = Action{Type: "continue_scan", Message: "Соединение работает; продолжаем формировать устойчивый пул"}
+		action = Action{Type: "continue_scan", Message: "Соединение работает; продолжаем формировать устойчивый список серверов"}
 	case "failed":
 		state.Connected = false
 		pool, _ := whitelist.Transition(state.Whitelist, whitelist.Command{Operation: "fail", NodeID: event.NodeID})
@@ -156,7 +156,7 @@ func Transition(input State, event Event) (Result, error) {
 		if pool.Candidate != nil {
 			action = Action{Type: "connect", Candidate: pool.Candidate, Message: "Переключаемся на следующий сервер"}
 		} else {
-			action = Action{Type: "scan_all_cached", Message: "Рабочий whitelist-пул исчерпан; повторяем полную проверку"}
+			action = Action{Type: "scan_all_cached", Message: "Список серверов для белых списков исчерпан; повторяем полную проверку"}
 		}
 	case "scan_complete":
 		pool, _ := whitelist.Transition(state.Whitelist, whitelist.Command{Operation: "complete"})

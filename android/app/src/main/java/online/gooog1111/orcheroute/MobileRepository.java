@@ -245,20 +245,25 @@ final class MobileRepository {
 
     private void seedDefaults() {
         try {
-            addDefault("ebrasha-public", "EbraSha — проверенный список",
+            addDefault("ebrasha-public", "EbraSha",
                     "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt",
                     "https://github.com/ebrasha/free-v2ray-public-list",
-                    "Обновляемый универсальный аварийный список.");
-            addDefault("default-au1rxx", "Au1rxx — универсальная подписка",
+                    "");
+            addDefault("default-au1rxx", "Au1rxx",
                     "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt",
                     "https://github.com/Au1rxx/free-vpn-subscriptions",
-                    "Умеренный V2Ray/Base64-набор для аварийного подключения.");
+                    "");
             save();
         } catch (JSONException error) { throw new IllegalStateException(error); }
     }
 
     private void addDefault(String id, String name, String secret, String repository, String description) throws JSONException {
-        if (findSubscription(id) != null) return;
+        JSONObject existing = findSubscription(id);
+        if (existing != null) {
+            existing.put("name", name).put("repository", repository).put("description", description)
+                    .put("builtin_default", true);
+            return;
+        }
         long now = now();
         root.getJSONArray("subscriptions").put(new JSONObject()
                 .put("id", id).put("name", name).put("group", "emergency").put("parser", "standard")

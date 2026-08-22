@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "OrcheRoute",
-  description: "Управление маршрутами, VPN-пулами и DNS",
+  description: "Управление маршрутами, списками VPN-серверов и DNS",
   icons: { icon: "/favicon.svg" },
 };
 

@@ -246,7 +246,7 @@ export function SettingsModal({
       options.waitFor === "subscriptions"
         ? ["Запускаем обновление", "Загружаем подписки", "Сохраняем серверы"]
         : options.waitFor === "servers"
-          ? ["Запускаем проверку", "Тестируем серверы", "Обновляем рабочий пул"]
+          ? ["Запускаем проверку", "Тестируем серверы", "Обновляем рабочий список серверов"]
         : options.waitFor === "components"
           ? [
               "Запускаем обновление",
@@ -329,7 +329,7 @@ export function SettingsModal({
                   current && {
                     ...current,
                     step: 2,
-                    detail: update.message ?? "Сверяем обновлённые пулы…",
+                    detail: update.message ?? "Сверяем обновлённые списки серверов…",
                     progress: undefined,
                   },
               );
@@ -762,7 +762,7 @@ function GeneralForm({
           <strong>Автоматически</strong>
           <small>
             Контроллер сам выбирает узел, переключается только после отказа и
-            возвращается в основной пул.
+            возвращается в основной список серверов.
           </small>
         </button>
         <button
@@ -795,8 +795,8 @@ function GeneralForm({
             if (event.target.checked) {
               void run(
                 actions.setEmergency,
-                "Включена работа только через аварийный пул.",
-                { title: "Проверяем аварийный пул", waitFor: "servers" },
+                "Включена работа только через аварийный список серверов.",
+                { title: "Проверяем аварийный список серверов", waitFor: "servers" },
               );
             } else {
               void run(actions.setAuto, "Включён автоматический выбор сервера.");
@@ -804,8 +804,8 @@ function GeneralForm({
           }}
         />
         <span>
-          <strong>Только аварийный пул</strong>
-          <small>В автоматическом режиме аварийный пул и так используется, когда в основном нет доступных серверов. Включите опцию, чтобы временно запретить основной пул.</small>
+          <strong>Только аварийный список серверов</strong>
+          <small>В автоматическом режиме аварийный список серверов и так используется, когда в основном нет доступных серверов. Включите опцию, чтобы временно запретить основной список серверов.</small>
         </span>
       </label>
       {(["primary", "emergency"] as const).map((pool) => (
@@ -934,7 +934,7 @@ function PoolNodes({
     <div className="node-group">
       <div className="node-group-heading">
         <span className="field-label">
-          {pool === "primary" ? "Основной пул" : pool === "emergency" ? "Аварийный пул" : "Пул белых списков"}
+          {pool === "primary" ? "Основной список серверов" : pool === "emergency" ? "Аварийный список серверов" : "Список серверов для белых списков"}
         </span>
         {pool === "whitelist" && canEditPool && (
           <button
@@ -942,8 +942,8 @@ function PoolNodes({
             disabled={busy}
             onClick={() => void run(
               () => actions.scanWhitelistPool(),
-              "Пул белых списков сформирован.",
-              { title: "Формируем пул белых списков", waitFor: "subscriptions" },
+              "Список серверов для белых списков сформирован.",
+              { title: "Формируем список серверов", waitFor: "subscriptions" },
             )}
           >
             Сформировать
@@ -995,7 +995,7 @@ function PoolNodes({
                 className="node-delete-button"
                 disabled={busy}
                 onClick={() => setDeletingNode(node)}
-                aria-label={`Удалить ${node.display_name} из текущего пула`}
+                aria-label={`Удалить ${node.display_name} из текущего списка`}
               >
                 Удалить
               </button>
@@ -1006,7 +1006,7 @@ function PoolNodes({
           <p className="empty-state">
             {unavailable
               ? `Рабочих серверов нет. Недоступных: ${unavailable}.`
-              : "В пуле пока нет квалифицированных серверов."}
+              : "В списке пока нет квалифицированных серверов."}
           </p>
         )}
       </div>
@@ -1025,13 +1025,13 @@ function PoolNodes({
           >
             <header>
               <div>
-                <strong id="delete-pool-node-title">Удалить сервер из пула?</strong>
+                <strong id="delete-pool-node-title">Удалить сервер из списка?</strong>
                 <small>Удаляется только текущая копия</small>
               </div>
               <button type="button" disabled={busy} onClick={() => setDeletingNode(null)} aria-label="Закрыть">×</button>
             </header>
             <div className="subscription-delete-body">
-              <p>«{deletingNode.display_name}» исчезнет из текущего пула.</p>
+              <p>«{deletingNode.display_name}» исчезнет из текущего списка.</p>
               <small>Следующая проверка или обновление подписки сможет добавить сервер снова. Если он сейчас активен, OrcheRoute выберет следующий доступный сервер.</small>
             </div>
             <footer>
@@ -1044,8 +1044,8 @@ function PoolNodes({
                   void (async () => {
                     const ok = await run(
                       () => actions.deleteNode(deletingNode.id),
-                      "Сервер удалён из текущего пула. Обновление подписки сможет добавить его снова.",
-                      { title: "Удаляем сервер из пула" },
+                      "Сервер удалён из текущего списка. Обновление подписки сможет добавить его снова.",
+                      { title: "Удаляем сервер из списка" },
                     );
                     if (ok) setDeletingNode(null);
                   })()
@@ -2639,7 +2639,7 @@ function SubscriptionsForm({
             onClick={() =>
               void run(
                 actions.checkServers,
-                "Проверка завершена, рабочие пулы обновлены.",
+                "Проверка завершена, рабочие списки серверов обновлены.",
                 { title: "Ищем доступные серверы", waitFor: "servers" },
               )
             }
@@ -2671,7 +2671,7 @@ function SubscriptionsForm({
       <div className="default-source-card">
         <div className="default-source-head">
           <div>
-            <strong>Дефолтный аварийный пул</strong>
+            <strong>Встроенный аварийный список серверов</strong>
             <small>Скачиваются и проверяются только отмеченные источники</small>
           </div>
           <span>
@@ -2694,7 +2694,6 @@ function SubscriptionsForm({
               />
               <span>
                 <strong>{subscription.name}</strong>
-                <small>{subscription.description}</small>
                 <em>
                   {subscription.enabled
                     ? `${subscription.last_links} ссылок · ${subscription.last_status}`
@@ -2723,10 +2722,10 @@ function SubscriptionsForm({
                 () => actions.updateDefaultEmergency(selectedDefaults),
                 androidRuntime
                   ? "Набор аварийных источников сохранён. Для загрузки нажмите «Обновить»."
-                  : "Набор аварийных источников сохранён, пул пересобран.",
+                  : "Набор аварийных источников сохранён, список серверов пересобран.",
                 androidRuntime
                   ? { title: "Сохраняем аварийные источники" }
-                  : { title: "Обновляем аварийный пул", waitFor: "subscriptions" },
+                  : { title: "Обновляем аварийный список серверов", waitFor: "subscriptions" },
               )
             }
           >
@@ -2759,7 +2758,7 @@ function SubscriptionsForm({
               editing
                 ? needsPoolUpdate
                   ? "Подписка сохранена. Для проверки нажмите «Обновить»."
-                  : "Настройки подписки сохранены без повторной проверки пула."
+                  : "Настройки подписки сохранены без повторной проверки списка серверов."
                 : `Добавлено источников: ${payloads.length}. Для проверки нажмите «Обновить».`,
               { title: editing ? "Сохраняем подписку" : "Добавляем источники" },
             );
@@ -2798,7 +2797,7 @@ function SubscriptionsForm({
             </header>
             <div className="subscription-delete-body">
               <p>«{deleting.name}» и сохранённые для неё серверы будут удалены.</p>
-              <small>Рабочий пул останется действующим до следующей проверки серверов.</small>
+              <small>Рабочий список останется действующим до следующей проверки серверов.</small>
             </div>
             <footer>
               <button className="secondary-button" type="button" disabled={busy} onClick={() => setDeleting(null)}>Отмена</button>
@@ -2810,7 +2809,7 @@ function SubscriptionsForm({
                   void (async () => {
                     const ok = await run(
                       () => actions.deleteSubscription(deleting.id),
-                      "Подписка удалена. Пул будет пересобран при следующей проверке.",
+                    "Подписка удалена. Список серверов будет пересобран при следующей проверке.",
                       { title: "Удаляем подписку" },
                     );
                     if (ok) setDeleting(null);
