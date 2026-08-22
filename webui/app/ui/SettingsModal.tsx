@@ -3128,7 +3128,7 @@ function ComponentsForm({
               <small>{Math.round(((appUpdate.current ?? 0) / appUpdate.total) * 100)}%</small>
             </div>
           ) : null}
-          <label className="check-row">
+          <label className={`toggle-row app-update-channel ${appUpdate?.beta_enabled ? "selected" : ""}`}>
             <input
               type="checkbox"
               checked={Boolean(appUpdate?.beta_enabled)}

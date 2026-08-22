@@ -128,10 +128,14 @@ test("android settings expose a signed GitHub release updater without transport 
 
 test("android updater selects a persistent prerelease channel with a stable-to-beta warning", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const updater = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/AppUpdater.java", import.meta.url), "utf8");
   const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
   assert.doesNotMatch(settings, /Обновиться до Beta/);
   assert.match(settings, /<strong>Beta-версии<\/strong>/);
+  assert.match(settings, /toggle-row app-update-channel/);
+  assert.match(css, /\.app-update-channel > input[^}]*accent-color: var\(--accent\)/);
+  assert.match(css, /\.app-update-channel > span[^}]*display: grid[^}]*gap: 3px/);
   assert.match(settings, /appUpdate\?\.current_prerelease/);
   assert.match(settings, /Это тестовая сборка с непроверенными изменениями VPN-автоматики/);
   assert.match(settings, /Понимаю риск, включить Beta/);
