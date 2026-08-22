@@ -2518,15 +2518,6 @@ function RouteTargetEditor({
           allowCustom
         />
       </div>
-      <div className="context-note">
-        <strong>О пресетах</strong>
-        <span>
-          HTTP, DNS, SSH и другие пункты преобразуются в правила протокола и
-          типовых портов. BitTorrent может использовать случайные порты,
-          шифрование и DHT, поэтому пресет 6881–6889 не гарантирует обнаружение
-          всего торрент-трафика на маршрутизаторе.
-        </span>
-      </div>
     </div>
   );
 }
