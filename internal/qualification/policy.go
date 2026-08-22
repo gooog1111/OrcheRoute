@@ -21,6 +21,10 @@ func DefaultPolicy() map[string]any {
 			"excluded_countries":      []any{},
 			"min_speed_mbps":          float64(10),
 			"stability_ratio":         0.65,
+			"tcp_timeout_ms":          float64(2000),
+			"url_timeout_ms":          float64(3000),
+			"geo_timeout_ms":          float64(5000),
+			"speed_timeout_ms":        float64(15000),
 			"allowlist_probe_url":     "https://ya.ru/",
 			"open_internet_probe_url": "https://www.cloudflare.com/cdn-cgi/trace",
 		},
@@ -72,8 +76,25 @@ func Validate(policy map[string]any) (map[string]any, error) {
 		return nil, validation("stability_ratio_out_of_range")
 	}
 	defaults["stability_ratio"] = ratio
+	timeoutRanges := map[string][2]int{
+		"tcp_timeout_ms":   {500, 10000},
+		"url_timeout_ms":   {1000, 30000},
+		"geo_timeout_ms":   {1000, 15000},
+		"speed_timeout_ms": {5000, 120000},
+	}
+	defaultValues := DefaultPolicy()["defaults"].(map[string]any)
+	for key, limits := range timeoutRanges {
+		value, conversionErr := valueInt(valueOr(defaults, key, defaultValues[key]))
+		if conversionErr != nil {
+			return nil, validation(key + "_invalid")
+		}
+		if value < limits[0] || value > limits[1] {
+			return nil, validation(key + "_out_of_range")
+		}
+		defaults[key] = float64(value)
+	}
 	for _, key := range []string{"allowlist_probe_url", "open_internet_probe_url"} {
-		value := strings.TrimSpace(valueString(valueOr(defaults, key, DefaultPolicy()["defaults"].(map[string]any)[key])))
+		value := strings.TrimSpace(valueString(valueOr(defaults, key, defaultValues[key])))
 		parsed, parseErr := url.Parse(value)
 		if parseErr != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" || parsed.User != nil {
 			return nil, validation("invalid_" + key)

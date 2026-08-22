@@ -1423,6 +1423,10 @@ URL-test использует три независимых адреса Google,
     "excluded_countries": ["RU", "BY"],
     "min_speed_mbps": 20,
     "stability_ratio": 0.7,
+    "tcp_timeout_ms": 2000,
+    "url_timeout_ms": 3000,
+    "geo_timeout_ms": 5000,
+    "speed_timeout_ms": 15000,
     "allowlist_probe_url": "https://ya.ru/",
     "open_internet_probe_url": "https://www.cloudflare.com/cdn-cgi/trace"
   }
@@ -1451,6 +1455,10 @@ URL-test использует три независимых адреса Google,
 | `excluded_countries` | До 64 кодов ISO alpha-2, например `RU` |
 | `min_speed_mbps` | `0.1..10000`; резервный порог при ошибке замера WAN |
 | `stability_ratio` | `0.1..1.0` |
+| `tcp_timeout_ms` | `500..10000`; ожидание TCP-проверки одного сервера |
+| `url_timeout_ms` | `1000..30000`; ожидание одного URL-test через сервер |
+| `geo_timeout_ms` | `1000..15000`; ожидание определения региона сервера |
+| `speed_timeout_ms` | `5000..120000`; ожидание одного замера скорости |
 | `allowlist_probe_url` | HTTP(S)-адрес, гарантированно доступный при белых списках |
 | `open_internet_probe_url` | HTTP(S)-адрес, доступный в обычном открытом Интернете |
 | `url_limit` | `0..10000`; `0` — без лимита |
@@ -1468,9 +1476,13 @@ URL-test использует три независимых адреса Google,
 {
   "version": 1,
   "defaults": {
-    "excluded_countries": ["RU"],
+    "excluded_countries": [],
     "min_speed_mbps": 10.0,
     "stability_ratio": 0.65,
+    "tcp_timeout_ms": 2000,
+    "url_timeout_ms": 3000,
+    "geo_timeout_ms": 5000,
+    "speed_timeout_ms": 15000,
     "allowlist_probe_url": "https://ya.ru/",
     "open_internet_probe_url": "https://www.cloudflare.com/cdn-cgi/trace"
   },

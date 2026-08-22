@@ -82,10 +82,10 @@ test("android qualification checks the complete parsed set in ordered stages", a
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   assert.doesNotMatch(runtime, /sampleProxies/);
   assert.match(runtime, /engineTestTCP/);
-  assert.match(runtime, /engineTestTCP\(batch\.toString\(\), 2000, 128\)/);
+  assert.match(runtime, /engineTestTCP\(batch\.toString\(\), tcpTimeoutMs, 128\)/);
   assert.match(runtime, /engineTestProxiesMulti/);
   assert.match(runtime, /final int urlBatchSize = 80/);
-  assert.match(runtime, /engineTestProxiesMulti\(batch\.toString\(\), testURLs\.toString\(\), 3000, 80\)/);
+  assert.match(runtime, /engineTestProxiesMulti\(batch\.toString\(\), testURLs\.toString\(\), urlTimeoutMs, 80\)/);
   assert.match(runtime, /effectivePolicy\.optInt\("url_limit", 0\)/);
   assert.match(runtime, /effectivePolicy\.optInt\("speed_candidates", 0\)/);
   assert.match(runtime, /effectivePolicy\.optInt\("keep", 0\)/);
@@ -240,10 +240,28 @@ test("android uses OrcheRoute notification glyph and user-facing server-list ter
 
 test("qualification UI exposes connectivity anchors and emergency per-source top", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   assert.match(settings, /Доступно при белых списках/);
   assert.match(settings, /Доступно в обычном интернете/);
   assert.match(settings, /Speed-test аварийной подписки/);
   assert.match(settings, /speed_candidates_per_source/);
+  assert.match(settings, /activeTab === "qualification"/);
+  assert.match(settings, /label="Квалификация"/);
+  assert.match(settings, /tcp_timeout_ms/);
+  assert.match(settings, /url_timeout_ms/);
+  assert.match(settings, /geo_timeout_ms/);
+  assert.match(settings, /speed_timeout_ms/);
+  assert.match(runtime, /engineTestTCP\(batch\.toString\(\), tcpTimeoutMs, 128\)/);
+  assert.match(runtime, /engineTestProxiesMulti\(batch\.toString\(\), testURLs\.toString\(\), urlTimeoutMs, 80\)/);
+  assert.match(runtime, /engineFilterCountries\(urlAlive\.toString\(\), excludedCountries\.toString\(\), geoTimeoutMs, 12\)/);
+  assert.match(runtime, /engineTestSpeedAdaptive\(batch\.toString\(\), speedURL, speedTimeoutMs, 6/);
+  assert.match(settings, /nodes\.slice\(0, 5\)/);
+  assert.match(settings, /className={`node-list-toggle/);
+  assert.match(settings, /aria-expanded={expanded}/);
+  assert.match(settings, /settings-nav-swipe-hint/);
+  assert.match(styles, /\.settings-nav-swipe-hint/);
+  assert.match(styles, /overflow-x: auto/);
 });
 
 test("android exposes selectable geo sources and applies the selected source", async () => {

@@ -128,7 +128,9 @@ html.prerelease-theme .brand-beta { display: inline-flex; }
 .modal-header h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.03em; }
 .settings-layout { min-height: 0; display: grid; grid-template-columns: 190px 1fr; }
 .settings-layout.is-locked { opacity: .56; filter: saturate(.65); transition: opacity .18s ease; }
-.settings-nav { padding: 18px 12px; border-right: 1px solid var(--line); background: var(--surface-soft); }
+.settings-nav-scroll { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: var(--surface-soft); }
+.settings-nav { height: 100%; padding: 18px 12px; border-right: 1px solid var(--line); background: var(--surface-soft); }
+.settings-nav-swipe-hint { display: none; }
 .settings-nav button { width: 100%; min-height: 43px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; text-align: left; font-size: 13px; }
 .settings-nav button:hover { color: var(--text); background: rgba(255,255,255,.035); }
 .settings-nav button.active { color: var(--accent-contrast); background: var(--accent); font-weight: 600; }
@@ -196,6 +198,10 @@ button.node-row { cursor: pointer; }
 .node-editor-main strong { overflow: hidden; font-size: 12px; font-weight: 580; text-overflow: ellipsis; white-space: nowrap; }
 .node-editor-main small { overflow: hidden; color: var(--faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .node-editor-main em { color: var(--muted); font-size: 10px; font-style: normal; white-space: nowrap; text-transform: uppercase; }
+.node-list-toggle { min-height: 40px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 0; border-top: 1px solid var(--line); background: rgba(var(--accent-rgb),.025); color: var(--muted); cursor: pointer; font-size: 10px; }
+.node-list-toggle:hover { background: rgba(var(--accent-rgb),.06); color: var(--text); }
+.node-list-toggle strong { color: var(--accent); font-size: 20px; font-weight: 400; line-height: 1; transform: rotate(90deg); transition: transform .16s ease; }
+.node-list-toggle.expanded strong { transform: rotate(-90deg); }
 .node-delete-button { align-self: center; min-height: 34px; margin-right: 10px; padding: 0 10px; border: 1px solid rgba(255,119,110,.28); border-radius: 8px; background: rgba(255,119,110,.06); color: var(--danger); cursor: pointer; font-size: 10px; }
 .node-delete-button:hover:not(:disabled) { background: rgba(255,119,110,.14); }
 .node-delete-button:disabled { opacity: .45; cursor: not-allowed; }
@@ -492,10 +498,12 @@ html.prerelease-theme .input-wrap select {
   .modal-header { min-height: calc(68px + env(safe-area-inset-top)); padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(18px, env(safe-area-inset-left)); }
   .modal-header h2 { font-size: 20px; }
   .settings-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .settings-nav { display: flex; gap: 6px; padding: 9px max(12px, env(safe-area-inset-right)) 9px max(12px, env(safe-area-inset-left)); border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .settings-nav-scroll { border-bottom: 1px solid var(--line); }
+  .settings-nav { display: flex; gap: 6px; height: auto; padding: 9px max(42px, env(safe-area-inset-right)) 9px max(12px, env(safe-area-inset-left)); border-right: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-snap-type: x proximity; }
   .settings-nav::-webkit-scrollbar { display: none; }
-  .settings-nav button { width: auto; flex: 0 0 auto; min-height: 34px; padding: 0 12px; }
+  .settings-nav button { width: auto; flex: 0 0 auto; min-height: 34px; padding: 0 12px; scroll-snap-align: start; }
   .settings-nav svg { display: none; }
+  .settings-nav-swipe-hint { width: 34px; display: grid; place-items: center; position: absolute; z-index: 2; top: 0; right: 0; bottom: 0; pointer-events: none; border-left: 1px solid rgba(var(--accent-rgb),.12); background: linear-gradient(90deg, rgba(8,17,15,0), var(--surface-soft) 42%); color: var(--accent); font-size: 15px; }
   .settings-content { min-height: 0; padding: 22px max(16px, env(safe-area-inset-right)) 28px max(16px, env(safe-area-inset-left)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 24px; -webkit-overflow-scrolling: touch; }
   .settings-section { min-width: 0; gap: 20px; }
   .section-heading { padding-bottom: 16px; }

@@ -41,6 +41,24 @@ func TestPolicyRejectsRanges(t *testing.T) {
 	}
 }
 
+func TestPolicyValidatesQualificationTimeouts(t *testing.T) {
+	policy := DefaultPolicy()
+	defaults := policy["defaults"].(map[string]any)
+	want := map[string]float64{
+		"tcp_timeout_ms": 2000, "url_timeout_ms": 3000,
+		"geo_timeout_ms": 5000, "speed_timeout_ms": 15000,
+	}
+	for key, value := range want {
+		if defaults[key] != value {
+			t.Fatalf("%s = %#v, want %v", key, defaults[key], value)
+		}
+	}
+	defaults["url_timeout_ms"] = float64(999)
+	if _, err := Validate(policy); err == nil || err.Error() != "url_timeout_ms_out_of_range" {
+		t.Fatalf("unexpected timeout validation: %v", err)
+	}
+}
+
 func TestPolicyValidatesConnectivityURLsAndEmergencyPerSourceLimit(t *testing.T) {
 	policy := DefaultPolicy()
 	validated, err := Validate(policy)

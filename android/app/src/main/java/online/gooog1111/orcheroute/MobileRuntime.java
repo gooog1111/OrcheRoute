@@ -516,6 +516,11 @@ final class MobileRuntime {
                     if (!parsed.optBoolean("ok")) throw new IllegalStateException(coreError(parsed));
                     JSONArray proxies = parsed.getJSONObject("result").getJSONArray("proxies");
                     if (proxies.length() == 0) throw new IllegalStateException("Подписка не содержит поддерживаемых серверов");
+					JSONObject effectivePolicy = effectiveQualification(item.optString("group", "primary"));
+					int tcpTimeoutMs = effectivePolicy.optInt("tcp_timeout_ms", 2000);
+					int urlTimeoutMs = effectivePolicy.optInt("url_timeout_ms", 3000);
+					int geoTimeoutMs = effectivePolicy.optInt("geo_timeout_ms", 5000);
+					int speedTimeoutMs = effectivePolicy.optInt("speed_timeout_ms", 15000);
 
                     JSONArray tcpTests = new JSONArray();
                     final int tcpBatchSize = 128;
@@ -524,7 +529,7 @@ final class MobileRuntime {
                         updateRefresh("running", "tcp", "TCP-проверка " + offset + "/" + proxies.length() + " · «" + item.optString("name") + "»", offset, proxies.length(), "");
                         JSONArray batch = new JSONArray();
                         for (int index = offset; index < end; index++) batch.put(proxies.getJSONObject(index));
-                        JSONObject tested = new JSONObject(Mobilecore.engineTestTCP(batch.toString(), 2000, 128));
+                        JSONObject tested = new JSONObject(Mobilecore.engineTestTCP(batch.toString(), tcpTimeoutMs, 128));
                         if (!tested.optBoolean("ok")) throw new IllegalStateException(coreError(tested));
                         ensureRefreshContinues(allowlistScan);
                         JSONArray nodes = tested.getJSONObject("result").getJSONArray("nodes");
@@ -542,7 +547,6 @@ final class MobileRuntime {
                         continue;
                     }
 
-                    JSONObject effectivePolicy = effectiveQualification(item.optString("group", "primary"));
                     if (restrictedScan) {
                         // The user's country exclusions describe normal server
                         // preference. During an allowlist the only valid
@@ -568,7 +572,7 @@ final class MobileRuntime {
                         int end = Math.min(urlSource.length(), offset + urlBatchSize);
                         updateRefresh("running", "url_test", "URL-test " + offset + "/" + urlSource.length() + " · «" + item.optString("name") + "»", offset, urlSource.length(), "");
                         JSONArray batch = slice(urlSource, offset, end);
-                        JSONObject tested = new JSONObject(Mobilecore.engineTestProxiesMulti(batch.toString(), testURLs.toString(), 3000, 80));
+                        JSONObject tested = new JSONObject(Mobilecore.engineTestProxiesMulti(batch.toString(), testURLs.toString(), urlTimeoutMs, 80));
                         if (!tested.optBoolean("ok")) throw new IllegalStateException(coreError(tested));
                         ensureRefreshContinues(allowlistScan);
                         JSONArray batchTests = tested.getJSONObject("result").getJSONArray("nodes");
@@ -589,7 +593,7 @@ final class MobileRuntime {
                     JSONArray excludedCountries = effectivePolicy.optJSONArray("excluded_countries");
                     if (!restrictedScan && excludedCountries != null && excludedCountries.length() > 0) {
                         updateRefresh("running", "geo", "Определяем регионы серверов · «" + item.optString("name") + "»", 0, urlAlive.length(), "");
-                        JSONObject geoTested = new JSONObject(Mobilecore.engineFilterCountries(urlAlive.toString(), excludedCountries.toString(), 5000, 12));
+                        JSONObject geoTested = new JSONObject(Mobilecore.engineFilterCountries(urlAlive.toString(), excludedCountries.toString(), geoTimeoutMs, 12));
                         if (!geoTested.optBoolean("ok")) throw new IllegalStateException(coreError(geoTested));
                         JSONArray geoTests = geoTested.getJSONObject("result").getJSONArray("nodes");
                         urlAlive = filterAliveSorted(urlAlive, geoTests, "delay_ms", true);
@@ -626,7 +630,7 @@ final class MobileRuntime {
                             int end = Math.min(speedSource.length(), offset + speedBatchSize);
                             updateRefresh("running", "speed_test", "Speed-test " + offset + "/" + speedSource.length() + " · «" + item.optString("name") + "»", offset, speedSource.length(), "");
                             JSONArray batch = slice(speedSource, offset, end);
-                            JSONObject tested = new JSONObject(Mobilecore.engineTestSpeedAdaptive(batch.toString(), speedURL, 15000, 6, minimumMbps, stabilityRatio, sampleBytes));
+                            JSONObject tested = new JSONObject(Mobilecore.engineTestSpeedAdaptive(batch.toString(), speedURL, speedTimeoutMs, 6, minimumMbps, stabilityRatio, sampleBytes));
                             if (!tested.optBoolean("ok")) throw new IllegalStateException(coreError(tested));
                             ensureRefreshContinues(allowlistScan);
                             append(speedTests, tested.getJSONObject("result").getJSONArray("nodes"));
