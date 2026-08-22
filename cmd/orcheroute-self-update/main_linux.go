@@ -68,7 +68,7 @@ func run(action, dir string, beta bool) error {
 		return fmt.Errorf("already_current")
 	}
 	rollback := filepath.Join(dir, "packages", "current.deb")
-	if validDeb(rollback) != "orcheroute" {
+	if debField(rollback, "Package") != "orcheroute" || debField(rollback, "Architecture") != "amd64" || debField(rollback, "Version") != current {
 		return fmt.Errorf("rollback_package_missing")
 	}
 	staging := filepath.Join(dir, "self-update")
@@ -81,12 +81,14 @@ func run(action, dir string, beta bool) error {
 	if digest(candidate) != rel.Asset.Digest {
 		return fmt.Errorf("sha256_mismatch")
 	}
-	if validDeb(candidate) != "orcheroute" {
+	if debField(candidate, "Package") != "orcheroute" || debField(candidate, "Architecture") != "amd64" || debField(candidate, "Version") != rel.Version {
 		return fmt.Errorf("invalid_deb_package")
 	}
 	backup := filepath.Join(dir, "backups", "before-self-update-"+time.Now().Format("20060102-150405")+".tar.gz")
 	os.MkdirAll(filepath.Dir(backup), 0700)
-	_ = exec.Command("tar", "-czf", backup, "/etc/orcheroute", "/var/lib/orcheroute/state.db", "/var/lib/orcheroute/routes.json", "/var/lib/orcheroute/network-active.json").Run()
+	if out, backupErr := exec.Command("tar", "--exclude=/var/lib/orcheroute/backups", "--exclude=/var/lib/orcheroute/self-update", "--exclude=/var/lib/orcheroute/packages", "-czf", backup, "/etc/orcheroute", "/var/lib/orcheroute").CombinedOutput(); backupErr != nil {
+		return fmt.Errorf("backup_failed:%s", tail(string(out)))
+	}
 	core := exec.Command("systemctl", "is-active", "--quiet", "orcheroute-core.service").Run() == nil
 	write(dir, status{State: "installing", Message: "Устанавливаем и проверяем пакет", CurrentVersion: current, LatestVersion: rel.Version, Active: true, UpdatedAt: time.Now().Unix(), Beta: beta})
 	if out, e := exec.CommandContext(ctx, "dpkg", "-i", candidate).CombinedOutput(); e != nil {
@@ -118,8 +120,8 @@ func installed() string {
 func newer(current, candidate string) bool {
 	return exec.Command("dpkg", "--compare-versions", current, "lt", candidate).Run() == nil
 }
-func validDeb(p string) string {
-	b, e := exec.Command("dpkg-deb", "-f", p, "Package").Output()
+func debField(p, field string) string {
+	b, e := exec.Command("dpkg-deb", "-f", p, field).Output()
 	if e != nil {
 		return ""
 	}
@@ -161,7 +163,8 @@ func digest(p string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 func health() bool {
-	r, e := http.Get("http://127.0.0.1:19111/healthz")
+	client := &http.Client{Timeout: 10 * time.Second}
+	r, e := client.Get("http://127.0.0.1:19100/healthz")
 	if e != nil {
 		return false
 	}
