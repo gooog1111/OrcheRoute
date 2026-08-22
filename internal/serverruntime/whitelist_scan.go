@@ -21,6 +21,11 @@ func (runtime *Runtime) startWhitelistScan(ids []string) (int, any) {
 	if physical.State != connectivity.Allowlist {
 		return http.StatusConflict, map[string]any{"error": "allowlist_not_detected", "network_mode": physical.State}
 	}
+	configContext, cancelConfig := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelConfig()
+	if err := runtime.ensureWhitelistConfig(configContext); err != nil {
+		return backendError(err)
+	}
 	operation := filepath.Join(runtime.Config.StateDirectory, "update-operation.json")
 	var current map[string]any
 	if readJSON(operation, &current) == nil && containsString([]string{"running", "cancelling"}, stringValue(current["status"])) && runtime.subscriptionUpdateProcessActive() {
