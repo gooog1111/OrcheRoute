@@ -150,6 +150,8 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.startUpdate(nil, "fetch")
 		case path == "/v1/subscriptions/check":
 			return runtime.startUpdate(nil, "check")
+		case path == "/v1/operations/subscription-update/cancel":
+			return runtime.cancelSubscriptionUpdate()
 		case strings.HasPrefix(path, "/v1/subscriptions/") && strings.HasSuffix(path, "/refresh"):
 			id, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/v1/subscriptions/"), "/refresh"))
 			return runtime.startUpdate([]string{id}, "fetch")
@@ -864,6 +866,7 @@ func (runtime *Runtime) saveDefaultEmergency(ctx context.Context, body map[strin
 
 func (runtime *Runtime) startUpdate(ids []string, updateMode string, groups ...string) (int, any) {
 	operation := filepath.Join(runtime.Config.StateDirectory, "update-operation.json")
+	cancelPath := filepath.Join(runtime.Config.StateDirectory, "update-cancel.request")
 	var current map[string]any
 	if readJSON(operation, &current) == nil && stringValue(current["status"]) == "running" {
 		age := time.Now().Unix() - int64(intValue(current["updated_at"]))
@@ -877,11 +880,13 @@ func (runtime *Runtime) startUpdate(ids []string, updateMode string, groups ...s
 		message = "Проверка сохранённых серверов запущена"
 	}
 	_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": "running", "phase": "starting", "message": message, "updated_at": time.Now().Unix()})
+	_ = os.Remove(cancelPath)
 	go func() {
 		arguments := []string{
 			"--state-dir", runtime.Config.ProductionState,
 			"--output-state-dir", runtime.Config.StateDirectory,
 			"--operation-path", operation,
+			"--cancel-path", cancelPath,
 			"--network-profile", filepath.Join(runtime.Config.StateDirectory, "network-active.json"),
 			"--policy", filepath.Join(runtime.Config.StateDirectory, "qualification-policy.json"),
 			"--mihomo", runtime.Config.MihomoBinary,
@@ -900,6 +905,11 @@ func (runtime *Runtime) startUpdate(ids []string, updateMode string, groups ...s
 		}
 		command := exec.Command(runtime.Config.UpdateBinary, arguments...)
 		output, err := command.CombinedOutput()
+		if _, cancelErr := os.Stat(cancelPath); cancelErr == nil {
+			_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": "cancelled", "phase": "cancelled", "message": "Операция остановлена пользователем. Завершённые результаты сохранены.", "error": "", "output": truncate(string(output), 4000), "updated_at": time.Now().Unix()})
+			_ = os.Remove(cancelPath)
+			return
+		}
 		// The helper owns the detailed terminal state (including a warning when
 		// every checked server is unavailable). Do not replace that result with
 		// a generic success merely because the helper process exited with code 0.
@@ -924,6 +934,30 @@ func (runtime *Runtime) startUpdate(ids []string, updateMode string, groups ...s
 		_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": status, "phase": "complete", "message": message, "error": errorText, "output": truncate(string(output), 4000), "updated_at": time.Now().Unix()})
 	}()
 	return 202, map[string]any{"accepted": true, "system_mutated": true}
+}
+
+func (runtime *Runtime) cancelSubscriptionUpdate() (int, any) {
+	operationPath := filepath.Join(runtime.Config.StateDirectory, "update-operation.json")
+	operation := map[string]any{}
+	if readJSON(operationPath, &operation) != nil ||
+		!containsString([]string{"running", "cancelling"}, stringValue(operation["status"])) {
+		return 200, map[string]any{"accepted": false, "active": false}
+	}
+	if stringValue(operation["status"]) == "cancelling" {
+		return 202, map[string]any{"accepted": false, "already_cancelling": true, "active": true}
+	}
+	cancelPath := filepath.Join(runtime.Config.StateDirectory, "update-cancel.request")
+	if err := atomicWrite(cancelPath, []byte("cancel\n"), 0o600); err != nil {
+		return backendError(err)
+	}
+	operation["status"] = "cancelling"
+	operation["phase"] = "cancelling"
+	operation["message"] = "Останавливаем после завершения текущей группы тестов"
+	operation["updated_at"] = time.Now().Unix()
+	if err := atomicJSON(operationPath, operation); err != nil {
+		return backendError(err)
+	}
+	return 202, map[string]any{"accepted": true, "active": true}
 }
 
 func containsString(values []string, target string) bool {

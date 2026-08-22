@@ -17,6 +17,7 @@ import (
 	"github.com/gooog1111/orcheroute/internal/linuxnetwork"
 	"github.com/gooog1111/orcheroute/internal/linuxqualify"
 	"github.com/gooog1111/orcheroute/internal/network"
+	"github.com/gooog1111/orcheroute/internal/operationcancel"
 	"github.com/gooog1111/orcheroute/internal/qualification"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
@@ -61,6 +62,7 @@ func main() {
 	stateDirectory := flag.String("state-dir", "/var/lib/orcheroute", "state directory")
 	outputStateDirectory := flag.String("output-state-dir", "", "isolated output directory (defaults to state-dir)")
 	operationPath := flag.String("operation-path", "", "operation status file override")
+	cancelPath := flag.String("cancel-path", "", "cooperative cancellation request file")
 	activeProfile := flag.String("network-profile", "/var/lib/orcheroute/network-active.json", "active network profile")
 	policyPath := flag.String("policy", "/var/lib/orcheroute/qualification-policy.json", "qualification policy")
 	mihomo := flag.String("mihomo", "/opt/orcheroute/bin/mihomo", "Mihomo binary")
@@ -74,7 +76,12 @@ func main() {
 	if outputDirectory == "" {
 		outputDirectory = *stateDirectory
 	}
-	if err := run(context.Background(), options{StateDirectory: *stateDirectory, OutputStateDirectory: outputDirectory, OperationPath: *operationPath, ActiveProfile: *activeProfile, PolicyPath: *policyPath, Mihomo: *mihomo, Force: *force, CachedOnly: *cachedOnly, FetchOnly: *fetchOnly, Groups: groups, SubscriptionIDs: subscriptionIDs}); err != nil {
+	ctx, stop := operationcancel.Watch(context.Background(), *cancelPath, 100*time.Millisecond)
+	defer stop()
+	if err := run(ctx, options{StateDirectory: *stateDirectory, OutputStateDirectory: outputDirectory, OperationPath: *operationPath, ActiveProfile: *activeProfile, PolicyPath: *policyPath, Mihomo: *mihomo, Force: *force, CachedOnly: *cachedOnly, FetchOnly: *fetchOnly, Groups: groups, SubscriptionIDs: subscriptionIDs}); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		fmt.Fprintln(os.Stderr, "update error:", err)
 		os.Exit(1)
 	}

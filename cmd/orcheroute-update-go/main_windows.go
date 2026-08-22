@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/network"
+	"github.com/gooog1111/orcheroute/internal/operationcancel"
 	"github.com/gooog1111/orcheroute/internal/qualification"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
@@ -73,6 +74,7 @@ func main() {
 	stateDirectory := flag.String("state-dir", filepath.Join(root, "state"), "state directory")
 	outputStateDirectory := flag.String("output-state-dir", "", "isolated output directory")
 	operationPath := flag.String("operation-path", "", "operation status file override")
+	cancelPath := flag.String("cancel-path", "", "cooperative cancellation request file")
 	activeProfile := flag.String("network-profile", filepath.Join(root, "state", "network-active.json"), "active network profile")
 	policyPath := flag.String("policy", filepath.Join(root, "state", "qualification-policy.json"), "qualification policy")
 	mihomo := flag.String("mihomo", filepath.Join(root, "bin", "mihomo.exe"), "Mihomo binary")
@@ -88,7 +90,12 @@ func main() {
 	}
 	current := options{StateDirectory: *stateDirectory, OutputStateDirectory: output, OperationPath: *operationPath, ActiveProfile: *activeProfile,
 		PolicyPath: *policyPath, Mihomo: *mihomo, Force: *force, CachedOnly: *cachedOnly, FetchOnly: *fetchOnly, Groups: groups, SubscriptionIDs: subscriptionIDs}
-	if err := run(context.Background(), current); err != nil {
+	ctx, stop := operationcancel.Watch(context.Background(), *cancelPath, 100*time.Millisecond)
+	defer stop()
+	if err := run(ctx, current); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
 		fmt.Fprintln(os.Stderr, "update error:", err)
 		os.Exit(1)
 	}
