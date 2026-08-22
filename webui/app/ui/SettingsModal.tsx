@@ -786,28 +786,6 @@ function GeneralForm({
           </small>
         </button>
       </div>
-      <label className={`toggle-row emergency-pool-option ${data?.status.proxy.mode === "emergency" ? "selected" : ""}`}>
-        <input
-          type="checkbox"
-          checked={data?.status.proxy.mode === "emergency"}
-          disabled={busy}
-          onChange={(event) => {
-            if (event.target.checked) {
-              void run(
-                actions.setEmergency,
-                "Включена работа только через аварийный список серверов.",
-                { title: "Проверяем аварийный список серверов", waitFor: "servers" },
-              );
-            } else {
-              void run(actions.setAuto, "Включён автоматический выбор сервера.");
-            }
-          }}
-        />
-        <span>
-          <strong>Только аварийный список серверов</strong>
-          <small>В автоматическом режиме аварийный список серверов и так используется, когда в основном нет доступных серверов. Включите опцию, чтобы временно запретить основной список серверов.</small>
-        </span>
-      </label>
       {(["primary", "emergency"] as const).map((pool) => (
         <PoolNodes key={pool} data={data} pool={pool} busy={busy} run={run} />
       ))}

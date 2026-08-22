@@ -41,6 +41,7 @@ final class MobileRepository {
         initializedMarker = new File(stateDirectory, ".initialized");
         root = loadState();
         ensure();
+		migrateEmergencyOnlyMode();
         migrateQualificationPolicy();
         migrateDetectedParsers();
         migrateDisplayNames();
@@ -181,6 +182,15 @@ final class MobileRepository {
             if (!root.has("network_active")) root.put("network_active", new JSONObject(root.getJSONObject("network_desired").toString()));
         } catch (JSONException impossible) { throw new IllegalStateException(impossible); }
     }
+
+	private void migrateEmergencyOnlyMode() {
+		if (!"emergency".equals(root.optString("mode", "auto"))) return;
+		try {
+			setAuto();
+		} catch (JSONException error) {
+			throw new IllegalStateException(error);
+		}
+	}
 
     private static JSONObject defaultQualificationPolicy() throws JSONException {
         JSONObject defaults = new JSONObject()

@@ -55,7 +55,7 @@ test("exposes separate subscription refresh and cached server checks", async () 
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(api, /\/v1\/subscriptions\/check/);
   assert.match(settings, /Проверить серверы/);
-  assert.match(settings, /Только аварийный список серверов/);
+  assert.doesNotMatch(settings, /Только аварийный список серверов/);
 });
 
 test("uses an embedded subscription delete confirmation", async () => {
@@ -65,15 +65,17 @@ test("uses an embedded subscription delete confirmation", async () => {
   assert.match(settings, /actions\.deleteSubscription\(deleting\.id\)/);
 });
 
-test("renders automatic/manual modes and an emergency-only option", async () => {
+test("renders automatic and manual modes without a redundant emergency-only setting", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
   assert.match(settings, /proxy\.mode === "auto" \? "selected"/);
-  assert.match(settings, /checked=\{data\?\.status\.proxy\.mode === "emergency"\}/);
-  assert.match(settings, /В автоматическом режиме аварийный список серверов и так используется/);
+  assert.doesNotMatch(settings, /actions\.setEmergency/);
+  assert.doesNotMatch(settings, /emergency-pool-option/);
   assert.match(settings, /<strong>Ручной режим<\/strong>/);
   assert.doesNotMatch(settings, /<strong>Ручной сервер<\/strong>/);
   assert.match(repository, /void setAuto\(\)[\s\S]*root\.remove\("selected_node"\);[\s\S]*selectBestLocked\(\);[\s\S]*save\(\);/);
+  assert.match(repository, /migrateEmergencyOnlyMode\(\);/);
+  assert.match(repository, /migrateEmergencyOnlyMode\(\)[\s\S]*"emergency"\.equals[\s\S]*setAuto\(\);/);
 });
 
 test("android qualification checks the complete parsed set in ordered stages", async () => {
