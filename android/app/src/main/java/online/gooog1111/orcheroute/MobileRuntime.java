@@ -189,7 +189,7 @@ final class MobileRuntime {
         String verb = method == null ? "GET" : method.toUpperCase(Locale.ROOT);
         try {
             if ("GET".equals(verb) && "/v1/status".equals(path)) return response(200, status());
-            if ("GET".equals(verb) && "/v1/pools".equals(path)) return response(200, new JSONObject().put("pools", repository.pools()));
+            if ("GET".equals(verb) && "/v1/pools".equals(path)) return response(200, new JSONObject().put("pools", repository.pools(allowlistRouteOverride)));
             if ("GET".equals(verb) && "/v1/nodes".equals(path)) return response(200, new JSONObject().put("nodes", repository.nodes()));
             String poolNodeId = entityId(path, "/v1/nodes/");
             if ("DELETE".equals(verb) && poolNodeId != null) return deletePoolNode(poolNodeId);
@@ -638,10 +638,10 @@ final class MobileRuntime {
                     if (restrictedScan) repository.replaceWhitelistSource(id, qualified, finalTests);
                     else repository.refreshSucceeded(id, qualified, finalTests, links, proxies.length());
                     success++;
-                    if (restrictedScan && qualified.length() > 0) {
-                        updateRefresh("running", "connect", "Найден доступный сервер, подключаемся · «" + item.optString("name") + "»", i + 1, items.length(), "");
-                        if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
-                    }
+                    // Do not start the VPN from a partially built pool. The
+                    // remaining probes must keep using the same physical
+                    // underlay; connection begins only after every selected
+                    // source has completed below.
                 } catch (Throwable error) {
                     if (error instanceof RefreshStopped) throw (RefreshStopped) error;
                     lastError = readable(error);

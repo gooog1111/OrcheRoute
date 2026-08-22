@@ -48,6 +48,23 @@ type Result struct {
 	OpenAnchorMozillaAvailable bool  `json:"open_anchor_mozilla_available"`
 }
 
+// ConfirmationInput is the state carried by a platform monitor between raw
+// probe observations. Keeping the thresholds here prevents Android and future
+// clients from interpreting a single timeout as a network-mode transition.
+type ConfirmationInput struct {
+	ConfirmedState State `json:"confirmed_state"`
+	CandidateState State `json:"candidate_state"`
+	CandidateCount int   `json:"candidate_count"`
+	ObservedState  State `json:"observed_state"`
+}
+
+type ConfirmationResult struct {
+	State          State `json:"state"`
+	CandidateState State `json:"candidate_state,omitempty"`
+	CandidateCount int   `json:"candidate_count"`
+	Changed        bool  `json:"changed"`
+}
+
 type Probe func(context.Context, Target) bool
 
 func Targets(config Config) ([]Target, error) {
@@ -123,6 +140,46 @@ func Classify(observation Observation) Result {
 		OpenAnchorGitHubAvailable:  observation.OpenAnchorGitHubAvailable,
 		OpenAnchorMozillaAvailable: observation.OpenAnchorMozillaAvailable,
 	}
+}
+
+// Confirm applies hysteresis to a raw observation. A working network is not
+// declared offline until three consecutive observations agree. Switching
+// between normal and allowlist requires two observations, while recovery from
+// confirmed offline is immediate.
+func Confirm(input ConfirmationInput) (ConfirmationResult, error) {
+	if !validObserved(input.ObservedState) {
+		return ConfirmationResult{}, errors.New("invalid_connectivity_observation")
+	}
+	if input.ConfirmedState != "" && input.ConfirmedState != "unknown" && !validObserved(input.ConfirmedState) {
+		return ConfirmationResult{}, errors.New("invalid_confirmed_connectivity_state")
+	}
+	confirmed := input.ConfirmedState
+	if confirmed == "" {
+		confirmed = "unknown"
+	}
+	if input.ObservedState == confirmed {
+		return ConfirmationResult{State: confirmed}, nil
+	}
+	candidate, count := input.ObservedState, 1
+	if input.CandidateState == input.ObservedState && input.CandidateCount > 0 {
+		count = input.CandidateCount + 1
+	}
+	required := 2
+	if confirmed == Offline {
+		required = 1
+	} else if input.ObservedState == Offline && confirmed != "unknown" {
+		required = 3
+	} else if confirmed == "unknown" && input.ObservedState != Offline {
+		required = 1
+	}
+	if count >= required {
+		return ConfirmationResult{State: input.ObservedState, Changed: input.ObservedState != confirmed}, nil
+	}
+	return ConfirmationResult{State: confirmed, CandidateState: candidate, CandidateCount: count}, nil
+}
+
+func validObserved(state State) bool {
+	return state == Normal || state == Allowlist || state == Offline
 }
 
 func normalizeOpenURL(value string) string {

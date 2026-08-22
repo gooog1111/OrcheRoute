@@ -698,7 +698,9 @@ final class MobileRepository {
         return next == null ? null : new JSONObject(next.toString());
     }
 
-    synchronized JSONArray pools() throws JSONException {
+    synchronized JSONArray pools() throws JSONException { return pools(false); }
+
+    synchronized JSONArray pools(boolean whitelistMode) throws JSONException {
         JSONArray nodes = root.getJSONArray("nodes");
         String selected = root.optString("selected_node", "");
         JSONArray output = new JSONArray();
@@ -712,12 +714,12 @@ final class MobileRepository {
                 if (selected.equals(node.optString("id"))) poolSelected = true;
             }
             output.put(new JSONObject().put("id", pool).put("priority", "primary".equals(pool) ? 1 : 2)
-                    .put("total", total).put("alive", alive).put("selected", poolSelected));
+                    .put("total", total).put("alive", alive).put("selected", !whitelistMode && poolSelected));
         }
         JSONArray whitelist = root.getJSONArray("whitelist_nodes");
         output.put(new JSONObject().put("id", "whitelist").put("priority", 0)
                 .put("total", whitelist.length()).put("alive", whitelist.length())
-                .put("selected", !root.optString("selected_whitelist_node", "").isEmpty()));
+                .put("selected", whitelistMode));
         return output;
     }
 

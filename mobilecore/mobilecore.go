@@ -71,6 +71,20 @@ func ClassifyConnectivity(observationJSON string) string {
 	return encode(map[string]any{"ok": true, "result": mobileconnectivity.Classify(observation)})
 }
 
+// ConfirmConnectivity stabilizes raw physical-network observations before a
+// platform controller is allowed to pause or restart the VPN.
+func ConfirmConnectivity(inputJSON string) string {
+	var input mobileconnectivity.ConfirmationInput
+	if json.Unmarshal([]byte(inputJSON), &input) != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_connectivity_confirmation"}})
+	}
+	result, err := mobileconnectivity.Confirm(input)
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	return encode(map[string]any{"ok": true, "result": result})
+}
+
 func ValidateQualificationPolicy(policyJSON string) string {
 	var policy map[string]any
 	if json.Unmarshal([]byte(policyJSON), &policy) != nil {

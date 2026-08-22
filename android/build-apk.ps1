@@ -17,7 +17,10 @@ if (-not (Test-Path -LiteralPath $apk)) {
 }
 
 $gradleConfig = Get-Content -LiteralPath (Join-Path $PSScriptRoot "app\build.gradle") -Raw
-$versionMatch = [regex]::Match($gradleConfig, 'versionName\s+"([^"]+)"')
+$versionMatch = [regex]::Match($gradleConfig, 'def\s+orcheRouteVersionName\s*=\s*"([^"]+)"')
+if (-not $versionMatch.Success) {
+    $versionMatch = [regex]::Match($gradleConfig, 'versionName\s+"([^"]+)"')
+}
 if (-not $versionMatch.Success) {
     throw "Unable to read versionName from app/build.gradle"
 }

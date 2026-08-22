@@ -74,14 +74,16 @@ func DecideNetwork(input DecisionInput) (Decision, error) {
 		}
 		return Decision{Action: "none"}, nil
 	case Allowlist:
+		// A partially built pool must never start the VPN: doing so changes the
+		// network used by the remaining probes and corrupts the scan result.
+		if input.WhitelistScan {
+			return Decision{Action: "wait_whitelist_scan"}, nil
+		}
 		if input.WhitelistCount > 0 {
 			if !input.WhitelistActive || !input.Connected {
 				return Decision{Action: "connect_whitelist"}, nil
 			}
 			return Decision{Action: "none"}, nil
-		}
-		if input.WhitelistScan {
-			return Decision{Action: "wait_whitelist_scan"}, nil
 		}
 		if input.WhitelistRetryDue {
 			return Decision{Action: "scan_whitelist"}, nil

@@ -61,3 +61,33 @@ func TestConnectivityCheckEndpointIsNotOpenInternetAnchor(t *testing.T) {
 		t.Fatalf("open target=%q", targets[1].URL)
 	}
 }
+
+func TestConfirmRejectsTransientOffline(t *testing.T) {
+	result, err := Confirm(ConfirmationInput{ConfirmedState: Allowlist, ObservedState: Offline})
+	if err != nil || result.State != Allowlist || result.CandidateCount != 1 {
+		t.Fatalf("first=%#v err=%v", result, err)
+	}
+	result, err = Confirm(ConfirmationInput{ConfirmedState: result.State, CandidateState: result.CandidateState, CandidateCount: result.CandidateCount, ObservedState: Offline})
+	if err != nil || result.State != Allowlist || result.CandidateCount != 2 {
+		t.Fatalf("second=%#v err=%v", result, err)
+	}
+	result, err = Confirm(ConfirmationInput{ConfirmedState: result.State, CandidateState: result.CandidateState, CandidateCount: result.CandidateCount, ObservedState: Offline})
+	if err != nil || result.State != Offline || !result.Changed {
+		t.Fatalf("third=%#v err=%v", result, err)
+	}
+}
+
+func TestConfirmNetworkModeNeedsTwoSamplesAndRecoversImmediately(t *testing.T) {
+	first, err := Confirm(ConfirmationInput{ConfirmedState: Normal, ObservedState: Allowlist})
+	if err != nil || first.State != Normal || first.CandidateCount != 1 {
+		t.Fatalf("first=%#v err=%v", first, err)
+	}
+	second, err := Confirm(ConfirmationInput{ConfirmedState: first.State, CandidateState: first.CandidateState, CandidateCount: first.CandidateCount, ObservedState: Allowlist})
+	if err != nil || second.State != Allowlist || !second.Changed {
+		t.Fatalf("second=%#v err=%v", second, err)
+	}
+	recovered, err := Confirm(ConfirmationInput{ConfirmedState: Offline, ObservedState: Normal})
+	if err != nil || recovered.State != Normal || !recovered.Changed {
+		t.Fatalf("recovered=%#v err=%v", recovered, err)
+	}
+}

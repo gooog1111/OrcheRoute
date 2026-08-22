@@ -43,6 +43,7 @@ func TestNetworkDecisionMatrix(t *testing.T) {
 		{"normal resumes", DecisionInput{NetworkMode: Normal, DesiredEnabled: true}, "start_normal"},
 		{"normal stays", DecisionInput{NetworkMode: Normal, DesiredEnabled: true, Connected: true}, "none"},
 		{"whitelist uses pool", DecisionInput{NetworkMode: Allowlist, DesiredEnabled: true, WhitelistCount: 2}, "connect_whitelist"},
+		{"whitelist finishes scan before connect", DecisionInput{NetworkMode: Allowlist, DesiredEnabled: true, WhitelistCount: 2, WhitelistScan: true}, "wait_whitelist_scan"},
 		{"whitelist scans when due", DecisionInput{NetworkMode: Allowlist, DesiredEnabled: true, WhitelistRetryDue: true}, "scan_whitelist"},
 		{"whitelist waits five minutes", DecisionInput{NetworkMode: Allowlist, DesiredEnabled: true}, "wait_whitelist_retry"},
 		{"disabled never resumes", DecisionInput{NetworkMode: Normal}, "none"},

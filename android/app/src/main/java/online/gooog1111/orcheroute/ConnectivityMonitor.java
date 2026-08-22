@@ -78,6 +78,9 @@ final class ConnectivityMonitor {
     private final Object queueLock = new Object();
     private volatile Snapshot snapshot = new Snapshot("unknown", 0, 0, "");
     private boolean queued;
+    private String candidateState = "";
+    private int candidateCount;
+    private long lastProbeAtMs;
 
     private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
         @Override public void onAvailable(Network network) { queueProbe(250); }
@@ -104,7 +107,7 @@ final class ConnectivityMonitor {
             }
         }
         queueProbe(0);
-        worker.scheduleWithFixedDelay(() -> queueProbe(0), 15, 15, TimeUnit.SECONDS);
+        worker.scheduleWithFixedDelay(() -> queueProbe(0), 10, 10, TimeUnit.SECONDS);
     }
 
     Snapshot snapshot() { return snapshot; }
@@ -113,6 +116,10 @@ final class ConnectivityMonitor {
         synchronized (queueLock) {
             if (queued) return;
             queued = true;
+            long sinceLast = System.currentTimeMillis() - lastProbeAtMs;
+            if (lastProbeAtMs > 0 && sinceLast < 5_000) {
+                delayMs = Math.max(delayMs, 5_000 - sinceLast);
+            }
         }
         worker.schedule(() -> {
             synchronized (queueLock) { queued = false; }
@@ -121,6 +128,7 @@ final class ConnectivityMonitor {
     }
 
     private void probe() {
+        lastProbeAtMs = System.currentTimeMillis();
         long attemptedAt = now();
         Snapshot previous = snapshot;
         try {
@@ -146,17 +154,33 @@ final class ConnectivityMonitor {
             JSONObject payload = new JSONObject(Mobilecore.classifyConnectivity(observation.toString()));
             JSONObject result = payload.optJSONObject("result");
             if (!payload.optBoolean("ok") || result == null) throw new IllegalStateException(coreError(payload));
-            String state = result.optString("state", "offline");
-            if (!"normal".equals(state) && !"allowlist".equals(state) && !"offline".equals(state)) {
+            String observedState = result.optString("state", "offline");
+            if (!validState(observedState)) {
                 throw new IllegalStateException("invalid_connectivity_state");
             }
-            Snapshot current = new Snapshot(state, attemptedAt, attemptedAt, "");
+            JSONObject confirmationInput = new JSONObject()
+                    .put("confirmed_state", previous.state)
+                    .put("candidate_state", candidateState)
+                    .put("candidate_count", candidateCount)
+                    .put("observed_state", observedState);
+            JSONObject confirmationPayload = new JSONObject(Mobilecore.confirmConnectivity(confirmationInput.toString()));
+            JSONObject confirmation = confirmationPayload.optJSONObject("result");
+            if (!confirmationPayload.optBoolean("ok") || confirmation == null) {
+                throw new IllegalStateException(coreError(confirmationPayload));
+            }
+            String state = confirmation.optString("state", previous.state);
+            candidateState = confirmation.optString("candidate_state", "");
+            candidateCount = confirmation.optInt("candidate_count", 0);
+            boolean confirmed = validState(state);
+            Snapshot current = new Snapshot(state, confirmed ? attemptedAt : previous.confirmedAt, attemptedAt, "");
             snapshot = current;
-            Log.i("OrcheRouteNet", "monitor=" + state + " underlay=" + underlay + " probes=" + observation);
+            Log.i("OrcheRouteNet", "observed=" + observedState + " confirmed=" + state
+                    + " candidate=" + candidateState + " streak=" + candidateCount
+                    + " underlay=" + underlay + " probes=" + observation);
 			// The listener also receives unchanged confirmed snapshots. This is
 			// the scheduler tick for deferred recovery (for example, a whitelist
 			// pool retry every five minutes); consumers still never start probes.
-			listener.onChanged(previous, current);
+			if (confirmed) listener.onChanged(previous, current);
         } catch (Throwable error) {
             Snapshot current = new Snapshot(previous.state, previous.confirmedAt, attemptedAt, readable(error));
             snapshot = current;
@@ -239,6 +263,10 @@ final class ConnectivityMonitor {
 
     private static String readable(Throwable error) {
         return error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+    }
+
+    private static boolean validState(String state) {
+        return "normal".equals(state) || "allowlist".equals(state) || "offline".equals(state);
     }
 
     private static long now() { return System.currentTimeMillis() / 1000L; }
