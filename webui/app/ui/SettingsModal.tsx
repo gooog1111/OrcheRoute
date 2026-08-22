@@ -3049,7 +3049,7 @@ function ComponentsForm({
         title="Ядро и геобазы"
         text={
           embedded
-            ? "Mihomo встроен в приложение и обновляется вместе с новой подписанной APK. GeoIP и GeoSite обновляются отдельно с проверкой и откатом."
+            ? undefined
             : "Проверка версии не меняет систему. Обновление Mihomo применяется только после проверки SHA-256 и конфигурации; нерабочая версия автоматически откатывается."
         }
       />
@@ -3058,7 +3058,7 @@ function ComponentsForm({
           label="Mihomo"
           value={components?.mihomo.installed_version || "Недоступно"}
         />
-        <Detail label="Последняя версия" value={versionState} />
+        {!embedded && <Detail label="Последняя версия" value={versionState} />}
         <Detail
           label="GeoIP"
           value={

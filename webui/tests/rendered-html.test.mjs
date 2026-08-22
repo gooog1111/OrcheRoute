@@ -124,6 +124,8 @@ test("android settings expose a signed GitHub release updater without transport 
   assert.doesNotMatch(settings, /Один транспорт для исходящих соединений/);
   assert.doesNotMatch(settings, />\s*Проверить версию\s*</);
   assert.doesNotMatch(settings, /Ядро обновляется с приложением/);
+  assert.doesNotMatch(settings, /Mihomo встроен в приложение и обновляется вместе с новой подписанной APK/);
+  assert.match(settings, /!embedded && <Detail label="Последняя версия" value=\{versionState\} \/>/);
   assert.match(settings, /Обновление OrcheRoute/);
 	assert.match(updater, /releases\/latest\/download\/android-update\.json/);
   assert.match(updater, /SHA-256 загруженного APK не совпадает/);

@@ -2,7 +2,7 @@ plugins {
     id "com.android.application"
 }
 
-def orcheRouteVersionName = "0.5.9-beta.12"
+def orcheRouteVersionName = "0.5.9-beta.13"
 def orcheRoutePrerelease = orcheRouteVersionName.contains("-")
 
 android {
@@ -13,7 +13,7 @@ android {
         applicationId "online.gooog1111.orcheroute"
         minSdk 26
         targetSdk 36
-		versionCode 38
+		versionCode 39
 		versionName orcheRouteVersionName
 		resValue "color", "launcher_accent", orcheRoutePrerelease ? "#FF5B61" : "#45F3C2"
 		resValue "string", "app_name", orcheRoutePrerelease ? "OrcheRoute BETA" : "OrcheRoute"
