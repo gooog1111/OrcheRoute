@@ -149,6 +149,9 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 		case path == "/v1/subscriptions/refresh":
 			return runtime.startUpdate(nil, "fetch")
 		case path == "/v1/subscriptions/check":
+			if runtime.connectivitySnapshot().State == "allowlist" {
+				return runtime.startWhitelistScan(nil)
+			}
 			return runtime.startUpdate(nil, "check")
 		case path == "/v1/whitelist/scan":
 			ids := []string{}
@@ -167,6 +170,9 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.startUpdate([]string{id}, "fetch")
 		case strings.HasPrefix(path, "/v1/subscriptions/") && strings.HasSuffix(path, "/check"):
 			id, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/v1/subscriptions/"), "/check"))
+			if runtime.connectivitySnapshot().State == "allowlist" {
+				return runtime.startWhitelistScan([]string{id})
+			}
 			return runtime.startUpdate([]string{id}, "check")
 		case strings.HasPrefix(path, "/v1/subscriptions/") && strings.HasSuffix(path, "/secret"):
 			id, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/v1/subscriptions/"), "/secret"))

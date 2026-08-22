@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/controller"
-	"github.com/gooog1111/orcheroute/internal/network"
+	mobileconnectivity "github.com/gooog1111/orcheroute/internal/mobile/connectivity"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
+	"github.com/gooog1111/orcheroute/internal/whitelist"
 )
 
 func (runtime *Runtime) RunController(ctx context.Context) {
@@ -45,17 +45,43 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 		runtime.recordControllerError(err)
 		return
 	}
+	physical := runtime.connectivitySnapshot()
+	if controlValue.Enabled && (physical.State == mobileconnectivity.Allowlist || physical.State == mobileconnectivity.Offline) {
+		runtime.restrictedNetworkCycle(cycleContext, physical.State)
+		return
+	}
+	if controlValue.Enabled && physical.State != mobileconnectivity.Normal {
+		return
+	}
 	nodes, _, err := runtime.liveNodes(cycleContext)
 	transportAvailable := err == nil
 	if err != nil {
+		if controlValue.Enabled && physical.State == mobileconnectivity.Normal {
+			if startErr := platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, true); startErr != nil {
+				runtime.recordControllerError(startErr)
+				return
+			}
+			_ = runtime.Store.SetSnapshot(context.Background(), map[string]any{"status": "starting", "mode": controlValue.Mode,
+				"active": "", "active_pool": "", "last_cycle": time.Now().Unix(), "wan_available": true})
+			return
+		}
 		// The direct connection and disabled state do not depend on Mihomo.
 		// Keep observing the host while the transport is stopped or has not yet
 		// produced a configuration; pools will simply remain empty meanwhile.
 		nodes = []PublicNode{}
 	}
+	if physical.State == mobileconnectivity.Normal {
+		derived := runtime.whitelistState()
+		if derived.SelectedNode != "" || derived.PendingNode != "" {
+			_, _ = runtime.whitelistTransition(whitelist.Command{Operation: "deactivate"})
+		}
+	}
 	active, activePool := "", ""
 	controllerNodes := make([]controller.Node, 0, len(nodes))
 	for _, node := range nodes {
+		if node.Pool == whitelist.Pool {
+			continue
+		}
 		delay := 0
 		if node.Delay != nil {
 			delay = *node.Delay
@@ -65,24 +91,10 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 			active, activePool = node.FullName, node.Pool
 		}
 	}
-	profile := network.Profile{}
-	if err := readJSON(filepath.Join(runtime.Config.StateDirectory, "network-active.json"), &profile); err != nil {
-		runtime.recordControllerError(err)
-		return
-	}
-	directRole := profile.Roles["direct"]
-	wan, activeOK := false, false
-	var wait sync.WaitGroup
-	wait.Add(1)
-	// Binding to the selected egress already keeps this probe off a system-wide
-	// VPN. A policy mark is deliberately not used here: on a clean install its
-	// routing table does not exist until the first network apply.
-	go func() { defer wait.Done(); wan = runtime.directAvailable(cycleContext, directRole.Interface, 0) }()
+	wan, activeOK := physical.State == mobileconnectivity.Normal, false
 	if controlValue.Enabled && transportAvailable {
-		wait.Add(1)
-		go func() { defer wait.Done(); activeOK = runtime.activeAvailable(cycleContext) }()
+		activeOK = runtime.activeAvailable(cycleContext)
 	}
-	wait.Wait()
 	manualNode := ""
 	if controlValue.ManualNode != nil {
 		manualNode = *controlValue.ManualNode
@@ -111,6 +123,109 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 	if changed {
 		_ = runtime.Store.AddEvent(context.Background(), serverstate.EventInput{EventType: "controller_decision", Severity: "info", Pool: stringPointer(decision.Pool), Reason: stringPointer(decision.Reason), Details: map[string]any{"action": decision.Action, "target": decision.Target, "observed_active": active, "wan_available": wan, "active_ok": activeOK}})
 	}
+}
+
+func (runtime *Runtime) restrictedNetworkCycle(ctx context.Context, mode mobileconnectivity.State) {
+	control, err := runtime.Store.Control(ctx)
+	if err != nil || !control.Enabled {
+		return
+	}
+	now := time.Now().Unix()
+	if mode == mobileconnectivity.Offline {
+		_ = platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, false)
+		runtime.setRestrictedSnapshot("internet_down", "", "", now)
+		return
+	}
+	state := runtime.whitelistState()
+	if state.ScanActive {
+		runtime.setRestrictedSnapshot("whitelist_scanning", state.SelectedNode, whitelist.Pool, now)
+		return
+	}
+	if len(state.Nodes) == 0 {
+		operation := map[string]any{}
+		retryDue := true
+		if readJSON(filepath.Join(runtime.Config.StateDirectory, "update-operation.json"), &operation) == nil {
+			retryDue = now-int64(intValue(operation["updated_at"])) >= 300
+		}
+		if retryDue {
+			_, _ = runtime.startWhitelistScan(nil)
+			runtime.setRestrictedSnapshot("whitelist_scanning", "", whitelist.Pool, now)
+		} else {
+			runtime.setRestrictedSnapshot("whitelist_unavailable", "", whitelist.Pool, now)
+		}
+		return
+	}
+	nodes, _, liveErr := runtime.liveNodes(ctx)
+	if liveErr != nil {
+		if err := platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, true); err != nil {
+			runtime.recordControllerError(err)
+			return
+		}
+		if err := runtime.selectWhitelistCandidate(state); err != nil {
+			runtime.setRestrictedSnapshot("whitelist_connecting", "", whitelist.Pool, now)
+			return
+		}
+		state = runtime.whitelistState()
+		active := ""
+		for _, node := range state.Nodes {
+			if node.ID == state.SelectedNode {
+				active = stringValue(node.Proxy["name"])
+				break
+			}
+		}
+		runtime.setRestrictedSnapshot("whitelist_connecting", active, whitelist.Pool, now)
+		return
+	}
+	activeName, activeID, activeOK := "", "", false
+	for _, node := range nodes {
+		if node.Pool == whitelist.Pool && node.Selected {
+			activeName, activeID = node.FullName, node.ID
+			break
+		}
+	}
+	if activeName != "" {
+		activeOK = runtime.activeAvailable(ctx)
+	}
+	if !activeOK {
+		if activeID != "" {
+			failed, _ := runtime.whitelistTransition(whitelist.Command{Operation: "fail", NodeID: activeID})
+			state = failed.State
+		}
+		if len(state.Nodes) == 0 {
+			_ = platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, false)
+			_, _ = runtime.startWhitelistScan(nil)
+			runtime.setRestrictedSnapshot("whitelist_scanning", "", whitelist.Pool, now)
+			return
+		}
+		if err := platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, true); err != nil {
+			runtime.recordControllerError(err)
+			return
+		}
+		if err := runtime.selectWhitelistCandidate(state); err != nil {
+			runtime.setRestrictedSnapshot("whitelist_connecting", "", whitelist.Pool, now)
+			return
+		}
+		state = runtime.whitelistState()
+		if selected := state.SelectedNode; selected != "" {
+			for _, node := range state.Nodes {
+				if node.ID == selected {
+					activeName = stringValue(node.Proxy["name"])
+					break
+				}
+			}
+		}
+	}
+	runtime.setRestrictedSnapshot("proxy_ok", activeName, whitelist.Pool, now)
+}
+
+func (runtime *Runtime) setRestrictedSnapshot(status, active, pool string, now int64) {
+	state := map[string]any{"status": status, "mode": "auto", "active": active, "active_pool": pool,
+		"failure_streak": 0, "last_cycle": now, "wan_available": status != "internet_down"}
+	_ = runtime.Store.SetSnapshot(context.Background(), state)
+	runtime.mu.Lock()
+	runtime.lastDecision = controller.Decision{Action: "keep", Pool: pool, Reason: status}
+	runtime.lastObservation = controller.Observation{Now: now, WAN: status != "internet_down", Active: active, ActivePool: pool}
+	runtime.mu.Unlock()
 }
 
 func (runtime *Runtime) executeDecision(ctx context.Context, decision controller.Decision) error {
