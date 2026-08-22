@@ -72,6 +72,8 @@ final class MobileRuntime {
     private String networkApplyError = "";
     private long networkApplyUpdatedAt;
     private int networkApplyRevision = 1;
+    private JSONObject directIdentity = new JSONObject();
+    private JSONObject proxyIdentity = new JSONObject();
 
     private MobileRuntime(Context context) {
         this.context = context.getApplicationContext();
@@ -138,6 +140,7 @@ final class MobileRuntime {
         state = "error";
         whitelistConnectPending = false;
         connectedNodeID = "";
+        proxyIdentity = new JSONObject();
         message = detail == null || detail.isEmpty() ? "Не удалось запустить Mihomo" : detail;
         if ("applying".equals(networkApplyStatus)) {
             networkApplyStatus = "failed"; networkApplyError = message; networkApplyMessage = "Не удалось применить транспорт или DNS"; networkApplyUpdatedAt = now();
@@ -155,6 +158,7 @@ final class MobileRuntime {
 		setDesiredEnabled(true);
         state = "connected";
         whitelistConnectPending = false;
+        if (!connectedNodeID.equals(nodeID == null ? "" : nodeID)) proxyIdentity = new JSONObject();
         connectedNodeID = nodeID == null ? "" : nodeID;
 		stableHealthChecks = 0;
         if (allowlistRouteOverride) {
@@ -176,6 +180,7 @@ final class MobileRuntime {
         state = "disabled";
         whitelistConnectPending = false;
         connectedNodeID = "";
+        proxyIdentity = new JSONObject();
         message = "OrcheRoute выключен";
     }
 
@@ -183,6 +188,15 @@ final class MobileRuntime {
 			setDesiredEnabled(true);
         state = "stopping";
         message = "Закрывается Android TUN и останавливается Mihomo";
+    }
+
+    Network identityPhysicalNetwork() { return connectivityMonitor.activePhysicalNetwork(); }
+
+    synchronized void updateConnectionIdentity(String route, JSONObject identity) throws JSONException {
+        JSONObject value = identity == null ? new JSONObject() : new JSONObject(identity.toString());
+        value.put("updated_at", now());
+        if ("direct".equals(route)) directIdentity = value;
+        else if ("proxy".equals(route)) proxyIdentity = value;
     }
 
     synchronized String request(String method, String path, String body, PermissionRequester permissionRequester) {
@@ -1289,7 +1303,8 @@ final class MobileRuntime {
                 .put("active_pool", active == null ? JSONObject.NULL : active.optString("pool"))
                 .put("failure_streak", 0)
                 .put("last_switch", repository.lastSwitch())
-                .put("manual_until", 0);
+                .put("manual_until", 0)
+                .put("identity", new JSONObject(proxyIdentity.toString()));
         return new JSONObject()
                 .put("version", 1)
                 .put("timestamp", now)
@@ -1299,6 +1314,7 @@ final class MobileRuntime {
                 .put("service", new JSONObject().put("enabled", desiredEnabled))
                 .put("wan", new JSONObject().put("interface", "android").put("available", internet)
                         .put("mode", connectivitySnapshot.state)
+                        .put("identity", new JSONObject(directIdentity.toString()))
                         .put("diagnostics", connectivitySnapshot.json()))
                 .put("network", network)
                 .put("proxy", proxy)

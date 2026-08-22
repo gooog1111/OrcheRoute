@@ -91,3 +91,16 @@ func TestConfirmNetworkModeNeedsTwoSamplesAndRecoversImmediately(t *testing.T) {
 		t.Fatalf("recovered=%#v err=%v", recovered, err)
 	}
 }
+
+func TestParseTraceIdentity(t *testing.T) {
+	identity, err := ParseTraceIdentity("fl=1\nip=203.0.113.8\nloc=US\ntls=TLSv1.3\n")
+	if err != nil || identity.IP != "203.0.113.8" || identity.CountryCode != "US" || identity.Region != "USA" || identity.Flag != "🇺🇸" {
+		t.Fatalf("identity=%#v err=%v", identity, err)
+	}
+}
+
+func TestParseTraceIdentityRequiresAnIPAddress(t *testing.T) {
+	if _, err := ParseTraceIdentity("loc=DE\n"); err == nil {
+		t.Fatal("expected missing IP error")
+	}
+}

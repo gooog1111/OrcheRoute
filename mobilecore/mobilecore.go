@@ -85,6 +85,14 @@ func ConfirmConnectivity(inputJSON string) string {
 	return encode(map[string]any{"ok": true, "result": result})
 }
 
+func ParseConnectionIdentity(traceBody string) string {
+	result, err := mobileconnectivity.ParseTraceIdentity(traceBody)
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	return encode(map[string]any{"ok": true, "result": result})
+}
+
 func ValidateQualificationPolicy(policyJSON string) string {
 	var policy map[string]any
 	if json.Unmarshal([]byte(policyJSON), &policy) != nil {

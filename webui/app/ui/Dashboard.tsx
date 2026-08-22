@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { actions, isAndroidRuntime, loadDashboard, type DashboardData, type Node } from "../lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { actions, isAndroidRuntime, loadDashboard, loadLiveDashboard, type ConnectionIdentity, type DashboardData, type Node } from "../lib/api";
 import { ChevronIcon, CloseIcon, GlobeIcon, PowerIcon, RefreshIcon, RouteIcon, ServerIcon, SettingsIcon } from "./Icons";
 import { SettingsModal as EditableSettingsModal, type SettingsTab } from "./SettingsModal";
 import { OperationPanel, type OperationView } from "./OperationPanel";
@@ -9,12 +9,12 @@ import { MatrixRain } from "./MatrixRain";
 
 
 const statusText: Record<string, string> = {
-  proxy_ok: "Защищено",
-  manual_proxy_ok: "Защищено · ручной узел",
+  proxy_ok: "Подключено",
+  manual_proxy_ok: "Подключено · ручной узел",
   proxy_degraded: "Соединение нестабильно",
   manual_proxy_degraded: "Ручной узел нестабилен",
   manual_target_unavailable: "Узел недоступен",
-  emergency_proxy_ok: "Защищено · аварийный пул",
+  emergency_proxy_ok: "Подключено · аварийный пул",
   emergency_proxy_degraded: "Аварийный пул недоступен",
   internet_down: "Нет интернета",
   recovery_grace: "Восстановление соединения",
@@ -45,6 +45,11 @@ function routeCount(data: DashboardData | null) {
   return Object.values(data.routes.stats).reduce((sum, item) => sum + (item.compiled_rules ?? item.entries ?? 0), 0);
 }
 
+function identityText(identity?: ConnectionIdentity) {
+  if (!identity?.ip) return "Определяем…";
+  return [identity.ip, identity.region, identity.flag].filter(Boolean).join(" ");
+}
+
 export function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,16 +59,25 @@ export function Dashboard() {
   const [tab, setTab] = useState<SettingsTab>("general");
   const [operationView, setOperationView] = useState<OperationView | null>(null);
   const [stoppingWhitelist, setStoppingWhitelist] = useState(false);
+  const dataRef = useRef<DashboardData | null>(null);
+  const refreshInFlight = useRef(false);
 
-  const refresh = useCallback(async (quiet = false) => {
+  useEffect(() => { dataRef.current = data; }, [data]);
+
+  const refresh = useCallback(async (quiet = false, live = false) => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     if (!quiet) setLoading(true);
     try {
-      const next = await loadDashboard();
+      const current = dataRef.current;
+      const next = live && current ? await loadLiveDashboard(current) : await loadDashboard();
+      dataRef.current = next;
       setData(next);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось получить состояние");
     } finally {
+      refreshInFlight.current = false;
       if (!quiet) setLoading(false);
     }
   }, []);
@@ -71,7 +85,8 @@ export function Dashboard() {
   useEffect(() => {
     if (settingsOpen) return;
     const first = window.setTimeout(() => void refresh(), 0);
-    const timer = window.setInterval(() => void refresh(true), 5000);
+    const android = isAndroidRuntime();
+    const timer = window.setInterval(() => void refresh(true, android), android ? 1000 : 5000);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(timer);
@@ -103,7 +118,6 @@ export function Dashboard() {
   const allTotalNodes = data?.pools.reduce((sum, pool) => sum + pool.total, 0) ?? 0;
   const aliveNodes = activePool?.alive ?? allAliveNodes;
   const totalNodes = activePool?.total ?? allTotalNodes;
-  const currentNode = data?.nodes.find((node) => node.selected);
   const whitelistPool = data?.pools.find((pool) => pool.id === "whitelist");
   const whitelistUpdate = data?.operations?.subscription_update;
   const whitelistScanning = Boolean(
@@ -216,14 +230,8 @@ export function Dashboard() {
             <span className="status-dot" />
             {loading ? "Подключение к серверу" : stateLabel}
           </div>
-          <h1>{enabled ? "Соединение под контролем" : "OrcheRoute выключен"}</h1>
-          {enabled && <p>
-            {data?.status.mobile?.state === "direct_test"
-              ? "Mihomo обрабатывает трафик через системный TUN в диагностическом режиме DIRECT. VPN-сервер пока не выбран."
-              : currentNode
-                ? `Активен ${currentNode.display_name}. Автоматика продолжит работу до отказа узла.`
-                : "Контроллер выбирает доступный сервер."}
-          </p>}
+          <h1>{enabled ? "OrcheRoute включён" : "OrcheRoute выключен"}</h1>
+          {enabled && <p className="connection-identity"><span>Direct</span>{identityText(data?.status.wan.identity)}</p>}
         </div>
 
         <div className="power-stage">
@@ -240,7 +248,10 @@ export function Dashboard() {
               <span>{busy ? "Подождите" : enabled ? "Выключить" : "Включить"}</span>
             </button>
           </div>
-          <small>{captureText[data?.status.network.capture_mode ?? ""] ?? "Режим не определён"}</small>
+          <div className="power-details">
+            <small>{captureText[data?.status.network.capture_mode ?? ""] ?? "Режим не определён"}</small>
+            {enabled && <small className="connection-identity"><span>Proxy</span>{identityText(data?.status.proxy.identity)}</small>}
+          </div>
         </div>
 
         <div className="metrics-grid" aria-label="Состояние системы">

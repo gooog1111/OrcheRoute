@@ -183,6 +183,25 @@ test("mobile dashboard centers power controls and places switch time on its own 
   assert.match(css, /\.power-stage \{ align-self: center; justify-self: center/);
 });
 
+test("android dashboard follows live VPN state and shows direct and proxy identities", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
+  const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
+  const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
+  assert.match(dashboard, /proxy_ok: "Подключено"/);
+  assert.match(dashboard, /enabled \? "OrcheRoute включён"/);
+  assert.doesNotMatch(dashboard, /Соединение под контролем/);
+  assert.doesNotMatch(dashboard, /Автоматика продолжит/);
+  assert.match(dashboard, /<span>Direct<\/span>/);
+  assert.match(dashboard, /<span>Proxy<\/span>/);
+  assert.match(dashboard, /android \? 1000 : 5000/);
+  assert.match(api, /loadLiveDashboard/);
+  assert.match(service, /network == null \? url\.openConnection\(\) : network\.openConnection\(url\)/);
+  assert.match(service, /Mobilecore\.parseConnectionIdentity/);
+  assert.match(runtime, /\.put\("identity", new JSONObject\(directIdentity\.toString\(\)\)\)/);
+  assert.match(runtime, /\.put\("identity", new JSONObject\(proxyIdentity\.toString\(\)\)\)/);
+});
+
 test("qualification UI exposes connectivity anchors and emergency per-source top", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(settings, /Доступно при белых списках/);

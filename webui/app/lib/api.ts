@@ -1,3 +1,11 @@
+export type ConnectionIdentity = {
+  ip: string;
+  country_code?: string;
+  region?: string;
+  flag?: string;
+  updated_at?: number;
+};
+
 export type OrcheRouteStatus = {
   version: number;
   timestamp: number;
@@ -5,7 +13,7 @@ export type OrcheRouteStatus = {
   stale: boolean;
   connectivity: string;
   service?: { enabled: boolean };
-  wan: { interface: string; available: boolean | null; mode?: "normal" | "allowlist" | "offline" | "unknown" };
+  wan: { interface: string; available: boolean | null; mode?: "normal" | "allowlist" | "offline" | "unknown"; identity?: ConnectionIdentity };
   network: {
     capture_mode: "interfaces" | "system" | string;
     direct_interface: string;
@@ -18,6 +26,7 @@ export type OrcheRouteStatus = {
     failure_streak: number;
     last_switch: number;
     manual_until: number;
+    identity?: ConnectionIdentity;
   };
   mobile?: {
     state: string;
@@ -433,6 +442,16 @@ export async function loadDashboard(): Promise<DashboardData> {
     operations,
     access,
   };
+}
+
+export async function loadLiveDashboard(current: DashboardData): Promise<DashboardData> {
+  const [status, pools, nodes, operations] = await Promise.all([
+    request<OrcheRouteStatus>("/v1/status"),
+    request<{ pools: Pool[] }>("/v1/pools").catch(() => ({ pools: current.pools })),
+    request<{ nodes: Node[] }>("/v1/nodes").catch(() => ({ nodes: current.nodes })),
+    request<OperationSnapshot>("/v1/operations").catch(() => current.operations),
+  ]);
+  return { ...current, status, pools: pools.pools, nodes: nodes.nodes, operations };
 }
 
 export function loadOperations(): Promise<OperationSnapshot> {

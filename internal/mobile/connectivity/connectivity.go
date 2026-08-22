@@ -7,8 +7,11 @@ package connectivity
 import (
 	"context"
 	"errors"
+	"net"
 	"strings"
 	"sync"
+
+	"golang.org/x/text/language"
 )
 
 type State string
@@ -63,6 +66,13 @@ type ConfirmationResult struct {
 	CandidateState State `json:"candidate_state,omitempty"`
 	CandidateCount int   `json:"candidate_count"`
 	Changed        bool  `json:"changed"`
+}
+
+type Identity struct {
+	IP          string `json:"ip"`
+	CountryCode string `json:"country_code,omitempty"`
+	Region      string `json:"region,omitempty"`
+	Flag        string `json:"flag,omitempty"`
 }
 
 type Probe func(context.Context, Target) bool
@@ -180,6 +190,46 @@ func Confirm(input ConfirmationInput) (ConfirmationResult, error) {
 
 func validObserved(state State) bool {
 	return state == Normal || state == Allowlist || state == Offline
+}
+
+// ParseTraceIdentity parses Cloudflare's plain-text trace response. Network
+// I/O remains platform-owned so Direct can be bound to a physical interface
+// while Proxy follows the active TUN.
+func ParseTraceIdentity(body string) (Identity, error) {
+	values := map[string]string{}
+	for _, line := range strings.Split(body, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok {
+			values[strings.ToLower(strings.TrimSpace(key))] = strings.TrimSpace(value)
+		}
+	}
+	ip := values["ip"]
+	if net.ParseIP(ip) == nil {
+		return Identity{}, errors.New("connection_identity_ip_missing")
+	}
+	result := Identity{IP: ip}
+	code := strings.ToUpper(values["loc"])
+	if len(code) != 2 {
+		return result, nil
+	}
+	region, err := language.ParseRegion(code)
+	if err != nil || !region.IsCountry() {
+		return result, nil
+	}
+	result.CountryCode = code
+	result.Region = region.ISO3()
+	if result.Region == "ZZZ" {
+		result.Region = code
+	}
+	result.Flag = countryFlag(code)
+	return result, nil
+}
+
+func countryFlag(code string) string {
+	if len(code) != 2 || code[0] < 'A' || code[0] > 'Z' || code[1] < 'A' || code[1] > 'Z' {
+		return ""
+	}
+	return string([]rune{rune(0x1F1E6) + rune(code[0]-'A'), rune(0x1F1E6) + rune(code[1]-'A')})
 }
 
 func normalizeOpenURL(value string) string {

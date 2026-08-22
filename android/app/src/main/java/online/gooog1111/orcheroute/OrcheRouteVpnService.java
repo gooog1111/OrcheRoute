@@ -16,8 +16,11 @@ import android.util.Log;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -58,6 +61,7 @@ public final class OrcheRouteVpnService extends VpnService {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService healthWorker = Executors.newSingleThreadScheduledExecutor();
     private final ScheduledExecutorService trafficWorker = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService identityWorker = Executors.newSingleThreadScheduledExecutor();
     private final Object tunnelLock = new Object();
     private ParcelFileDescriptor vpnInterface;
     private volatile boolean connected;
@@ -66,6 +70,7 @@ public final class OrcheRouteVpnService extends VpnService {
     private volatile int healthFailureStreak;
     private ScheduledFuture<?> healthMonitor;
     private ScheduledFuture<?> trafficMonitor;
+    private ScheduledFuture<?> identityMonitor;
     private volatile String notificationNode = "";
 
     static void start(Context context) {
@@ -220,6 +225,7 @@ public final class OrcheRouteVpnService extends VpnService {
             if (profile.proxy()) startHealthMonitor();
             notificationNode = profile.proxy() ? profile.nodeName : "DIRECT";
             startTrafficMonitor();
+            startIdentityMonitor();
             NotificationManager manager = getSystemService(NotificationManager.class);
             manager.notify(NOTIFICATION_ID, notification(profile.proxy()
                     ? "VPN работает · " + profile.nodeName
@@ -283,6 +289,7 @@ public final class OrcheRouteVpnService extends VpnService {
         worker.shutdownNow();
         healthWorker.shutdownNow();
         trafficWorker.shutdownNow();
+        identityWorker.shutdownNow();
         if (connected) MobileRuntime.get(this).onDisabled();
         connected = false;
         super.onDestroy();
@@ -291,6 +298,7 @@ public final class OrcheRouteVpnService extends VpnService {
     private void stopTunnel() {
         stopHealthMonitor();
         stopTrafficMonitor();
+        stopIdentityMonitor();
         synchronized (tunnelLock) {
             closeVpnInterface();
             Mobilecore.engineStopTun();
@@ -328,6 +336,57 @@ public final class OrcheRouteVpnService extends VpnService {
         if (bytes < 1024L * 1024L) return String.format(java.util.Locale.ROOT, "%.1f КБ/с", bytes / 1024.0);
         if (bytes < 1024L * 1024L * 1024L) return String.format(java.util.Locale.ROOT, "%.1f МБ/с", bytes / (1024.0 * 1024.0));
         return String.format(java.util.Locale.ROOT, "%.2f ГБ/с", bytes / (1024.0 * 1024.0 * 1024.0));
+    }
+
+    private void startIdentityMonitor() {
+        stopIdentityMonitor();
+        identityMonitor = identityWorker.scheduleWithFixedDelay(this::updateConnectionIdentities, 2, 30, TimeUnit.SECONDS);
+    }
+
+    private void stopIdentityMonitor() {
+        ScheduledFuture<?> monitor = identityMonitor;
+        identityMonitor = null;
+        if (monitor != null) monitor.cancel(false);
+    }
+
+    private void updateConnectionIdentities() {
+        if (!connected || stopping) return;
+        MobileRuntime runtime = MobileRuntime.get(this);
+        JSONObject direct = probeIdentity(runtime.identityPhysicalNetwork());
+        if (direct != null) {
+            try { runtime.updateConnectionIdentity("direct", direct); } catch (Throwable ignored) { }
+        }
+        JSONObject proxy = probeIdentity(null);
+        if (proxy != null) {
+            try { runtime.updateConnectionIdentity("proxy", proxy); } catch (Throwable ignored) { }
+        }
+    }
+
+    private static JSONObject probeIdentity(Network network) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL("https://www.cloudflare.com/cdn-cgi/trace");
+            connection = (HttpURLConnection) (network == null ? url.openConnection() : network.openConnection(url));
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            connection.setUseCaches(false);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Cache-Control", "no-cache, no-store");
+            connection.setRequestProperty("User-Agent", "OrcheRoute Android identity monitor");
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) return null;
+            StringBuilder trace = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null && trace.length() < 8192) trace.append(line).append('\n');
+            }
+            JSONObject envelope = new JSONObject(Mobilecore.parseConnectionIdentity(trace.toString()));
+            return envelope.optBoolean("ok") ? envelope.optJSONObject("result") : null;
+        } catch (Throwable error) {
+            Log.d("OrcheRouteIdentity", (network == null ? "proxy" : "direct") + " identity unavailable", error);
+            return null;
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
     }
 
     private void startHealthMonitor() {

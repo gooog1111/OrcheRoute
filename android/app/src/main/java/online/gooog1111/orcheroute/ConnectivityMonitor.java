@@ -81,6 +81,7 @@ final class ConnectivityMonitor {
     private String candidateState = "";
     private int candidateCount;
     private long lastProbeAtMs;
+    private volatile Network activePhysicalNetwork;
 
     private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
         @Override public void onAvailable(Network network) { queueProbe(250); }
@@ -112,6 +113,8 @@ final class ConnectivityMonitor {
 
     Snapshot snapshot() { return snapshot; }
 
+    Network activePhysicalNetwork() { return activePhysicalNetwork; }
+
     private void queueProbe(long delayMs) {
         synchronized (queueLock) {
             if (queued) return;
@@ -138,6 +141,7 @@ final class ConnectivityMonitor {
             if (!targetPayload.optBoolean("ok")) throw new IllegalStateException(coreError(targetPayload));
             JSONArray targets = targetPayload.getJSONObject("result").getJSONArray("targets");
             Network underlay = physicalNetwork(settings.transport);
+            activePhysicalNetwork = underlay;
             JSONObject observation = emptyObservation();
             if (underlay != null) {
                 List<Future<Boolean>> results = new ArrayList<>();
