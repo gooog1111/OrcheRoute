@@ -237,6 +237,18 @@ export function SettingsModal({
     };
   }, [tabs.length, updateNavEdges]);
 
+  useEffect(() => {
+    const nav = navRef.current;
+    const active = nav?.querySelector<HTMLElement>("button.active");
+    if (!nav || !active) return;
+    const left = active.offsetLeft;
+    const right = left + active.offsetWidth;
+    if (left < nav.scrollLeft) nav.scrollTo({ left, behavior: "smooth" });
+    else if (right > nav.scrollLeft + nav.clientWidth) {
+      nav.scrollTo({ left: right - nav.clientWidth, behavior: "smooth" });
+    }
+  }, [activeTab]);
+
   const scrollNavigation = (direction: -1 | 1) => {
     const nav = navRef.current;
     if (!nav) return;
@@ -596,6 +608,7 @@ export function SettingsModal({
           inert={busy ? true : undefined}
         >
           <div className="settings-nav-scroll">
+          <button className="settings-nav-edge left" type="button" disabled={!navEdges.left} onClick={() => scrollNavigation(-1)} aria-label="Предыдущие разделы">‹</button>
           <nav ref={navRef} className="settings-nav" aria-label="Разделы настроек">
             <Tab
               active={activeTab === "general"}
@@ -635,12 +648,7 @@ export function SettingsModal({
               label="Обновления"
             />
           </nav>
-          {navEdges.left && (
-            <button className="settings-nav-edge left" type="button" onClick={() => scrollNavigation(-1)} aria-label="Предыдущие разделы">‹</button>
-          )}
-          {navEdges.right && (
-            <button className="settings-nav-edge right" type="button" onClick={() => scrollNavigation(1)} aria-label="Следующие разделы">›</button>
-          )}
+          <button className="settings-nav-edge right" type="button" disabled={!navEdges.right} onClick={() => scrollNavigation(1)} aria-label="Следующие разделы">›</button>
           </div>
           <div className="settings-content" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
             {activeTab === "general" && (

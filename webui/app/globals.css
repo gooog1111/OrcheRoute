@@ -517,14 +517,15 @@ html.prerelease-theme .input-wrap select {
   .modal-header { min-height: calc(68px + env(safe-area-inset-top)); padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(18px, env(safe-area-inset-left)); }
   .modal-header h2 { font-size: 20px; }
   .settings-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .settings-nav-scroll { border-bottom: 1px solid var(--line); }
-  .settings-nav { display: flex; gap: 6px; height: auto; padding: 9px max(42px, env(safe-area-inset-right)) 9px max(12px, env(safe-area-inset-left)); border-right: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-snap-type: x proximity; }
+  .settings-nav-scroll { display: grid; grid-template-columns: 30px minmax(0, 1fr) 30px; align-items: stretch; border-bottom: 1px solid var(--line); }
+  .settings-nav { min-width: 0; display: flex; gap: 6px; height: auto; padding: 9px 0; border-right: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; scroll-snap-type: x proximity; }
   .settings-nav::-webkit-scrollbar { display: none; }
   .settings-nav button { width: auto; flex: 0 0 auto; min-height: 34px; padding: 0 12px; scroll-snap-align: start; }
   .settings-nav svg { display: none; }
-  .settings-nav-edge { width: 34px; display: grid; place-items: center; position: absolute; z-index: 3; top: 0; bottom: 0; padding: 0; border: 0; color: var(--accent); cursor: pointer; font-size: 22px; line-height: 1; }
-  .settings-nav-edge.left { left: 0; background: linear-gradient(90deg, rgba(5,10,9,.96) 25%, rgba(5,10,9,.64) 62%, transparent); }
-  .settings-nav-edge.right { right: 0; background: linear-gradient(270deg, rgba(5,10,9,.96) 25%, rgba(5,10,9,.64) 62%, transparent); }
+  .settings-nav-edge { width: 30px; min-width: 0; display: grid; place-items: center; position: static; z-index: 3; padding: 0; border: 0; color: var(--accent); cursor: pointer; font-size: 22px; line-height: 1; transition: opacity .15s; }
+  .settings-nav-edge.left { background: linear-gradient(90deg, rgba(5,10,9,.98), rgba(5,10,9,.72)); }
+  .settings-nav-edge.right { background: linear-gradient(270deg, rgba(5,10,9,.98), rgba(5,10,9,.72)); }
+  .settings-nav-edge:disabled { opacity: .14; cursor: default; }
   .settings-content { min-height: 0; padding: 22px max(16px, env(safe-area-inset-right)) 28px max(16px, env(safe-area-inset-left)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 24px; -webkit-overflow-scrolling: touch; }
   .settings-section { min-width: 0; gap: 20px; }
   .section-heading { padding-bottom: 16px; }

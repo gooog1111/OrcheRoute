@@ -281,8 +281,12 @@ test("qualification UI exposes connectivity anchors and emergency per-source top
   assert.match(settings, /settings-nav-edge right/);
   assert.match(settings, /scrollNavigation\(-1\)/);
   assert.match(settings, /scrollNavigation\(1\)/);
+  assert.match(settings, /querySelector<HTMLElement>\("button\.active"\)/);
+  assert.match(settings, /right - nav\.clientWidth/);
   assert.match(styles, /\.settings-nav-edge\.left/);
   assert.match(styles, /\.settings-nav-edge\.right/);
+  assert.match(styles, /grid-template-columns: 30px minmax\(0, 1fr\) 30px/);
+  assert.match(styles, /\.settings-nav-edge:disabled/);
   assert.match(settings, /const baseOperation: OperationView \| null/);
   assert.match(settings, /: null;\s*const displayedOperation/);
   assert.match(styles, /overflow-x: auto/);
