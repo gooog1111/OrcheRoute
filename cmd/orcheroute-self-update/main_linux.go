@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -18,6 +19,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 type status struct {
@@ -48,6 +51,16 @@ func run(action, dir string, beta bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 	current := installed()
+	if action == "backup" {
+		write(dir, status{State: "backup", Message: "Создаём резервную копию", CurrentVersion: current, Active: true, UpdatedAt: time.Now().Unix(), Beta: beta})
+		path, err := createBackup(ctx, dir)
+		if err != nil {
+			return err
+		}
+		fmt.Println(path)
+		write(dir, status{State: "current", Message: "Резервная копия создана", CurrentVersion: current, UpdatedAt: time.Now().Unix(), Beta: beta})
+		return nil
+	}
 	write(dir, status{State: "checking", Message: "Проверяем манифест обновлений", CurrentVersion: current, Active: true, UpdatedAt: time.Now().Unix(), Beta: beta})
 	rel, err := selfupdate.Latest(ctx, nil, beta, "amd64")
 	if err != nil {
@@ -85,10 +98,9 @@ func run(action, dir string, beta bool) error {
 	if debField(candidate, "Package") != "orcheroute" || debField(candidate, "Architecture") != "amd64" || debField(candidate, "Version") != rel.Version {
 		return fmt.Errorf("invalid_deb_package")
 	}
-	backup := filepath.Join(dir, "backups", "before-self-update-"+time.Now().Format("20060102-150405")+".tar.gz")
-	os.MkdirAll(filepath.Dir(backup), 0700)
-	if out, backupErr := exec.Command("tar", "--exclude=/var/lib/orcheroute/backups", "--exclude=/var/lib/orcheroute/self-update", "--exclude=/var/lib/orcheroute/packages", "-czf", backup, "/etc/orcheroute", "/var/lib/orcheroute").CombinedOutput(); backupErr != nil {
-		return fmt.Errorf("backup_failed:%s", tail(string(out)))
+	_, backupErr := createBackup(ctx, dir)
+	if backupErr != nil {
+		return fmt.Errorf("backup_failed:%s", backupErr)
 	}
 	core := exec.Command("systemctl", "is-active", "--quiet", "orcheroute-core.service").Run() == nil
 	write(dir, status{State: "installing", Message: "Устанавливаем и проверяем пакет", CurrentVersion: current, LatestVersion: rel.Version, Active: true, UpdatedAt: time.Now().Unix(), Beta: beta})
@@ -107,6 +119,89 @@ func run(action, dir string, beta bool) error {
 		return err
 	}
 	write(dir, status{State: "current", Message: "OrcheRoute обновлён", CurrentVersion: rel.Version, LatestVersion: rel.Version, UpdatedAt: time.Now().Unix(), Beta: beta})
+	return nil
+}
+
+func createBackup(ctx context.Context, stateDir string) (string, error) {
+	root := "/var/backups/orcheroute"
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return "", err
+	}
+	staging, err := os.MkdirTemp(root, ".snapshot-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(staging)
+	if err := copyEntry(ctx, "/etc/orcheroute", filepath.Join(staging, "etc")); err != nil {
+		return "", err
+	}
+	stateTarget := filepath.Join(staging, "var", "lib", "orcheroute")
+	if err := os.MkdirAll(stateTarget, 0700); err != nil {
+		return "", err
+	}
+	entries, err := os.ReadDir(stateDir)
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if backupExcluded(entry.Name()) {
+			continue
+		}
+		if err := copyEntry(ctx, filepath.Join(stateDir, entry.Name()), stateTarget); err != nil {
+			return "", err
+		}
+	}
+	if err := backupSQLite(ctx, filepath.Join(stateDir, "state.db"), filepath.Join(stateTarget, "state.db")); err != nil {
+		return "", err
+	}
+	output := filepath.Join(root, "before-self-update-"+time.Now().Format("20060102-150405")+".tar.gz")
+	if result, err := exec.CommandContext(ctx, "tar", "-C", staging, "-czf", output, "etc", "var").CombinedOutput(); err != nil {
+		return "", fmt.Errorf("tar:%s", tail(string(result)))
+	}
+	if result, err := exec.CommandContext(ctx, "tar", "-tzf", output).CombinedOutput(); err != nil {
+		_ = os.Remove(output)
+		return "", fmt.Errorf("archive_invalid:%s", tail(string(result)))
+	}
+	return output, nil
+}
+
+func backupExcluded(name string) bool {
+	switch name {
+	case "backups", "self-update", "packages", "app-update.json", "state.db", "state.db-wal", "state.db-shm":
+		return true
+	default:
+		return false
+	}
+}
+
+func copyEntry(ctx context.Context, source, targetDirectory string) error {
+	if err := os.MkdirAll(targetDirectory, 0700); err != nil {
+		return err
+	}
+	var result []byte
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		result, err = exec.CommandContext(ctx, "cp", "-a", "--", source, targetDirectory).CombinedOutput()
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("copy:%s", tail(string(result)))
+}
+
+func backupSQLite(ctx context.Context, source, target string) error {
+	database, err := sql.Open("sqlite", source)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	if _, err := database.ExecContext(ctx, "VACUUM INTO ?", target); err != nil {
+		return fmt.Errorf("sqlite:%w", err)
+	}
 	return nil
 }
 

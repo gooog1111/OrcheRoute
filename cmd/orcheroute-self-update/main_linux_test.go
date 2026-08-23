@@ -2,7 +2,14 @@
 
 package main
 
-import "testing"
+import (
+	"context"
+	"database/sql"
+	"path/filepath"
+	"testing"
+
+	_ "modernc.org/sqlite"
+)
 
 func TestRollbackAssetURL(t *testing.T) {
 	tests := []struct {
@@ -17,5 +24,41 @@ func TestRollbackAssetURL(t *testing.T) {
 		if got := rollbackAssetURL(test.version, test.beta); got != test.want {
 			t.Fatalf("rollbackAssetURL(%q, %t)=%q want %q", test.version, test.beta, got, test.want)
 		}
+	}
+}
+
+func TestBackupExcluded(t *testing.T) {
+	for _, name := range []string{"backups", "self-update", "packages", "app-update.json", "state.db", "state.db-wal", "state.db-shm"} {
+		if !backupExcluded(name) {
+			t.Fatalf("%s must be excluded", name)
+		}
+	}
+	if backupExcluded("routes.json") {
+		t.Fatal("persistent configuration must be copied")
+	}
+}
+
+func TestBackupSQLiteCreatesConsistentCopy(t *testing.T) {
+	directory := t.TempDir()
+	source, target := filepath.Join(directory, "source.db"), filepath.Join(directory, "target.db")
+	database, err := sql.Open("sqlite", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if _, err := database.Exec("CREATE TABLE values_table(value TEXT); INSERT INTO values_table VALUES ('saved')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := backupSQLite(context.Background(), source, target); err != nil {
+		t.Fatal(err)
+	}
+	copyDatabase, err := sql.Open("sqlite", target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer copyDatabase.Close()
+	var value string
+	if err := copyDatabase.QueryRow("SELECT value FROM values_table").Scan(&value); err != nil || value != "saved" {
+		t.Fatalf("value=%q err=%v", value, err)
 	}
 }
