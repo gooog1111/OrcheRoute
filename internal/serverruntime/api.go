@@ -376,7 +376,11 @@ func (runtime *Runtime) getStatus(ctx context.Context) (int, any) {
 	} else if physical.State == "offline" {
 		physicalAvailable = false
 	}
-	return 200, map[string]any{"version": 1, "timestamp": time.Now().Unix(), "updated_at": snapshot.UpdatedAt, "stale": time.Now().Unix()-snapshot.UpdatedAt > 35, "connectivity": connectivity, "runtime": "go", "service": map[string]any{"enabled": control.Enabled}, "wan": map[string]any{"interface": profile.Roles["direct"].Interface, "available": physicalAvailable, "mode": physical.State, "updated_at": physical.UpdatedAt, "error": physical.Error, "identity": identities.Direct}, "network": map[string]any{"capture_mode": profile.Capture.Mode, "direct_interface": profile.Roles["direct"].Interface, "vpn_underlay_interface": profile.Roles["vpn_underlay"].Interface}, "proxy": map[string]any{"mode": control.Mode, "active_node": activeValue, "active_pool": poolValue, "failure_streak": intValue(state["failure_streak"]), "last_switch": intValue(state["last_switch"]), "manual_until": control.ManualUntil, "identity": identities.Proxy}}
+	lastSwitch := int64Value(state["last_switch"])
+	if physical.ConfirmedAt > lastSwitch {
+		lastSwitch = physical.ConfirmedAt
+	}
+	return 200, map[string]any{"version": 1, "timestamp": time.Now().Unix(), "updated_at": snapshot.UpdatedAt, "stale": time.Now().Unix()-snapshot.UpdatedAt > 35, "connectivity": connectivity, "runtime": "go", "service": map[string]any{"enabled": control.Enabled}, "wan": map[string]any{"interface": profile.Roles["direct"].Interface, "available": physicalAvailable, "mode": physical.State, "updated_at": physical.UpdatedAt, "error": physical.Error, "identity": identities.Direct}, "network": map[string]any{"capture_mode": profile.Capture.Mode, "direct_interface": profile.Roles["direct"].Interface, "vpn_underlay_interface": profile.Roles["vpn_underlay"].Interface}, "proxy": map[string]any{"mode": control.Mode, "active_node": activeValue, "active_pool": poolValue, "failure_streak": intValue(state["failure_streak"]), "last_switch": lastSwitch, "manual_until": control.ManualUntil, "identity": identities.Proxy}}
 }
 
 func (runtime *Runtime) getPools(ctx context.Context) (int, any) {

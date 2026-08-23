@@ -77,7 +77,7 @@ func TestServerConnectivityMonitorUsesDirectInterfaceAndHysteresis(t *testing.T)
 func TestStatusUsesPhysicalConnectivitySnapshot(t *testing.T) {
 	runtime := cleanTestRuntime(t)
 	if err := atomicJSON(runtime.connectivityPath(), ConnectivitySnapshot{
-		State: mobileconnectivity.Allowlist, UpdatedAt: 123, DirectInterface: "wan0",
+		State: mobileconnectivity.Allowlist, UpdatedAt: 123, ConfirmedAt: 120, DirectInterface: "wan0",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +97,10 @@ func TestStatusUsesPhysicalConnectivitySnapshot(t *testing.T) {
 	identity := wan["identity"].(*mobileconnectivity.Identity)
 	if identity.IP != "198.51.100.10" || identity.CountryCode != "US" {
 		t.Fatalf("identity=%#v", identity)
+	}
+	proxy := payload.(map[string]any)["proxy"].(map[string]any)
+	if proxy["last_switch"] != int64(120) {
+		t.Fatalf("proxy=%#v", proxy)
 	}
 }
 
