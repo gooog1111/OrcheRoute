@@ -20,6 +20,7 @@ func main() {
 	flag.StringVar(&config.Mihomo, "mihomo", "/opt/orcheroute/bin/mihomo", "Mihomo binary")
 	flag.StringVar(&config.CoreService, "core-service", "orcheroute-core.service", "Mihomo service")
 	flag.StringVar(&config.ControllerService, "controller-service", "orcheroute-go.service", "controller service")
+	flag.BoolVar(&config.Scheduled, "scheduled", false, "honour configured automatic GEO interval")
 	flag.Parse()
 	if err := components.Run(context.Background(), config); err != nil {
 		fmt.Fprintln(os.Stderr, err)

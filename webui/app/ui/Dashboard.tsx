@@ -252,6 +252,7 @@ export function Dashboard() {
           </div>
           <h1>{enabled ? "OrcheRoute включён" : "OrcheRoute выключен"}</h1>
           {enabled && <p className="connection-identity"><span>Direct</span>{identityText(data?.status.wan.identity)}</p>}
+          {enabled && <p className="connection-identity"><span>Proxy</span>{identityText(data?.status.proxy.identity)}</p>}
         </div>
 
         <div className="power-stage">
@@ -270,7 +271,6 @@ export function Dashboard() {
           </div>
           <div className="power-details">
             <small>{captureText[data?.status.network.capture_mode ?? ""] ?? "Режим не определён"}</small>
-            {enabled && <small className="connection-identity"><span>Proxy</span>{identityText(data?.status.proxy.identity)}</small>}
           </div>
         </div>
 

@@ -7,5 +7,5 @@ Wants=network-online.target
 Type=oneshot
 User=root
 WorkingDirectory=/var/lib/orcheroute
-ExecStart=/opt/orcheroute/bin/orcheroute-components-go --component geo
+ExecStart=/opt/orcheroute/bin/orcheroute-components-go --component geo --scheduled
 TimeoutStartSec=10min

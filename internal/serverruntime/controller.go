@@ -61,8 +61,9 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 				runtime.recordControllerError(startErr)
 				return
 			}
-			_ = runtime.Store.SetSnapshot(context.Background(), map[string]any{"status": "starting", "mode": controlValue.Mode,
-				"active": "", "active_pool": "", "last_cycle": time.Now().Unix(), "wan_available": true})
+			now := time.Now().Unix()
+			_ = runtime.setSnapshotTrackingSwitch(map[string]any{"status": "starting", "mode": controlValue.Mode,
+				"active": "", "active_pool": "", "last_cycle": now, "wan_available": true}, now)
 			return
 		}
 		// The direct connection and disabled state do not depend on Mihomo.
@@ -115,7 +116,7 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 	stateMap := map[string]any{}
 	payload, _ := json.Marshal(state)
 	_ = json.Unmarshal(payload, &stateMap)
-	_ = runtime.Store.SetSnapshot(context.Background(), stateMap)
+	_ = runtime.setSnapshotTrackingSwitch(stateMap, observation.Now)
 	runtime.mu.Lock()
 	changed := runtime.lastDecision != decision
 	runtime.lastDecision, runtime.lastObservation = decision, observation
@@ -221,11 +222,26 @@ func (runtime *Runtime) restrictedNetworkCycle(ctx context.Context, mode mobilec
 func (runtime *Runtime) setRestrictedSnapshot(status, active, pool string, now int64) {
 	state := map[string]any{"status": status, "mode": "auto", "active": active, "active_pool": pool,
 		"failure_streak": 0, "last_cycle": now, "wan_available": status != "internet_down"}
-	_ = runtime.Store.SetSnapshot(context.Background(), state)
+	_ = runtime.setSnapshotTrackingSwitch(state, now)
 	runtime.mu.Lock()
 	runtime.lastDecision = controller.Decision{Action: "keep", Pool: pool, Reason: status}
 	runtime.lastObservation = controller.Observation{Now: now, WAN: status != "internet_down", Active: active, ActivePool: pool}
 	runtime.mu.Unlock()
+}
+
+func (runtime *Runtime) setSnapshotTrackingSwitch(state map[string]any, now int64) error {
+	previous, err := runtime.Store.Snapshot(context.Background())
+	if err != nil {
+		return err
+	}
+	lastSwitch := int64Value(previous.State["last_switch"])
+	previousActive, previousPool := stringValue(previous.State["active"]), stringValue(previous.State["active_pool"])
+	nextActive, nextPool := stringValue(state["active"]), stringValue(state["active_pool"])
+	if nextActive != "" && (nextActive != previousActive || nextPool != previousPool) {
+		lastSwitch = now
+	}
+	state["last_switch"] = lastSwitch
+	return runtime.Store.SetSnapshot(context.Background(), state)
 }
 
 func (runtime *Runtime) executeDecision(ctx context.Context, decision controller.Decision) error {

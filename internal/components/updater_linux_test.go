@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestBinaryVersionPrefersMihomoVersionOverGoToolchain(t *testing.T) {
@@ -62,5 +63,30 @@ func TestCoreUpdateNeverRestartsOwningController(t *testing.T) {
 func TestIsNewerVersion(t *testing.T) {
 	if !IsNewerVersion("1.19.29", "1.19.30") || IsNewerVersion("1.19.30", "1.19.29") || IsNewerVersion("1.19.30", "1.19.30") {
 		t.Fatal("version ordering is incorrect")
+	}
+}
+
+func TestScheduledGeoHonoursConfiguredInterval(t *testing.T) {
+	directory := t.TempDir()
+	settings := `{"geo_auto_update":true,"geo_interval_hours":24}`
+	if err := os.WriteFile(filepath.Join(directory, "component-settings.json"), []byte(settings), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0)
+	for _, name := range []string{"GeoIP.dat", "GeoSite.dat"} {
+		path := filepath.Join(directory, name)
+		if err := os.WriteFile(path, []byte("test"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, now.Add(-time.Hour), now.Add(-time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current := updater{config: Config{StateDirectory: directory, ProductionState: directory}}
+	if due, err := current.scheduledGeoDue(now); err != nil || due {
+		t.Fatalf("due=%v err=%v", due, err)
+	}
+	if due, err := current.scheduledGeoDue(now.Add(24 * time.Hour)); err != nil || !due {
+		t.Fatalf("due=%v err=%v", due, err)
 	}
 }

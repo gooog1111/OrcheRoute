@@ -505,9 +505,30 @@ func intValue(value any) int {
 		return int(current)
 	case int:
 		return current
+	case int64:
+		return int(current)
+	case int32:
+		return int(current)
 	case json.Number:
 		value, _ := strconv.Atoi(current.String())
 		return value
+	}
+	return 0
+}
+
+func int64Value(value any) int64 {
+	switch current := value.(type) {
+	case int64:
+		return current
+	case int:
+		return int64(current)
+	case int32:
+		return int64(current)
+	case float64:
+		return int64(current)
+	case json.Number:
+		result, _ := current.Int64()
+		return result
 	}
 	return 0
 }

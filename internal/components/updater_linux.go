@@ -31,6 +31,7 @@ var (
 
 type Config struct {
 	Component, StateDirectory, ProductionState, ConfigDirectory, Mihomo, CoreService, ControllerService string
+	Scheduled                                                                                           bool
 }
 type Release struct {
 	CheckedAt        int64  `json:"checked_at"`
@@ -80,7 +81,50 @@ func Run(ctx context.Context, config Config) error {
 	}
 	defer unix.Flock(int(lock.Fd()), unix.LOCK_UN)
 	current := updater{config: config, client: &http.Client{Timeout: 5 * time.Minute}, operation: filepath.Join(config.StateDirectory, "component-operation.json")}
+	if config.Scheduled && config.Component == "geo" {
+		due, dueErr := current.scheduledGeoDue(time.Now())
+		if dueErr != nil {
+			return dueErr
+		}
+		if !due {
+			return current.status("success", "complete", map[string]any{"message": "Обновление GEO ещё не требуется", "component": "geo", "skipped": true})
+		}
+	}
 	return current.run(ctx)
+}
+
+func (current updater) scheduledGeoDue(now time.Time) (bool, error) {
+	settings := map[string]any{"geo_auto_update": true, "geo_interval_hours": float64(24)}
+	path := filepath.Join(current.config.StateDirectory, "component-settings.json")
+	if payload, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(payload, &settings); err != nil {
+			return false, err
+		}
+	} else if !os.IsNotExist(err) {
+		return false, err
+	}
+	enabled, _ := settings["geo_auto_update"].(bool)
+	if !enabled {
+		return false, nil
+	}
+	interval := 24
+	if value, ok := settings["geo_interval_hours"].(float64); ok && value >= 1 {
+		interval = int(value)
+	}
+	oldest := now
+	for _, name := range []string{"GeoIP.dat", "GeoSite.dat"} {
+		info, err := os.Stat(filepath.Join(current.config.ProductionState, name))
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if info.ModTime().Before(oldest) {
+			oldest = info.ModTime()
+		}
+	}
+	return !now.Before(oldest.Add(time.Duration(interval) * time.Hour)), nil
 }
 func (current updater) run(ctx context.Context) (err error) {
 	defer func() {
