@@ -8,6 +8,7 @@ fi
 
 install -d -m 0750 /etc/orcheroute
 install -d -m 0700 /var/lib/orcheroute
+install -d -m 0700 /var/backups/orcheroute
 
 preserved_mihomo=/var/lib/orcheroute/packages/mihomo-before-package
 packaged_mihomo=/opt/orcheroute/bin/mihomo

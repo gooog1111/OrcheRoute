@@ -16,7 +16,7 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
 ReadOnlyPaths=/opt/orcheroute/webui
-ReadWritePaths=/etc/orcheroute /var/lib/orcheroute /opt/orcheroute/bin
+ReadWritePaths=/etc/orcheroute /var/lib/orcheroute /opt/orcheroute/bin -/var/backups/orcheroute
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 
 [Install]

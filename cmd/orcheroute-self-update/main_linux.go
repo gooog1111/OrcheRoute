@@ -43,9 +43,42 @@ func main() {
 	if os.Geteuid() != 0 {
 		fatal(*state, "root_required", *beta)
 	}
+	if shouldDetach(*action) {
+		if err := detachIntoSystemd(); err != nil {
+			fatal(*state, "detach_failed:"+err.Error(), *beta)
+		}
+		return
+	}
 	if err := run(*action, *state, *beta); err != nil {
 		fatal(*state, err.Error(), *beta)
 	}
+}
+
+func shouldDetach(action string) bool {
+	return (action == "install" || action == "backup") && os.Getenv("ORCHEROUTE_SELF_UPDATE_TRANSIENT") != "1"
+}
+
+func detachIntoSystemd() error {
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	unit := fmt.Sprintf("orcheroute-self-update-%d", time.Now().UnixNano())
+	arguments := []string{
+		"--quiet",
+		"--collect",
+		"--unit=" + unit,
+		"--property=Type=exec",
+		"--property=TimeoutStartSec=25min",
+		"--property=UMask=0077",
+		"--property=Environment=ORCHEROUTE_SELF_UPDATE_TRANSIENT=1",
+		executable,
+	}
+	arguments = append(arguments, os.Args[1:]...)
+	if output, err := exec.Command("systemd-run", arguments...).CombinedOutput(); err != nil {
+		return fmt.Errorf("systemd-run:%s", tail(string(output)))
+	}
+	return nil
 }
 func run(action, dir string, beta bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)

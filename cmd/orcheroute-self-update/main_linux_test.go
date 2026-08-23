@@ -5,11 +5,31 @@ package main
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 
 	_ "modernc.org/sqlite"
 )
+
+func TestInstallAndBackupDetachFromControlPlaneService(t *testing.T) {
+	original, present := os.LookupEnv("ORCHEROUTE_SELF_UPDATE_TRANSIENT")
+	t.Cleanup(func() {
+		if present {
+			_ = os.Setenv("ORCHEROUTE_SELF_UPDATE_TRANSIENT", original)
+		} else {
+			_ = os.Unsetenv("ORCHEROUTE_SELF_UPDATE_TRANSIENT")
+		}
+	})
+	_ = os.Unsetenv("ORCHEROUTE_SELF_UPDATE_TRANSIENT")
+	if !shouldDetach("install") || !shouldDetach("backup") || shouldDetach("check") {
+		t.Fatal("only mutating self-update actions must detach")
+	}
+	_ = os.Setenv("ORCHEROUTE_SELF_UPDATE_TRANSIENT", "1")
+	if shouldDetach("install") || shouldDetach("backup") {
+		t.Fatal("transient service must not detach recursively")
+	}
+}
 
 func TestRollbackAssetURL(t *testing.T) {
 	tests := []struct {
