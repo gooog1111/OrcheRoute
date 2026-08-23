@@ -355,12 +355,20 @@ func (current updater) updateCore(ctx context.Context, release Release) (bool, e
 	if err := copyAtomic(candidate, current.config.Mihomo, 0o755); err != nil {
 		return false, err
 	}
-	if err := restart(ctx, current.config.CoreService, current.config.ControllerService); err != nil {
+	// The updater is started by orcheroute-go and belongs to that service's
+	// cgroup. Restarting the controller here kills this process before it can
+	// report success. The controller reconnects to Mihomo on every cycle, so
+	// only the independent core service needs a restart.
+	if err := restart(ctx, coreRestartServices(current.config)...); err != nil {
 		_ = copyAtomic(backup, current.config.Mihomo, 0o755)
-		_ = restart(context.Background(), current.config.CoreService, current.config.ControllerService)
+		_ = restart(context.Background(), coreRestartServices(current.config)...)
 		return false, fmt.Errorf("mihomo_update_rolled_back: %w", err)
 	}
 	return true, nil
+}
+
+func coreRestartServices(config Config) []string {
+	return []string{config.CoreService}
 }
 func (current updater) download(ctx context.Context, address, path string, maximum int64, progress func(current, total int64)) error {
 	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)

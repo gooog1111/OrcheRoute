@@ -51,3 +51,10 @@ func TestFormatDownloadProgress(t *testing.T) {
 		t.Fatalf("unexpected progress text: %q", got)
 	}
 }
+
+func TestCoreUpdateNeverRestartsOwningController(t *testing.T) {
+	services := coreRestartServices(Config{CoreService: "orcheroute-core.service", ControllerService: "orcheroute-go.service"})
+	if len(services) != 1 || services[0] != "orcheroute-core.service" {
+		t.Fatalf("restart services = %#v", services)
+	}
+}
