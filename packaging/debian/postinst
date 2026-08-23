@@ -8,6 +8,18 @@ fi
 
 install -d -m 0750 /etc/orcheroute
 install -d -m 0700 /var/lib/orcheroute
+
+preserved_mihomo=/var/lib/orcheroute/packages/mihomo-before-package
+packaged_mihomo=/opt/orcheroute/bin/mihomo
+if [ -x "$preserved_mihomo" ] && [ -x "$packaged_mihomo" ]; then
+    preserved_version=$($preserved_mihomo -v 2>/dev/null | sed -n 's/.*[vV]\([0-9][0-9.]*\).*/\1/p' | head -n 1)
+    packaged_version=$($packaged_mihomo -v 2>/dev/null | sed -n 's/.*[vV]\([0-9][0-9.]*\).*/\1/p' | head -n 1)
+    if [ -n "$preserved_version" ] && [ -n "$packaged_version" ] && dpkg --compare-versions "$preserved_version" gt "$packaged_version"; then
+        install -m 0755 "$preserved_mihomo" "$packaged_mihomo"
+    fi
+fi
+rm -f "$preserved_mihomo"
+
 credentials=$(/opt/orcheroute/bin/orcheroute-bootstrap --output /etc/orcheroute/runtime.env)
 chmod 0640 /etc/orcheroute/runtime.env
 if [ -n "$credentials" ]; then

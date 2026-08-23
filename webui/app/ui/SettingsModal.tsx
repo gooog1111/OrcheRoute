@@ -3170,7 +3170,22 @@ function ComponentsForm({
           label="Mihomo"
           value={components?.mihomo.installed_version || "Недоступно"}
         />
-        {!embedded && <Detail label="Последняя версия" value={versionState} />}
+        {!embedded && (
+          <div className="detail component-version-detail">
+            <span>Последняя версия</span>
+            <strong>{versionState}</strong>
+            {components?.mihomo.update_available && (
+              <button
+                className="primary-button"
+                type="button"
+                disabled={busy}
+                onClick={() => update("core", "Безопасно обновляем Mihomo")}
+              >
+                Обновить Mihomo
+              </button>
+            )}
+          </div>
+        )}
         <Detail
           label="GeoIP"
           value={
@@ -3418,18 +3433,6 @@ function ComponentsForm({
           </button>
         </ActionBar>
       </div>
-      {!embedded && (
-        <ActionBar>
-          <button
-            className="primary-button"
-            type="button"
-            disabled={busy || !components?.mihomo.update_available}
-            onClick={() => update("core", "Безопасно обновляем Mihomo")}
-          >
-            Обновить Mihomo
-          </button>
-        </ActionBar>
-      )}
     </div>
   );
 }

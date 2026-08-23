@@ -210,6 +210,7 @@ button.node-row { cursor: pointer; }
 .detail { min-height: 72px; padding: 14px; display: grid; align-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); }
 .detail span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .09em; }
 .detail strong { font-size: 13px; font-weight: 560; }
+.component-version-detail .primary-button { width: fit-content; margin-top: 4px; }
 .config-line { min-height: 45px; padding: 8px 12px; display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 10px; border: 1px solid var(--line); border-bottom: 0; background: var(--surface-soft); }
 .config-line:nth-child(2) { border-radius: 11px 11px 0 0; }
 .config-line:last-child { border-bottom: 1px solid var(--line); border-radius: 0 0 11px 11px; }

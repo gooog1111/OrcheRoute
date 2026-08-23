@@ -58,3 +58,9 @@ func TestCoreUpdateNeverRestartsOwningController(t *testing.T) {
 		t.Fatalf("restart services = %#v", services)
 	}
 }
+
+func TestIsNewerVersion(t *testing.T) {
+	if !IsNewerVersion("1.19.29", "1.19.30") || IsNewerVersion("1.19.30", "1.19.29") || IsNewerVersion("1.19.30", "1.19.30") {
+		t.Fatal("version ordering is incorrect")
+	}
+}

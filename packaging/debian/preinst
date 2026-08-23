@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+# Preserve a runtime-updated Mihomo before dpkg unpacks the bundled baseline.
+# postinst restores this copy only when it is newer than the package binary.
+if [ -x /opt/orcheroute/bin/mihomo ]; then
+    install -d -m 0700 /var/lib/orcheroute/packages
+    install -m 0755 /opt/orcheroute/bin/mihomo /var/lib/orcheroute/packages/mihomo-before-package
+fi
+
+exit 0

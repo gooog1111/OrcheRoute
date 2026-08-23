@@ -148,7 +148,7 @@ func (current updater) latest(ctx context.Context) (Release, error) {
 		return Release{}, fmt.Errorf("mihomo_release_digest_missing")
 	}
 	installed, _ := binaryVersion(current.config.Mihomo)
-	result := Release{CheckedAt: time.Now().Unix(), InstalledVersion: installed, LatestVersion: latest, UpdateAvailable: installed != latest, ReleaseURL: payload.HTMLURL, AssetName: asset.Name, AssetURL: asset.BrowserDownloadURL, AssetSize: asset.Size, AssetDigest: asset.Digest}
+	result := Release{CheckedAt: time.Now().Unix(), InstalledVersion: installed, LatestVersion: latest, UpdateAvailable: IsNewerVersion(installed, latest), ReleaseURL: payload.HTMLURL, AssetName: asset.Name, AssetURL: asset.BrowserDownloadURL, AssetSize: asset.Size, AssetDigest: asset.Digest}
 	if err := writeJSON(filepath.Join(current.config.StateDirectory, "component-latest.json"), result); err != nil {
 		return Release{}, err
 	}
@@ -486,6 +486,7 @@ func binaryVersion(path string) (string, error) {
 func normalizeVersion(value string) string {
 	return strings.TrimPrefix(strings.TrimSpace(value), "v")
 }
+
 func restart(ctx context.Context, services ...string) error {
 	for _, service := range services {
 		if service == "" {

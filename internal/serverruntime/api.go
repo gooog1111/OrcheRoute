@@ -1148,7 +1148,8 @@ func (runtime *Runtime) getComponents(ctx context.Context) (int, any) {
 	if geoSource == "" {
 		geoSource = "metacubex"
 	}
-	return 200, map[string]any{"mihomo": map[string]any{"installed": installed != "", "version": version, "installed_version": installed, "error": versionError, "binary": runtime.Config.MihomoBinary, "latest_version": latest["latest_version"], "update_available": latest["latest_version"] != nil && stringValue(latest["latest_version"]) != installed, "checked_at": intValue(latest["checked_at"]), "release_url": latest["release_url"]}, "geoip": geoip, "geosite": geosite, "auto_update": settings["geo_auto_update"], "interval_hours": interval, "next_geo_update": next, "geo_source": geoSource, "geoip_url": settings["geoip_url"], "geosite_url": settings["geosite_url"], "geo_sources": components.GeoSources, "installed_geo_source": installedSource, "catalog": catalog, "operation": operations["component_update"]}
+	latestVersion := stringValue(latest["latest_version"])
+	return 200, map[string]any{"mihomo": map[string]any{"installed": installed != "", "version": version, "installed_version": installed, "error": versionError, "binary": runtime.Config.MihomoBinary, "latest_version": latest["latest_version"], "update_available": components.IsNewerVersion(installed, latestVersion), "checked_at": intValue(latest["checked_at"]), "release_url": latest["release_url"]}, "geoip": geoip, "geosite": geosite, "auto_update": settings["geo_auto_update"], "interval_hours": interval, "next_geo_update": next, "geo_source": geoSource, "geoip_url": settings["geoip_url"], "geosite_url": settings["geosite_url"], "geo_sources": components.GeoSources, "installed_geo_source": installedSource, "catalog": catalog, "operation": operations["component_update"]}
 }
 func (runtime *Runtime) saveComponentSettings(body map[string]any) (int, any) {
 	enabled, ok := body["geo_auto_update"].(bool)
