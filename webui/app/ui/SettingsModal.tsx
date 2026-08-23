@@ -2920,7 +2920,7 @@ function SubscriptionsForm({
         {custom.map((subscription) => (
           <article className="subscription-row" key={subscription.id}>
             <span
-              className={`node-status ${subscription.enabled && subscription.last_status !== "error" ? "alive" : ""}`}
+              className={`node-status ${subscription.enabled && subscription.last_status === "ok" ? "alive" : ""}`}
             />
             <div className="subscription-main">
               <strong>{subscription.name}</strong>
@@ -2936,7 +2936,7 @@ function SubscriptionsForm({
                 · {subscription.last_links} ссылок · каждые{" "}
                 {Math.round(subscription.interval_seconds / 60)} мин
               </small>
-              {Boolean(subscription.last_attempt) && (
+              {(subscription.last_tested ?? 0) > 0 && (
                 <small className="subscription-check-result">
                   Последняя проверка: {subscription.last_tested ?? subscription.last_links} · доступно {subscription.last_available ?? "—"}
                 </small>

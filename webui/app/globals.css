@@ -73,6 +73,9 @@ html.prerelease-theme .brand-beta { display: inline-flex; }
 .hero-copy p { margin: 0; max-width: 470px; color: var(--muted); font-size: 15px; line-height: 1.65; }
 .connection-identity { display: flex; align-items: center; gap: 7px; color: var(--muted); font-family: "Cascadia Code", Consolas, monospace; font-variant-numeric: tabular-nums; }
 .connection-identity span { color: var(--faint); font-family: Inter, "Segoe UI", Arial, sans-serif; font-size: .72em; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; }
+.connected-server { display: flex; align-items: baseline; gap: 7px; overflow: hidden; color: var(--text) !important; text-overflow: ellipsis; white-space: nowrap; }
+.connected-server span { flex: 0 0 auto; color: var(--faint); font-size: .72em; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; }
+.connected-server strong { overflow: hidden; font-size: inherit; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
 .power-stage { justify-self: center; display: grid; justify-items: center; gap: 18px; }
 .power-halo { width: 246px; height: 246px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; position: relative; transition: border-color .3s; }
 .power-halo::before, .power-halo::after { content: ""; position: absolute; border-radius: 50%; border: 1px solid var(--line); transition: border-color .3s, transform .3s; }

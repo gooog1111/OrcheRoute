@@ -222,6 +222,7 @@ func run(ctx context.Context, options options) error {
 	dependencies := updater.Dependencies{Repository: database, Cache: cache, Fetcher: fetcher, Qualifier: qualifier,
 		Providers: updater.FileProviderStore{ProvidersDirectory: filepath.Join(options.OutputStateDirectory, "providers"), ReportsDirectory: filepath.Join(options.OutputStateDirectory, "qualification")}, Progress: reportProgress}
 	dependencies.UpdateStatus = database.UpdateSubscriptionStatus
+	dependencies.UpdateQualificationStatus = database.UpdateSubscriptionQualification
 	dependencies.RecordEvent = func(ctx context.Context, eventType, severity, pool, reason string, details map[string]any) error {
 		return database.AddEvent(ctx, serverstate.EventInput{EventType: eventType, Severity: severity, Pool: stringPointer(pool), Reason: stringPointer(reason), Details: details})
 	}
@@ -242,7 +243,7 @@ func run(ctx context.Context, options options) error {
 		return nil
 	}
 	result, err := updater.Run(ctx, dependencies, updater.Request{Groups: selected, RequestedGroups: requestedGroups, SubscriptionIDs: requestedIDs,
-		Force: options.Force || request.Force, FetchOnly: options.FetchOnly, SkipFetch: options.CachedOnly, Policies: policies})
+		Force: options.Force || request.Force, FetchOnly: options.FetchOnly, SkipFetch: options.CachedOnly, CheckOnly: options.CachedOnly && len(requestedIDs) > 0, Policies: policies})
 	status, message := "success", "Обновление завершено"
 	if err != nil {
 		status, message = "error", "Обновление прервано"

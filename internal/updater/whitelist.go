@@ -52,12 +52,16 @@ func RunWhitelist(ctx context.Context, dependencies Dependencies, request Whitel
 		report(dependencies.Progress, Progress{Phase: "whitelist", Message: "Проверяем подписку «" + item.Name + "»", Current: index + 1, Total: len(eligible), Pool: whitelist.Pool})
 		links, readErr := dependencies.Cache.Read(ctx, item.ID)
 		if readErr != nil || len(links) == 0 {
-			result.Failures[item.ID] = "cache_unavailable"
+			reason := "cache_unavailable"
+			result.Failures[item.ID] = reason
+			updateOneQualificationStatus(ctx, dependencies, item.ID, "error", 0, 0, &reason)
 			continue
 		}
 		aggregated := subscriptions.Aggregate([]subscriptions.SourceLinks{{ID: item.ID, Name: item.Name, Links: links}})
 		if len(aggregated.Proxies) == 0 {
-			result.Failures[item.ID] = "no_supported_nodes"
+			reason := "no_supported_nodes"
+			result.Failures[item.ID] = reason
+			updateOneQualificationStatus(ctx, dependencies, item.ID, "error", 0, 0, &reason)
 			continue
 		}
 		sources := make(map[string]qualification.Source, len(aggregated.SourceByNode))
@@ -69,9 +73,19 @@ func RunWhitelist(ctx context.Context, dependencies Dependencies, request Whitel
 			if ctx.Err() != nil {
 				return result, ctx.Err()
 			}
-			result.Failures[item.ID] = errorName(qualifyErr)
+			reason := errorName(qualifyErr)
+			result.Failures[item.ID] = reason
+			updateOneQualificationStatus(ctx, dependencies, item.ID, "error", len(aggregated.Proxies), 0, &reason)
 			continue
 		}
+		tested, available := qualificationCounts(qualified.Report, len(aggregated.Proxies), len(qualified.Proxies))
+		status := "ok"
+		var statusError *string
+		if available == 0 {
+			reason := "no_available_servers"
+			status, statusError = "unavailable", &reason
+		}
+		updateOneQualificationStatus(ctx, dependencies, item.ID, status, tested, available, statusError)
 		nodes := make([]whitelist.Node, 0, len(qualified.Proxies))
 		for _, proxy := range qualified.Proxies {
 			name, _ := proxy["name"].(string)

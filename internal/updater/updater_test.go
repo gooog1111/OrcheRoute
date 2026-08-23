@@ -2,6 +2,7 @@ package updater
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -46,6 +47,66 @@ type fakeQualifier struct{}
 
 func (fakeQualifier) Qualify(_ context.Context, pool string, proxies []map[string]any, _ map[string]any, _ map[string]qualification.Source) (qualification.Result, error) {
 	return qualification.Result{Proxies: proxies, Report: qualification.Report{Pool: pool, Input: len(proxies), Retained: len(proxies)}}, nil
+}
+
+type recordingQualifier struct {
+	calls int
+	input int
+}
+
+func (qualifier *recordingQualifier) Qualify(_ context.Context, pool string, proxies []map[string]any, _ map[string]any, sources map[string]qualification.Source) (qualification.Result, error) {
+	qualifier.calls++
+	qualifier.input += len(proxies)
+	reports := map[string]*qualification.SourceReport{}
+	for _, source := range sources {
+		reports[source.ID] = &qualification.SourceReport{Input: len(proxies), Qualified: len(proxies), Retained: len(proxies)}
+	}
+	return qualification.Result{Proxies: proxies, Report: qualification.Report{Pool: pool, Input: len(proxies), Qualified: len(proxies), Retained: len(proxies), Sources: reports}}, nil
+}
+
+func TestCheckOnlyQualifiesRequestedSubscriptionWithoutReplacingPool(t *testing.T) {
+	ctx := context.Background()
+	directory := t.TempDir()
+	cache := subscriptions.FileCache{Directory: filepath.Join(directory, "cache")}
+	one := "trojan://one@one.example:443#One"
+	two := "trojan://two@two.example:443#Two"
+	if err := cache.Write(ctx, "one", subscriptions.NewCache([]string{one}, time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Write(ctx, "two", subscriptions.NewCache([]string{two}, time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	repository := &fakeRepository{items: []subscriptions.Subscription{
+		{ID: "one", Name: "One", GroupName: subscriptions.Primary, Enabled: true},
+		{ID: "two", Name: "Two", GroupName: subscriptions.Primary, Enabled: true},
+	}}
+	providers := FileProviderStore{ProvidersDirectory: filepath.Join(directory, "providers")}
+	if err := atomicJSON(filepath.Join(directory, "providers", "primary.json"), map[string]any{"proxies": []any{map[string]any{"name": "existing"}}}); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(filepath.Join(directory, "providers", "primary.json"))
+	qualifier := &recordingQualifier{}
+	statusID, tested, available := "", 0, 0
+	result, err := Run(ctx, Dependencies{
+		Repository: repository, Cache: cache, Fetcher: &fakeFetcher{}, Qualifier: qualifier, Providers: providers,
+		UpdateQualificationStatus: func(_ context.Context, id, _ string, currentTested, currentAvailable int, _ *string) error {
+			statusID, tested, available = id, currentTested, currentAvailable
+			return nil
+		},
+	}, Request{Groups: []subscriptions.Group{subscriptions.Primary}, SubscriptionIDs: map[string]bool{"one": true}, SkipFetch: true, CheckOnly: true, Policies: map[subscriptions.Group]map[string]any{subscriptions.Primary: {}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if qualifier.calls != 1 || qualifier.input != 1 || statusID != "one" || tested != 1 || available != 1 {
+		t.Fatalf("calls=%d input=%d status=%q tested=%d available=%d", qualifier.calls, qualifier.input, statusID, tested, available)
+	}
+	if result.Pools[subscriptions.Primary].Accepted != 1 {
+		t.Fatalf("result=%#v", result)
+	}
+	after, _ := os.ReadFile(filepath.Join(directory, "providers", "primary.json"))
+	if string(before) != string(after) {
+		t.Fatal("single-subscription check replaced the active pool")
+	}
 }
 
 func TestRunUsesFreshCacheAndRebuildsRequestedPool(t *testing.T) {

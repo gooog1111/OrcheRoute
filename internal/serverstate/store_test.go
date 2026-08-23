@@ -62,11 +62,18 @@ func TestStoreRoundTrip(t *testing.T) {
 	if err := store.UpdateSubscriptionStatus(ctx, created.ID, "ok", &links, nil, true); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.UpdateSubscriptionQualification(ctx, created.ID, "ok", 5, 3, nil); err != nil {
+		t.Fatal(err)
+	}
+	qualified, err := store.Get(ctx, created.ID, false)
+	if err != nil || qualified.LastTested != 5 || qualified.LastAvailable != 3 {
+		t.Fatalf("qualification status was not persisted: %#v %v", qualified, err)
+	}
 	updated, err := store.Update(ctx, created.ID, map[string]any{"group_name": "emergency"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.GroupName != subscriptions.Emergency || updated.LastSuccess != 0 || updated.LastStatus != "pending" || updated.LastLinks != 0 {
+	if updated.GroupName != subscriptions.Emergency || updated.LastSuccess != 0 || updated.LastStatus != "pending" || updated.LastLinks != 0 || updated.LastTested != 0 || updated.LastAvailable != 0 {
 		t.Fatalf("status was not reset: %#v", updated)
 	}
 	deleted, err := store.Delete(ctx, created.ID)

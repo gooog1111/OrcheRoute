@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     interval_seconds INTEGER NOT NULL DEFAULT 3600, last_attempt INTEGER NOT NULL DEFAULT 0,
     last_success INTEGER NOT NULL DEFAULT 0, last_status TEXT NOT NULL DEFAULT 'pending',
     last_error TEXT, last_links INTEGER NOT NULL DEFAULT 0,
+    last_tested INTEGER NOT NULL DEFAULT 0, last_available INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS subscriptions_group_idx ON subscriptions(group_name, enabled);
@@ -119,6 +120,9 @@ func (store *Store) initialize(ctx context.Context) error {
 	if err := store.migrateSubscriptionParsers(ctx); err != nil {
 		return err
 	}
+	if err := store.migrateSubscriptionQualification(ctx); err != nil {
+		return err
+	}
 	rows, err := store.db.QueryContext(ctx, "PRAGMA table_info(control)")
 	if err != nil {
 		return err
@@ -150,6 +154,36 @@ func (store *Store) initialize(ctx context.Context) error {
 	}
 	_, err = store.db.ExecContext(ctx, "INSERT OR IGNORE INTO control(id, mode, manual_node, manual_until, enabled, updated_at) VALUES (1, 'auto', NULL, 0, 1, 0)")
 	return err
+}
+
+func (store *Store) migrateSubscriptionQualification(ctx context.Context) error {
+	rows, err := store.db.QueryContext(ctx, "PRAGMA table_info(subscriptions)")
+	if err != nil {
+		return err
+	}
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, dataType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		columns[name] = true
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, name := range []string{"last_tested", "last_available"} {
+		if columns[name] {
+			continue
+		}
+		if _, err := store.db.ExecContext(ctx, "ALTER TABLE subscriptions ADD COLUMN "+name+" INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (store *Store) migrateControlModes(ctx context.Context) error {
@@ -407,7 +441,7 @@ func (store *Store) Update(ctx context.Context, id string, changes map[string]an
 	assignments = append(assignments, "updated_at=?")
 	values = append(values, store.now().Unix())
 	if reset {
-		assignments = append(assignments, "last_success=0", "last_status='pending'", "last_error=NULL", "last_links=0")
+		assignments = append(assignments, "last_success=0", "last_status='pending'", "last_error=NULL", "last_links=0", "last_tested=0", "last_available=0")
 	}
 	values = append(values, id)
 	result, err := store.db.ExecContext(ctx, "UPDATE subscriptions SET "+strings.Join(assignments, ",")+" WHERE id=?", values...)
@@ -450,7 +484,15 @@ func (store *Store) UpdateSubscriptionStatus(ctx context.Context, id, status str
 	return err
 }
 
-const subscriptionSelect = `SELECT id,name,group_name,parser,secret,enabled,interval_seconds,last_attempt,last_success,last_status,last_error,last_links,created_at,updated_at FROM subscriptions`
+func (store *Store) UpdateSubscriptionQualification(ctx context.Context, id, status string, tested, available int, statusError *string) error {
+	now := store.now().Unix()
+	_, err := store.db.ExecContext(ctx, `UPDATE subscriptions
+SET last_attempt=?,last_status=?,last_error=?,last_tested=?,last_available=?,updated_at=? WHERE id=?`,
+		now, status, statusError, tested, available, now, id)
+	return err
+}
+
+const subscriptionSelect = `SELECT id,name,group_name,parser,secret,enabled,interval_seconds,last_attempt,last_success,last_status,last_error,last_links,last_tested,last_available,created_at,updated_at FROM subscriptions`
 
 type scanner interface{ Scan(...any) error }
 
@@ -458,7 +500,7 @@ func scanSubscription(row scanner) (subscriptions.Subscription, error) {
 	var item subscriptions.Subscription
 	var enabled int
 	var lastError sql.NullString
-	err := row.Scan(&item.ID, &item.Name, &item.GroupName, &item.Parser, &item.Secret, &enabled, &item.IntervalSeconds, &item.LastAttempt, &item.LastSuccess, &item.LastStatus, &lastError, &item.LastLinks, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.Name, &item.GroupName, &item.Parser, &item.Secret, &enabled, &item.IntervalSeconds, &item.LastAttempt, &item.LastSuccess, &item.LastStatus, &lastError, &item.LastLinks, &item.LastTested, &item.LastAvailable, &item.CreatedAt, &item.UpdatedAt)
 	item.Enabled = enabled != 0
 	item.LastError = nullable(lastError)
 	return item, err

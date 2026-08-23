@@ -41,6 +41,8 @@ type Subscription struct {
 	LastStatus       string  `json:"last_status"`
 	LastError        *string `json:"last_error"`
 	LastLinks        int     `json:"last_links"`
+	LastTested       int     `json:"last_tested"`
+	LastAvailable    int     `json:"last_available"`
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
 }

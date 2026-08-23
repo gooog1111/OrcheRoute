@@ -55,6 +55,8 @@ test("exposes separate subscription refresh and cached server checks", async () 
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(api, /\/v1\/subscriptions\/check/);
   assert.match(settings, /Проверить серверы/);
+  assert.match(settings, /subscription\.last_tested/);
+  assert.match(settings, /subscription\.last_available/);
   assert.doesNotMatch(settings, /Только аварийный список серверов/);
 });
 
@@ -125,7 +127,8 @@ test("android settings expose a signed GitHub release updater without transport 
   assert.doesNotMatch(settings, />\s*Проверить версию\s*</);
   assert.doesNotMatch(settings, /Ядро обновляется с приложением/);
   assert.doesNotMatch(settings, /Mihomo встроен в приложение и обновляется вместе с новой подписанной APK/);
-  assert.match(settings, /!embedded && <Detail label="Последняя версия" value=\{versionState\} \/>/);
+  assert.match(settings, /<span>Последняя версия<\/span>/);
+  assert.match(settings, /<strong>\{versionState\}<\/strong>/);
   assert.match(settings, /Обновление OrcheRoute/);
 	assert.match(updater, /releases\/latest\/download\/android-update\.json/);
   assert.match(updater, /SHA-256 загруженного APK не совпадает/);
@@ -221,6 +224,8 @@ test("android dashboard follows live VPN state and shows direct and proxy identi
   assert.doesNotMatch(dashboard, /Автоматика продолжит/);
   assert.match(dashboard, /<span>Direct<\/span>/);
   assert.match(dashboard, /<span>Proxy<\/span>/);
+  assert.match(dashboard, /className="connected-server"/);
+  assert.match(dashboard, /activeServerName/);
   assert.match(dashboard, /android \? 1000 : 5000/);
   assert.match(api, /loadLiveDashboard/);
   assert.match(service, /network == null \? url\.openConnection\(\) : network\.openConnection\(url\)/);

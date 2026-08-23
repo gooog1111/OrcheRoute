@@ -10,6 +10,7 @@ import (
 )
 
 type StatusUpdater func(ctx context.Context, id, status string, links *int, statusError *string, success bool) error
+type QualificationStatusUpdater func(ctx context.Context, id, status string, tested, available int, statusError *string) error
 type EventRecorder func(ctx context.Context, eventType, severity, pool, reason string, details map[string]any) error
 type ProgressReporter func(Progress)
 
@@ -24,15 +25,16 @@ type ProviderStore interface {
 }
 
 type Dependencies struct {
-	Repository   subscriptions.Repository
-	Cache        subscriptions.CacheRepository
-	Fetcher      subscriptions.Fetcher
-	UpdateStatus StatusUpdater
-	RecordEvent  EventRecorder
-	Qualifier    Qualifier
-	Providers    ProviderStore
-	Progress     ProgressReporter
-	Now          func() time.Time
+	Repository                subscriptions.Repository
+	Cache                     subscriptions.CacheRepository
+	Fetcher                   subscriptions.Fetcher
+	UpdateStatus              StatusUpdater
+	UpdateQualificationStatus QualificationStatusUpdater
+	RecordEvent               EventRecorder
+	Qualifier                 Qualifier
+	Providers                 ProviderStore
+	Progress                  ProgressReporter
+	Now                       func() time.Time
 }
 
 type Request struct {
@@ -42,6 +44,7 @@ type Request struct {
 	Force           bool
 	FetchOnly       bool
 	SkipFetch       bool
+	CheckOnly       bool
 	Policies        map[subscriptions.Group]map[string]any
 }
 
@@ -139,6 +142,9 @@ func Run(ctx context.Context, dependencies Dependencies, request Request) (Resul
 	if request.FetchOnly {
 		return result, nil
 	}
+	if request.CheckOnly && len(request.SubscriptionIDs) > 0 {
+		return checkSubscriptions(ctx, dependencies, request, all)
+	}
 	for index, group := range groups {
 		report(dependencies.Progress, Progress{Phase: "qualifying", Message: "Проверяем серверы пула " + string(group), Current: index + 1, Total: len(groups), Pool: string(group)})
 		if !subscriptions.ShouldRebuildProvider(group, request.Force, request.RequestedGroups, dependencies.Providers.Exists(string(group))) {
@@ -171,6 +177,7 @@ func Run(ctx context.Context, dependencies Dependencies, request Request) (Resul
 		}
 		policy := request.Policies[group]
 		qualified, qualifyErr := dependencies.Qualifier.Qualify(ctx, string(group), aggregated.Proxies, policy, sourceMap)
+		updateSourceQualificationStatus(ctx, dependencies, qualified, qualifyErr)
 		if qualified.Report.Pool != "" {
 			if reportErr := dependencies.Providers.WriteReport(string(group), qualified.Report); reportErr != nil {
 				return result, reportErr
@@ -206,6 +213,132 @@ func Run(ctx context.Context, dependencies Dependencies, request Request) (Resul
 		}
 	}
 	return result, nil
+}
+
+func checkSubscriptions(ctx context.Context, dependencies Dependencies, request Request, all []subscriptions.Subscription) (Result, error) {
+	result := Result{Failures: []string{}, Pools: map[subscriptions.Group]PoolResult{}}
+	selectedGroups := map[subscriptions.Group]bool{}
+	for _, group := range request.Groups {
+		selectedGroups[group] = true
+	}
+	if len(selectedGroups) == 0 {
+		selectedGroups[subscriptions.Primary] = true
+		selectedGroups[subscriptions.Emergency] = true
+	}
+	for _, item := range all {
+		if !item.Enabled || !request.SubscriptionIDs[item.ID] || !selectedGroups[item.GroupName] {
+			continue
+		}
+		pool := result.Pools[item.GroupName]
+		pool.Sources++
+		if pool.Errors == nil {
+			pool.Errors = map[string]int{}
+		}
+		report(dependencies.Progress, Progress{Phase: "qualifying", Message: "Проверяем подписку «" + item.Name + "»", Current: 1, Total: 1, Pool: string(item.GroupName)})
+		links, readErr := dependencies.Cache.Read(ctx, item.ID)
+		if readErr != nil || len(links) == 0 {
+			reason := "cache_unavailable"
+			pool.Errors[reason]++
+			pool.Reason = reason
+			result.Failures = appendUnique(result.Failures, item.ID)
+			updateOneQualificationStatus(ctx, dependencies, item.ID, "error", 0, 0, &reason)
+			result.Pools[item.GroupName] = pool
+			continue
+		}
+		aggregated := subscriptions.Aggregate([]subscriptions.SourceLinks{{ID: item.ID, Name: item.Name, Links: links}})
+		pool.Fetched += aggregated.Fetched
+		pool.Rejected += sumErrors(aggregated.Errors)
+		for reason, count := range aggregated.Errors {
+			pool.Errors[reason] += count
+		}
+		if len(aggregated.Proxies) == 0 {
+			reason := "no_supported_nodes"
+			pool.Errors[reason]++
+			pool.Reason = reason
+			result.Failures = appendUnique(result.Failures, item.ID)
+			updateOneQualificationStatus(ctx, dependencies, item.ID, "error", 0, 0, &reason)
+			result.Pools[item.GroupName] = pool
+			continue
+		}
+		sourceMap := make(map[string]qualification.Source, len(aggregated.SourceByNode))
+		for name, source := range aggregated.SourceByNode {
+			sourceMap[name] = qualification.Source{ID: source.ID, Name: source.Name}
+		}
+		qualified, qualifyErr := dependencies.Qualifier.Qualify(ctx, string(item.GroupName), aggregated.Proxies, request.Policies[item.GroupName], sourceMap)
+		tested, available := qualificationCounts(qualified.Report, len(aggregated.Proxies), len(qualified.Proxies))
+		status := "ok"
+		var statusError *string
+		if qualifyErr != nil {
+			reason := errorName(qualifyErr)
+			status, statusError = "error", &reason
+			pool.Reason = reason
+			pool.Errors[reason]++
+			result.Failures = appendUnique(result.Failures, item.ID)
+		} else if available == 0 {
+			reason := "no_available_servers"
+			status, statusError = "unavailable", &reason
+			pool.Reason = reason
+			pool.Errors[reason]++
+			result.Failures = appendUnique(result.Failures, item.ID)
+		}
+		updateOneQualificationStatus(ctx, dependencies, item.ID, status, tested, available, statusError)
+		pool.Accepted += available
+		if tested > available {
+			pool.Rejected += tested - available
+		}
+		result.Pools[item.GroupName] = pool
+	}
+	return result, nil
+}
+
+func updateSourceQualificationStatus(ctx context.Context, dependencies Dependencies, result qualification.Result, qualifyErr error) {
+	if dependencies.UpdateQualificationStatus == nil {
+		return
+	}
+	for id, source := range result.Report.Sources {
+		tested, available := qualificationCountsFromSource(source)
+		status := "ok"
+		var statusError *string
+		if qualifyErr != nil {
+			reason := errorName(qualifyErr)
+			status, statusError = "error", &reason
+		} else if available == 0 {
+			reason := "no_available_servers"
+			status, statusError = "unavailable", &reason
+		}
+		updateOneQualificationStatus(ctx, dependencies, id, status, tested, available, statusError)
+	}
+}
+
+func updateOneQualificationStatus(ctx context.Context, dependencies Dependencies, id, status string, tested, available int, statusError *string) {
+	if dependencies.UpdateQualificationStatus != nil {
+		_ = dependencies.UpdateQualificationStatus(ctx, id, status, tested, available, statusError)
+	}
+}
+
+func qualificationCounts(report qualification.Report, testedFallback, availableFallback int) (int, int) {
+	tested, available := report.Input, report.Qualified
+	if tested == 0 {
+		tested = testedFallback
+	}
+	if available == 0 && report.Qualified == 0 && report.Retained > 0 {
+		available = report.Retained
+	}
+	if available == 0 && report.Input == 0 {
+		available = availableFallback
+	}
+	return tested, available
+}
+
+func qualificationCountsFromSource(report *qualification.SourceReport) (int, int) {
+	if report == nil {
+		return 0, 0
+	}
+	available := report.Qualified
+	if available == 0 && report.Retained > 0 {
+		available = report.Retained
+	}
+	return report.Input, available
 }
 
 func poolFailure(ctx context.Context, dependencies Dependencies, _ []string, group subscriptions.Group, reason string, details PoolResult) error {

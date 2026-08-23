@@ -427,7 +427,7 @@ func (runtime *Runtime) getSubscriptions(ctx context.Context) (int, any) {
 }
 
 func subscriptionPublic(item subscriptions.Subscription) map[string]any {
-	return map[string]any{"id": item.ID, "name": item.Name, "group": string(item.GroupName), "parser": string(item.Parser), "enabled": item.Enabled, "interval_seconds": item.IntervalSeconds, "last_attempt": item.LastAttempt, "last_success": item.LastSuccess, "last_status": item.LastStatus, "last_error": item.LastError, "last_links": item.LastLinks, "created_at": item.CreatedAt, "updated_at": item.UpdatedAt, "secret_configured": true}
+	return map[string]any{"id": item.ID, "name": item.Name, "group": string(item.GroupName), "parser": string(item.Parser), "enabled": item.Enabled, "interval_seconds": item.IntervalSeconds, "last_attempt": item.LastAttempt, "last_success": item.LastSuccess, "last_status": item.LastStatus, "last_error": item.LastError, "last_links": item.LastLinks, "last_tested": item.LastTested, "last_available": item.LastAvailable, "created_at": item.CreatedAt, "updated_at": item.UpdatedAt, "secret_configured": true}
 }
 func builtinMap() map[string]subscriptions.BuiltinSource {
 	result := map[string]subscriptions.BuiltinSource{}

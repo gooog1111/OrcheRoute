@@ -1,5 +1,5 @@
 Package: orcheroute
-Version: 0.5.11-beta.10
+Version: 0.5.11-beta.11
 Section: net
 Priority: optional
 Architecture: amd64
