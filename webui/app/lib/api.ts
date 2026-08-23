@@ -51,6 +51,7 @@ export type Node = {
   priority: number;
   alive: boolean;
   delay_ms: number | null;
+  country?: string;
   selected: boolean;
   source_id?: string | null;
   source_name?: string | null;
@@ -176,6 +177,8 @@ export type QualificationReport = {
   tcp_alive: number;
   url_alive: number;
   speed_tested: number;
+  geo_enabled?: boolean;
+  geo_passed?: number;
   qualified: number;
   retained: number;
   baseline_mbps?: number;
@@ -188,6 +191,7 @@ export type QualificationReport = {
     tcp_alive: number;
     url_alive: number;
     speed_tested: number;
+    geo_passed?: number;
     qualified: number;
     retained: number;
     outcomes?: Record<string, number>;

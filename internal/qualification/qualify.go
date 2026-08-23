@@ -79,6 +79,7 @@ type SourceReport struct {
 	Input       int            `json:"input"`
 	TCPAlive    int            `json:"tcp_alive"`
 	URLAlive    int            `json:"url_alive"`
+	GeoPassed   int            `json:"geo_passed"`
 	SpeedTested int            `json:"speed_tested"`
 	Qualified   int            `json:"qualified"`
 	Retained    int            `json:"retained"`
@@ -93,6 +94,7 @@ type Report struct {
 	TCPAlive            int                      `json:"tcp_alive"`
 	URLAlive            int                      `json:"url_alive"`
 	GeoEnabled          bool                     `json:"geo_enabled"`
+	GeoPassed           int                      `json:"geo_passed"`
 	ExcludedCountries   []string                 `json:"excluded_countries"`
 	ExcludedByCountry   map[string]int           `json:"excluded_by_country"`
 	SpeedRuns           int                      `json:"speed_runs"`
@@ -119,6 +121,7 @@ type NodeMetrics struct {
 	DelayMS        int     `json:"delay_ms,omitempty"`
 	SpeedMbps      float64 `json:"speed_mbps,omitempty"`
 	StabilityRatio float64 `json:"stability_ratio,omitempty"`
+	Country        string  `json:"country,omitempty"`
 }
 
 type rankedProxy struct {
@@ -285,12 +288,18 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	threshold := int(minimumMbps * 1_000_000 / 8)
 	measurements := make([]Measurement, len(evidence))
 	for index, current := range evidence {
-		measurements[index] = EvaluateSpeed(current, threshold, stabilityRatio, excluded)
+		declared := DeclaredCountry(proxyName(speedProxies[index]))
+		if excluded[declared] {
+			measurements[index] = Measurement{Status: "country_excluded", Country: declared}
+		} else {
+			measurements[index] = EvaluateSpeed(current, threshold, stabilityRatio, excluded)
+		}
 	}
 	outcomes := map[string]int{}
 	excludedCounts := map[string]int{}
 	fast := []rankedProxy{}
 	fastest := float64(0)
+	geoPassed := 0
 	for index, measurement := range measurements {
 		proxy := speedProxies[index]
 		current := metrics[proxyName(proxy)]
@@ -303,6 +312,7 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 				current.StabilityRatio = math.Round(math.Min(first, second)/math.Max(first, second)*10000) / 10000
 			}
 		}
+		current.Country = strings.ToUpper(strings.TrimSpace(evidence[index].Country))
 		metrics[proxyName(proxy)] = current
 		outcomes[measurement.Status]++
 		if measurement.Status == "country_excluded" && measurement.Country != "" {
@@ -310,6 +320,10 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		}
 		source := getSourceReport(proxy)
 		source.SpeedTested++
+		if len(excluded) > 0 && measurement.Status != "country_excluded" && evidence[index].CoreOK && evidence[index].GeoStatus == "" && current.Country != "" {
+			geoPassed++
+			source.GeoPassed++
+		}
 		source.Outcomes[measurement.Status]++
 		if measurement.BytesPerSecond > fastest {
 			fastest = measurement.BytesPerSecond
@@ -334,6 +348,7 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	report := Report{
 		Pool: pool, StartedAt: started, FinishedAt: now().Unix(), Input: len(proxies), TCPAlive: len(tcpAlive), URLAlive: len(urlAlive),
 		GeoEnabled: len(excluded) > 0, ExcludedCountries: excludedList, ExcludedByCountry: excludedCounts,
+		GeoPassed: geoPassed,
 		SpeedRuns: 2, SpeedTested: len(measurements), Qualified: len(fast), Retained: len(qualified),
 		ThresholdMbps: math.Round(minimumMbps*100) / 100, BaselineMbps: math.Round(baselineMbps*100) / 100,
 		BaselineRatio: BaselineRatio, ThresholdSource: thresholdSource, StabilityRatio: stabilityRatio,
@@ -341,6 +356,20 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		Outcomes:            outcomes, Sources: sourceReports,
 	}
 	return Result{Proxies: qualified, Report: report, Metrics: metrics}, nil
+}
+
+// DeclaredCountry returns an ISO 3166-1 alpha-2 country encoded as a flag in
+// the subscription-provided node name. It is only a conservative exclusion
+// hint: measured GeoIP remains authoritative for accepted nodes.
+func DeclaredCountry(name string) string {
+	runes := []rune(name)
+	for index := 0; index+1 < len(runes); index++ {
+		first, second := runes[index], runes[index+1]
+		if first >= 0x1F1E6 && first <= 0x1F1FF && second >= 0x1F1E6 && second <= 0x1F1FF {
+			return string([]rune{'A' + first - 0x1F1E6, 'A' + second - 0x1F1E6})
+		}
+	}
+	return ""
 }
 
 func EvaluateSpeed(evidence SpeedEvidence, threshold int, stabilityRatio float64, excluded map[string]bool) Measurement {

@@ -37,6 +37,7 @@ func (store FileProviderStore) Write(pool string, result qualification.Result, s
 			value["delay_ms"] = metrics.DelayMS
 			value["speed_mbps"] = metrics.SpeedMbps
 			value["stability_ratio"] = metrics.StabilityRatio
+			value["country"] = metrics.Country
 		}
 		nodes[name] = value
 	}

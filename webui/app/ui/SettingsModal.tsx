@@ -1076,6 +1076,7 @@ function PoolNodes({
                     node.source_id ||
                     "Источник прежнего формата"}{" "}
                   · {node.alive ? "доступен" : "недоступен"}
+                  {node.country ? ` · GEO ${node.country}` : ""}
                 </small>
               </span>
               <em>{node.delay_ms ? `${node.delay_ms} мс` : "—"}</em>
@@ -1171,7 +1172,7 @@ function PoolNodes({
         {report && (
           <small>
             Последняя проверка: {report.input} кандидатов → TCP{" "}
-            {report.tcp_alive} → URL {report.url_alive} → speed-test{" "}
+            {report.tcp_alive} → URL {report.url_alive}{report.geo_enabled ? ` → GEO ${report.geo_passed ?? 0}` : ""} → speed-test{" "}
             {report.speed_tested} → принято {report.retained}
             {report.threshold_mbps
               ? ` · WAN ${report.baseline_mbps?.toFixed(1) ?? "—"} Мбит/с · порог ${report.threshold_mbps.toFixed(1)} Мбит/с`
@@ -1183,8 +1184,8 @@ function PoolNodes({
             {Object.entries(report.sources).map(([id, value]) => (
               <small key={id}>
                 <strong>{sourceNames[id] || id}</strong>
-                {value.input} → TCP {value.tcp_alive} → URL {value.url_alive} →
-                speed {value.speed_tested} → принято {value.retained}
+                {value.input} → TCP {value.tcp_alive} → URL {value.url_alive}
+                {report.geo_enabled ? ` → GEO ${value.geo_passed ?? 0}` : ""} → speed {value.speed_tested} → принято {value.retained}
               </small>
             ))}
           </div>

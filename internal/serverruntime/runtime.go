@@ -370,6 +370,7 @@ type PublicNode struct {
 	Delay           *int    `json:"delay_ms"`
 	SpeedMbps       float64 `json:"speed_mbps,omitempty"`
 	StabilityRatio  float64 `json:"stability_ratio,omitempty"`
+	Country         string  `json:"country,omitempty"`
 	HealthSuccesses int     `json:"health_successes,omitempty"`
 	HealthFailures  int     `json:"health_failures,omitempty"`
 	Score           float64 `json:"score,omitempty"`
@@ -445,6 +446,7 @@ func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string
 			}
 			var sourceID, sourceName any
 			speedMbps, stabilityRatio := float64(0), float64(0)
+			country := ""
 			healthSuccesses, healthFailures := 0, 0
 			if item, ok := metadata[full].(map[string]any); ok {
 				sourceID, sourceName = item["id"], item["name"]
@@ -453,6 +455,7 @@ func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string
 				}
 				speedMbps = floatValue(item["speed_mbps"])
 				stabilityRatio = floatValue(item["stability_ratio"])
+				country = strings.ToUpper(strings.TrimSpace(stringValue(item["country"])))
 				healthSuccesses = intValue(item["health_successes"])
 				healthFailures = intValue(item["health_failures"])
 			}
@@ -464,7 +467,7 @@ func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string
 			if delay != nil {
 				ranked.DelayMS = *delay
 			}
-			result = append(result, PublicNode{ID: id, DisplayName: display, Pool: pool, Priority: priority, Alive: alive, Delay: delay, SpeedMbps: speedMbps, StabilityRatio: stabilityRatio, HealthSuccesses: healthSuccesses, HealthFailures: healthFailures, Score: noderank.Score(ranked), Selected: full == selected, SourceID: sourceID, SourceName: sourceName, FullName: full})
+			result = append(result, PublicNode{ID: id, DisplayName: display, Pool: pool, Priority: priority, Alive: alive, Delay: delay, SpeedMbps: speedMbps, StabilityRatio: stabilityRatio, Country: country, HealthSuccesses: healthSuccesses, HealthFailures: healthFailures, Score: noderank.Score(ranked), Selected: full == selected, SourceID: sourceID, SourceName: sourceName, FullName: full})
 			mapping[id] = full
 		}
 	}
