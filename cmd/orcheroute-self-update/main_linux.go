@@ -12,6 +12,7 @@ import (
 	"github.com/gooog1111/orcheroute/internal/selfupdate"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,9 +68,9 @@ func run(action, dir string, beta bool) error {
 	if !available {
 		return fmt.Errorf("already_current")
 	}
-	rollback := filepath.Join(dir, "packages", "current.deb")
-	if debField(rollback, "Package") != "orcheroute" || debField(rollback, "Architecture") != "amd64" || debField(rollback, "Version") != current {
-		return fmt.Errorf("rollback_package_missing")
+	rollback, err := ensureRollback(ctx, dir, current, beta)
+	if err != nil {
+		return err
 	}
 	staging := filepath.Join(dir, "self-update")
 	os.MkdirAll(staging, 0700)
@@ -107,6 +108,45 @@ func run(action, dir string, beta bool) error {
 	}
 	write(dir, status{State: "current", Message: "OrcheRoute обновлён", CurrentVersion: rel.Version, LatestVersion: rel.Version, UpdatedAt: time.Now().Unix(), Beta: beta})
 	return nil
+}
+
+func ensureRollback(ctx context.Context, dir, current string, beta bool) (string, error) {
+	rollback := filepath.Join(dir, "packages", "current.deb")
+	if validRollback(rollback, current) {
+		return rollback, nil
+	}
+	if strings.TrimSpace(current) == "" {
+		return "", fmt.Errorf("rollback_package_missing")
+	}
+	if err := os.MkdirAll(filepath.Dir(rollback), 0700); err != nil {
+		return "", err
+	}
+	temporary := rollback + ".download"
+	_ = os.Remove(temporary)
+	defer os.Remove(temporary)
+	if err := download(ctx, rollbackAssetURL(current, beta), temporary, 0); err != nil {
+		return "", fmt.Errorf("rollback_package_download_failed:%w", err)
+	}
+	if !validRollback(temporary, current) {
+		return "", fmt.Errorf("rollback_package_invalid")
+	}
+	if err := os.Rename(temporary, rollback); err != nil {
+		return "", err
+	}
+	return rollback, nil
+}
+
+func validRollback(path, version string) bool {
+	return debField(path, "Package") == "orcheroute" && debField(path, "Architecture") == "amd64" && debField(path, "Version") == version
+}
+
+func rollbackAssetURL(version string, beta bool) string {
+	tag := "v" + version
+	if beta {
+		tag = "server-beta"
+	}
+	name := "OrcheRoute-Linux-Server-" + version + "-amd64.deb"
+	return "https://github.com/" + selfupdate.Repository + "/releases/download/" + url.PathEscape(tag) + "/" + url.PathEscape(name)
 }
 func rollbackInstall(ctx context.Context, p string, cause error) error {
 	_, _ = exec.CommandContext(ctx, "dpkg", "-i", p).CombinedOutput()
