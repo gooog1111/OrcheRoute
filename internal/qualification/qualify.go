@@ -288,12 +288,7 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	threshold := int(minimumMbps * 1_000_000 / 8)
 	measurements := make([]Measurement, len(evidence))
 	for index, current := range evidence {
-		declared := DeclaredCountry(proxyName(speedProxies[index]))
-		if excluded[declared] {
-			measurements[index] = Measurement{Status: "country_excluded", Country: declared}
-		} else {
-			measurements[index] = EvaluateSpeed(current, threshold, stabilityRatio, excluded)
-		}
+		measurements[index] = EvaluateSpeed(current, threshold, stabilityRatio, excluded)
 	}
 	outcomes := map[string]int{}
 	excludedCounts := map[string]int{}
@@ -356,20 +351,6 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		Outcomes:            outcomes, Sources: sourceReports,
 	}
 	return Result{Proxies: qualified, Report: report, Metrics: metrics}, nil
-}
-
-// DeclaredCountry returns an ISO 3166-1 alpha-2 country encoded as a flag in
-// the subscription-provided node name. It is only a conservative exclusion
-// hint: measured GeoIP remains authoritative for accepted nodes.
-func DeclaredCountry(name string) string {
-	runes := []rune(name)
-	for index := 0; index+1 < len(runes); index++ {
-		first, second := runes[index], runes[index+1]
-		if first >= 0x1F1E6 && first <= 0x1F1FF && second >= 0x1F1E6 && second <= 0x1F1FF {
-			return string([]rune{'A' + first - 0x1F1E6, 'A' + second - 0x1F1E6})
-		}
-	}
-	return ""
 }
 
 func EvaluateSpeed(evidence SpeedEvidence, threshold int, stabilityRatio float64, excluded map[string]bool) Measurement {

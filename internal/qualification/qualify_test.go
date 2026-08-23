@@ -59,31 +59,6 @@ func TestEvaluateSpeed(t *testing.T) {
 	}
 }
 
-func TestDeclaredCountryFromSubscriptionFlag(t *testing.T) {
-	if got := DeclaredCountry("SUB-123 🇷🇺 Trust VPN | Россия"); got != "RU" {
-		t.Fatalf("country=%q want RU", got)
-	}
-	if got := DeclaredCountry("SUB-123 Trust VPN | Россия"); got != "" {
-		t.Fatalf("country=%q want empty", got)
-	}
-}
-
-func TestDeclaredExcludedCountryWinsOverMeasuredGeo(t *testing.T) {
-	proxy := map[string]any{"name": "SUB-123 🇷🇺 Trust VPN | Россия"}
-	backend := &fakeBackend{
-		tcp: []Latency{{Alive: true}}, url: []Latency{{Alive: true}},
-		speed: []SpeedEvidence{{CoreOK: true, Country: "NL", Downloads: goodDownloads(2_000_000, 2_000_000)}},
-	}
-	settings := map[string]any{"min_speed_mbps": float64(10), "stability_ratio": .65, "excluded_countries": []any{"RU"}, "url_limit": float64(0), "speed_candidates": float64(0), "keep": float64(0)}
-	result, err := Qualify(context.Background(), "primary", []map[string]any{proxy}, settings, nil, backend, time.Now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result.Proxies) != 0 || result.Report.ExcludedByCountry["RU"] != 1 || result.Report.Outcomes["country_excluded"] != 1 {
-		t.Fatalf("Russian-labelled node was not excluded: %#v", result.Report)
-	}
-}
-
 func TestQualificationPipelineAndReport(t *testing.T) {
 	proxies := []map[string]any{{"name": "A"}, {"name": "B"}, {"name": "C"}}
 	backend := &fakeBackend{
