@@ -33,15 +33,35 @@ func TestAutomaticModeUsesEmergencyWhenPrimaryUnavailable(t *testing.T) {
 
 func TestFailbackRequiresStableChecks(t *testing.T) {
 	policy := DefaultPolicy()
-	input := Observation{Now: 100, WAN: true, Active: "backup", ActivePool: Emergency, ActiveOK: true, Control: Control{Enabled: true}, Nodes: []Node{{Name: "main", Pool: Primary, Alive: true, Delay: 20}}}
+	input := Observation{Now: 100, WAN: true, Active: "backup", ActivePool: Emergency, ActiveOK: true, Control: Control{Enabled: true}, Nodes: []Node{{Name: "main", Pool: Primary, Alive: true, Delay: 20, LastTestedAt: 99}}}
 	state, first := Step(State{}, input, policy)
-	if first.Action != "keep" || first.Reason != "failback_probe" {
+	if first.Action != "refresh" || first.Pool != Primary {
 		t.Fatalf("%+v", first)
+	}
+	input.Nodes[0].LastTestedAt = state.RecoveryRequestedAt
+	input.Now = state.NextRecoveryCheck
+	state, second := Step(state, input, policy)
+	if second.Action != "keep" || second.Reason != "failback_probe" {
+		t.Fatalf("%+v", second)
+	}
+	input.Now = state.NextRecoveryCheck
+	_, third := Step(state, input, policy)
+	if third.Action != "select" || third.Target != "main" {
+		t.Fatalf("%+v", third)
+	}
+}
+
+func TestFailbackNeverUsesStalePrimaryAfterRefreshRequest(t *testing.T) {
+	policy := DefaultPolicy()
+	input := Observation{Now: 100, WAN: true, Active: "backup", ActivePool: Emergency, ActiveOK: true, Control: Control{Enabled: true}, Nodes: []Node{{Name: "stale", Pool: Primary, Alive: true, LastTestedAt: 10}}}
+	state, first := Step(State{}, input, policy)
+	if first.Action != "refresh" {
+		t.Fatalf("first=%+v", first)
 	}
 	input.Now = state.NextRecoveryCheck
 	_, second := Step(state, input, policy)
-	if second.Action != "select" || second.Target != "main" {
-		t.Fatalf("%+v", second)
+	if second.Action == "select" {
+		t.Fatalf("stale primary selected: %+v", second)
 	}
 }
 

@@ -38,6 +38,9 @@ func QualificationMetadata(result qualification.Result, sources map[string]subsc
 			value["stability_ratio"] = metrics.StabilityRatio
 			value["country"] = metrics.Country
 		}
+		if result.Report.FinishedAt > 0 {
+			value["last_tested_at"] = result.Report.FinishedAt
+		}
 		nodes[name] = value
 	}
 	return nodes

@@ -21,6 +21,7 @@ type Node struct {
 	StabilityRatio  float64 `json:"stability_ratio,omitempty"`
 	HealthSuccesses int     `json:"health_successes,omitempty"`
 	HealthFailures  int     `json:"health_failures,omitempty"`
+	LastTestedAt    int64   `json:"last_tested_at,omitempty"`
 }
 
 type Control struct {
@@ -41,22 +42,23 @@ type Observation struct {
 }
 
 type State struct {
-	Status             string           `json:"status"`
-	Mode               string           `json:"mode"`
-	Active             string           `json:"active"`
-	ActivePool         string           `json:"active_pool,omitempty"`
-	FailureStreak      int              `json:"failure_streak"`
-	LastSwitch         int64            `json:"last_switch"`
-	LastCycle          int64            `json:"last_cycle"`
-	InternetDownSince  int64            `json:"internet_down_since"`
-	WANAvailable       bool             `json:"wan_available"`
-	RecoveryGraceUntil int64            `json:"recovery_grace_until"`
-	RecoveryStreak     int              `json:"recovery_streak"`
-	RecoveryTarget     string           `json:"recovery_target"`
-	NextSwitchAttempt  int64            `json:"next_switch_attempt"`
-	NextRecoveryCheck  int64            `json:"next_recovery_check"`
-	NextPoolRefresh    int64            `json:"next_pool_refresh"`
-	Cooldowns          map[string]int64 `json:"cooldowns"`
+	Status              string           `json:"status"`
+	Mode                string           `json:"mode"`
+	Active              string           `json:"active"`
+	ActivePool          string           `json:"active_pool,omitempty"`
+	FailureStreak       int              `json:"failure_streak"`
+	LastSwitch          int64            `json:"last_switch"`
+	LastCycle           int64            `json:"last_cycle"`
+	InternetDownSince   int64            `json:"internet_down_since"`
+	WANAvailable        bool             `json:"wan_available"`
+	RecoveryGraceUntil  int64            `json:"recovery_grace_until"`
+	RecoveryStreak      int              `json:"recovery_streak"`
+	RecoveryTarget      string           `json:"recovery_target"`
+	RecoveryRequestedAt int64            `json:"recovery_requested_at"`
+	NextSwitchAttempt   int64            `json:"next_switch_attempt"`
+	NextRecoveryCheck   int64            `json:"next_recovery_check"`
+	NextPoolRefresh     int64            `json:"next_pool_refresh"`
+	Cooldowns           map[string]int64 `json:"cooldowns"`
 }
 
 type Decision struct {
@@ -168,18 +170,33 @@ func Step(previous State, observation Observation, policy Policy) (State, Decisi
 		if currentPool == Emergency && now >= state.NextRecoveryCheck {
 			state.NextRecoveryCheck = now + int64(policy.RecoveryInterval.Seconds())
 			better := candidates(observation.Nodes, Primary, state.Cooldowns, "")
-			if len(better) > 0 {
-				target := better[0]
+			fresh := make([]Node, 0, len(better))
+			for _, node := range better {
+				if state.RecoveryRequestedAt > 0 && node.LastTestedAt >= state.RecoveryRequestedAt {
+					fresh = append(fresh, node)
+				}
+			}
+			if len(fresh) > 0 {
+				target := fresh[0]
 				if state.RecoveryTarget == target.Name {
 					state.RecoveryStreak++
 				} else {
 					state.RecoveryTarget, state.RecoveryStreak = target.Name, 1
 				}
 				if state.RecoveryStreak >= policy.RecoveryStableChecks {
-					state.RecoveryStreak, state.RecoveryTarget = 0, ""
+					state.RecoveryStreak, state.RecoveryTarget, state.RecoveryRequestedAt = 0, "", 0
 					return state, Decision{Action: "select", Target: target.Name, Pool: target.Pool, Reason: "higher_priority_stable"}
 				}
 				return state, Decision{Action: "keep", Target: target.Name, Pool: target.Pool, Reason: "failback_probe"}
+			}
+			if state.RecoveryRequestedAt == 0 || now >= state.NextPoolRefresh {
+				state.RecoveryRequestedAt = now
+				state.NextPoolRefresh = now + int64(policy.PoolRefreshCooldown.Seconds())
+				state.RecoveryStreak, state.RecoveryTarget = 0, ""
+				return state, Decision{Action: "refresh", Pool: Primary, Reason: "refresh_primary_before_failback"}
+			}
+			if len(better) > 0 {
+				return state, Decision{Action: "keep", Pool: Primary, Reason: "awaiting_fresh_primary"}
 			}
 		}
 		return state, Decision{Action: "keep", Reason: "active_healthy"}

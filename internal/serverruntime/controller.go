@@ -87,7 +87,7 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 		if node.Delay != nil {
 			delay = *node.Delay
 		}
-		controllerNodes = append(controllerNodes, controller.Node{Name: node.FullName, Pool: node.Pool, Alive: node.Alive, Delay: delay, SpeedMbps: node.SpeedMbps, StabilityRatio: node.StabilityRatio, HealthSuccesses: node.HealthSuccesses, HealthFailures: node.HealthFailures})
+		controllerNodes = append(controllerNodes, controller.Node{Name: node.FullName, Pool: node.Pool, Alive: node.Alive, Delay: delay, SpeedMbps: node.SpeedMbps, StabilityRatio: node.StabilityRatio, HealthSuccesses: node.HealthSuccesses, HealthFailures: node.HealthFailures, LastTestedAt: node.LastTestedAt})
 		if node.Selected {
 			active, activePool = node.FullName, node.Pool
 		}

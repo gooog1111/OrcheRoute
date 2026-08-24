@@ -373,6 +373,7 @@ type PublicNode struct {
 	Country         string  `json:"country,omitempty"`
 	HealthSuccesses int     `json:"health_successes,omitempty"`
 	HealthFailures  int     `json:"health_failures,omitempty"`
+	LastTestedAt    int64   `json:"last_tested_at,omitempty"`
 	Score           float64 `json:"score,omitempty"`
 	Selected        bool    `json:"selected"`
 	SourceID        any     `json:"source_id"`
@@ -448,6 +449,7 @@ func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string
 			speedMbps, stabilityRatio := float64(0), float64(0)
 			country := ""
 			healthSuccesses, healthFailures := 0, 0
+			lastTestedAt := int64(0)
 			if item, ok := metadata[full].(map[string]any); ok {
 				sourceID, sourceName = item["id"], item["name"]
 				if value := intValue(item["delay_ms"]); value > 0 {
@@ -458,6 +460,7 @@ func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string
 				country = strings.ToUpper(strings.TrimSpace(stringValue(item["country"])))
 				healthSuccesses = intValue(item["health_successes"])
 				healthFailures = intValue(item["health_failures"])
+				lastTestedAt = int64Value(item["last_tested_at"])
 			}
 			priority := 1
 			if pool == "primary" {
@@ -467,7 +470,7 @@ func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string
 			if delay != nil {
 				ranked.DelayMS = *delay
 			}
-			result = append(result, PublicNode{ID: id, DisplayName: display, Pool: pool, Priority: priority, Alive: alive, Delay: delay, SpeedMbps: speedMbps, StabilityRatio: stabilityRatio, Country: country, HealthSuccesses: healthSuccesses, HealthFailures: healthFailures, Score: noderank.Score(ranked), Selected: full == selected, SourceID: sourceID, SourceName: sourceName, FullName: full})
+			result = append(result, PublicNode{ID: id, DisplayName: display, Pool: pool, Priority: priority, Alive: alive, Delay: delay, SpeedMbps: speedMbps, StabilityRatio: stabilityRatio, Country: country, HealthSuccesses: healthSuccesses, HealthFailures: healthFailures, LastTestedAt: lastTestedAt, Score: noderank.Score(ranked), Selected: full == selected, SourceID: sourceID, SourceName: sourceName, FullName: full})
 			mapping[id] = full
 		}
 	}
