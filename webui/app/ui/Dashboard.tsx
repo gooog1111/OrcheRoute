@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { actions, getAndroidAppUpdateStatus, installAndroidAppUpdate, isAndroidRuntime, loadDashboard, loadLiveDashboard, type AndroidAppUpdateStatus, type ConnectionIdentity, type DashboardData, type Node } from "../lib/api";
+import { actions, getAndroidAppUpdateStatus, installAndroidAppUpdate, loadDashboard, loadLiveDashboard, type AndroidAppUpdateStatus, type ConnectionIdentity, type DashboardData, type Node } from "../lib/api";
+import { platformCapabilities } from "../platform/runtime";
 import { ChevronIcon, CloseIcon, GlobeIcon, PowerIcon, RefreshIcon, RouteIcon, ServerIcon, SettingsIcon } from "./Icons";
 import { SettingsModal as EditableSettingsModal, type SettingsTab } from "./SettingsModal";
 import { OperationPanel, type OperationView } from "./OperationPanel";
@@ -54,6 +55,7 @@ function identityText(identity?: ConnectionIdentity) {
 }
 
 export function Dashboard() {
+  const platform = platformCapabilities();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -70,12 +72,12 @@ export function Dashboard() {
   useEffect(() => { dataRef.current = data; }, [data]);
 
   useEffect(() => {
-    if (!isAndroidRuntime()) return;
+    if (platform.appUpdater !== "android") return;
     const refreshUpdate = () => setAppUpdate(getAndroidAppUpdateStatus());
     refreshUpdate();
     const timer = window.setInterval(refreshUpdate, 750);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [platform.appUpdater]);
 
   const refresh = useCallback(async (quiet = false, live = false) => {
     if (refreshInFlight.current) return;
@@ -98,13 +100,12 @@ export function Dashboard() {
   useEffect(() => {
     if (settingsOpen) return;
     const first = window.setTimeout(() => void refresh(), 0);
-    const android = isAndroidRuntime();
-    const timer = window.setInterval(() => void refresh(true, android), android ? 1000 : 5000);
+    const timer = window.setInterval(() => void refresh(true, platform.liveDashboard), platform.dashboardPollMs);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(timer);
     };
-  }, [refresh, settingsOpen]);
+  }, [platform.dashboardPollMs, platform.liveDashboard, refresh, settingsOpen]);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -294,7 +295,7 @@ export function Dashboard() {
                   : `${whitelistPool?.alive ?? 0} доступных из ${whitelistPool?.total ?? 0}${whitelistPool?.selected ? " · используется сейчас" : ""}`}
               </small>
             </div>
-            {isAndroidRuntime() && (
+            {platform.controlWhitelistScan && (
               <button
                 className="whitelist-action"
                 type="button"
@@ -312,7 +313,7 @@ export function Dashboard() {
       <OperationPanel
         operation={operationView ?? whitelistOperation}
         onDismiss={operationView ? () => setOperationView(null) : undefined}
-        action={isAndroidRuntime() && whitelistOperation && !operationView ? {
+        action={platform.controlWhitelistScan && whitelistOperation && !operationView ? {
           label: stoppingWhitelist ? "Останавливаем" : "Остановить",
           onClick: () => void stopWhitelistScan(),
           disabled: stoppingWhitelist,

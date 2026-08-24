@@ -39,7 +39,8 @@ test("keeps API credentials out of the client bundle", async () => {
 test("pauses dashboard polling while settings are being edited", async () => {
   const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
   assert.match(dashboard, /if \(settingsOpen\) return;/);
-  assert.match(dashboard, /\[refresh, settingsOpen\]/);
+  assert.match(dashboard, /platform\.dashboardPollMs/);
+  assert.match(dashboard, /refresh, settingsOpen/);
 });
 
 test("embedded settings use the expanded workspace and hide web publication controls", async () => {
@@ -47,7 +48,18 @@ test("embedded settings use the expanded workspace and hide web publication cont
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   assert.match(css, /settings-modal-wide[^}]*1480px/);
   assert.match(css, /height:\s*min\(1080px, calc\(100dvh - 32px\)\)/);
-  assert.match(settings, /!desktopMode\s*&&\s*\(\s*<Tab\s+active=\{activeTab === "access"\}/);
+  assert.match(settings, /platform\.showAccessSettings\s*&&\s*\(\s*<Tab\s+active=\{activeTab === "access"\}/);
+});
+
+test("common UI receives platform differences from one capability module", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const platform = await readFile(new URL("../app/platform/runtime.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(dashboard, /isAndroidRuntime|OrcheRouteAndroid|window\.runtime/);
+  assert.doesNotMatch(settings, /isAndroidRuntime|OrcheRouteAndroid|window\.runtime/);
+  for (const capability of ["networkEditor", "showAccessSettings", "editServerLists", "appUpdater"]) {
+    assert.match(platform, new RegExp(capability));
+  }
 });
 
 test("exposes separate subscription refresh and cached server checks", async () => {
@@ -216,6 +228,7 @@ test("mobile dashboard centers power controls and places switch time on its own 
 test("android dashboard follows live VPN state and shows direct and proxy identities", async () => {
   const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
+  const platform = await readFile(new URL("../app/platform/runtime.ts", import.meta.url), "utf8");
   const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   assert.match(dashboard, /proxy_ok: "Подключено"/);
@@ -226,7 +239,8 @@ test("android dashboard follows live VPN state and shows direct and proxy identi
   assert.match(dashboard, /<span>Proxy<\/span>/);
   assert.match(dashboard, /className="connected-server"/);
   assert.match(dashboard, /activeServerName/);
-  assert.match(dashboard, /android \? 1000 : 5000/);
+  assert.match(dashboard, /platform\.dashboardPollMs/);
+  assert.match(platform, /kind: "android"[\s\S]*dashboardPollMs: 1000[\s\S]*liveDashboard: true/);
   assert.match(api, /loadLiveDashboard/);
   assert.match(service, /network == null \? url\.openConnection\(\) : network\.openConnection\(url\)/);
   assert.match(service, /Mobilecore\.parseConnectionIdentity/);

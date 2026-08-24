@@ -1,3 +1,5 @@
+import { platformCapabilities } from "../platform/runtime";
+
 export type ConnectionIdentity = {
   ip: string;
   country_code?: string;
@@ -377,16 +379,6 @@ export function setAndroidAppUpdateBetaEnabled(enabled: boolean) {
 
 export function getServerAppUpdateStatus() { return request<AndroidAppUpdateStatus>("/v1/app-update"); }
 
-export function isEmbeddedRuntime() {
-  if (typeof window === "undefined") return false;
-  const host = window as Window & { runtime?: unknown; OrcheRouteAndroid?: unknown };
-  return typeof host.runtime === "object" || typeof host.OrcheRouteAndroid === "object";
-}
-
-export function isAndroidRuntime() {
-	return typeof androidBridge() === "object";
-}
-
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const android = androidBridge();
   if (android && typeof android.request === "function") {
@@ -437,8 +429,8 @@ export async function loadDashboard(): Promise<DashboardData> {
     request<RouteState>("/v1/routes").catch(() => null),
     request<ComponentStatus>("/v1/components").catch(() => null),
     request<OperationSnapshot>("/v1/operations").catch(() => null),
-    isEmbeddedRuntime() ? Promise.resolve(null) : request<WebAccess>("/v1/web/access").catch(() => null),
-    isAndroidRuntime() ? Promise.resolve(getAndroidAppUpdateStatus()) : request<AndroidAppUpdateStatus>("/v1/app-update").catch(() => null),
+    platformCapabilities().showAccessSettings ? request<WebAccess>("/v1/web/access").catch(() => null) : Promise.resolve(null),
+    platformCapabilities().appUpdater === "android" ? Promise.resolve(getAndroidAppUpdateStatus()) : request<AndroidAppUpdateStatus>("/v1/app-update").catch(() => null),
   ]);
   return {
     status,

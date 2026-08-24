@@ -19,8 +19,6 @@ import {
   getAndroidAppUpdateStatus,
   getServerAppUpdateStatus,
   installAndroidAppUpdate,
-  isEmbeddedRuntime,
-  isAndroidRuntime,
   loadOperations,
   openTextFile,
   saveTextFile,
@@ -33,6 +31,7 @@ import {
   type RouteState,
   type Subscription,
 } from "../lib/api";
+import { platformCapabilities } from "../platform/runtime";
 import { ChevronIcon, CloseIcon } from "./Icons";
 import { OperationPanel, type OperationView } from "./OperationPanel";
 
@@ -199,14 +198,14 @@ export function SettingsModal({
   const [operationCancellable, setOperationCancellable] = useState(false);
   const [operationCancelling, setOperationCancelling] = useState(false);
   const [navEdges, setNavEdges] = useState({ left: false, right: false });
-  const desktopMode = isEmbeddedRuntime();
+  const platform = platformCapabilities();
   const touchStart = useRef<{ x: number; y: number; interactive: boolean } | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const tabs = useMemo<SettingsTab[]>(
-    () => desktopMode
-      ? ["general", "network", "routes", "sources", "qualification", "components"]
-      : ["general", "access", "network", "routes", "sources", "qualification", "components"],
-    [desktopMode],
+    () => platform.showAccessSettings
+      ? ["general", "access", "network", "routes", "sources", "qualification", "components"]
+      : ["general", "network", "routes", "sources", "qualification", "components"],
+    [platform.showAccessSettings],
   );
 
   useEffect(() => {
@@ -269,7 +268,7 @@ export function SettingsModal({
   }, [busy]);
 
   useEffect(() => {
-    if (!isAndroidRuntime()) return;
+    if (!platform.revealFieldsAfterKeyboard) return;
     let revealTimer: number | null = null;
     const revealFocusedField = (event: FocusEvent) => {
       const target = event.target;
@@ -286,7 +285,7 @@ export function SettingsModal({
       document.removeEventListener("focusin", revealFocusedField);
       if (revealTimer !== null) window.clearTimeout(revealTimer);
     };
-  }, []);
+  }, [platform.revealFieldsAfterKeyboard]);
 
   const run: Runner = async (operation, success, options = {}) => {
     const steps =
@@ -309,7 +308,7 @@ export function SettingsModal({
             : ["Сохраняем изменения", "Проверяем ответ", "Обновляем интерфейс"];
     setBusy(true);
     setOperationCancelling(false);
-    setOperationCancellable(isAndroidRuntime() && (options.waitFor === "subscriptions" || options.waitFor === "servers"));
+    setOperationCancellable(platform.cancelLongOperations && (options.waitFor === "subscriptions" || options.waitFor === "servers"));
     setMessage(null);
     setError(null);
     setOperationView({
@@ -616,7 +615,7 @@ export function SettingsModal({
               onClick={() => onTab("general")}
               label="Основное"
             />
-            {!desktopMode && (
+            {platform.showAccessSettings && (
               <Tab
                 active={activeTab === "access"}
                 onClick={() => onTab("access")}
@@ -657,7 +656,7 @@ export function SettingsModal({
             )}
             {activeTab === "access" && <AccessPanel data={data} busy={busy} />}
             {activeTab === "network" &&
-              (isAndroidRuntime() ? (
+              (platform.networkEditor === "vpn-service" ? (
                 <AndroidNetworkForm data={data} busy={busy} run={run} />
               ) : (
                 <NetworkForm data={data} busy={busy} run={run} />
@@ -1000,7 +999,7 @@ function PoolNodes({
   const [showUnavailable, setShowUnavailable] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [deletingNode, setDeletingNode] = useState<Node | null>(null);
-  const canEditPool = isAndroidRuntime();
+  const canEditPool = platformCapabilities().editServerLists;
   const allNodes = data?.nodes.filter((node) => node.pool === pool) ?? [];
   const unavailable = allNodes.filter((node) => !node.alive).length;
   const nodes = showUnavailable
@@ -2670,7 +2669,7 @@ function SubscriptionsForm({
   const [exporting, setExporting] = useState<Subscription | null>(null);
   const [deleting, setDeleting] = useState<Subscription | null>(null);
   const [copiedID, setCopiedID] = useState<string | null>(null);
-  const androidRuntime = isAndroidRuntime();
+  const platform = platformCapabilities();
   const subscriptionUpdate = data?.operations?.subscription_update;
   const updateRunning = Boolean(
     subscriptionUpdate?.active ||
@@ -2814,10 +2813,10 @@ function SubscriptionsForm({
             onClick={() =>
               void run(
                 () => actions.updateDefaultEmergency(selectedDefaults),
-                androidRuntime
+                !platform.rebuildEmergencyOnSelection
                   ? "Набор аварийных источников сохранён. Для загрузки нажмите «Обновить»."
                   : "Набор аварийных источников сохранён, список серверов пересобран.",
-                androidRuntime
+                !platform.rebuildEmergencyOnSelection
                   ? { title: "Сохраняем аварийные источники" }
                   : { title: "Обновляем аварийный список серверов", waitFor: "subscriptions" },
               )
@@ -3080,7 +3079,7 @@ function ComponentsForm({
   run: Runner;
 }) {
   const components = data?.components;
-  const embedded = isAndroidRuntime();
+  const embedded = platformCapabilities().appUpdater === "android";
   const [geoEnabled, setGeoEnabled] = useState(true);
   const [geoInterval, setGeoInterval] = useState(24);
   const [geoSource, setGeoSource] = useState("metacubex");
