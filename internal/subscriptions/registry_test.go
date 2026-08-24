@@ -83,3 +83,14 @@ func TestPlanRefresh(t *testing.T) {
 		t.Fatal("unexpected rebuild decision")
 	}
 }
+
+func TestNextUpdate(t *testing.T) {
+	if got := NextUpdate(1_000, 900, true); got != 1_900 {
+		t.Fatalf("next update=%d", got)
+	}
+	for _, got := range []int64{NextUpdate(0, 900, true), NextUpdate(1_000, 0, true), NextUpdate(1_000, 900, false)} {
+		if got != 0 {
+			t.Fatalf("unavailable schedule returned %d", got)
+		}
+	}
+}

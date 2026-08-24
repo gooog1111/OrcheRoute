@@ -376,7 +376,7 @@ final class MobileRepository {
         return result;
     }
 
-    synchronized void refreshSucceeded(String id, JSONArray proxies, JSONArray tests, JSONArray links, int testedCount) throws JSONException {
+    synchronized void refreshSucceeded(String id, JSONArray proxies, JSONArray tests, JSONArray links, int testedCount, boolean fetched) throws JSONException {
         JSONObject subscription = findSubscription(id);
         if (subscription == null) return;
 		JSONObject history = nodeHistoryForSourceLocked(id);
@@ -412,7 +412,8 @@ final class MobileRepository {
 		rankNodesLocked("nodes");
         subscription.put("last_status", "success").put("last_error", JSONObject.NULL)
                 .put("last_result", aliveCount == 0 ? "no_available_servers" : "available_servers")
-                .put("last_available", aliveCount).put("last_tested", testedCount).put("last_success", now());
+                .put("last_available", aliveCount).put("last_tested", testedCount);
+        if (fetched) subscription.put("last_success", now());
         clearMissingSelectionLocked();
         save();
     }
@@ -435,14 +436,15 @@ final class MobileRepository {
         save();
     }
 
-    synchronized void refreshUnavailable(String id, JSONArray links, String result, int tested) throws JSONException {
+    synchronized void refreshUnavailable(String id, JSONArray links, String result, int tested, boolean fetched) throws JSONException {
         JSONObject subscription = findSubscription(id);
         if (subscription == null) return;
         JSONArray merged = mergeArrays(links, subscription.optJSONArray("cached_links"));
         subscription.put("cached_links", merged).put("last_links", merged.length())
                 .put("last_status", "success").put("last_error", JSONObject.NULL)
                 .put("last_result", result).put("last_available", 0).put("last_tested", tested)
-                .put("last_attempt", now()).put("last_success", now()).put("updated_at", now());
+                .put("last_attempt", now()).put("updated_at", now());
+        if (fetched) subscription.put("last_success", now());
         JSONArray nodes = root.getJSONArray("nodes");
         for (int i = 0; i < nodes.length(); i++) {
             JSONObject node = nodes.getJSONObject(i);
@@ -1027,6 +1029,9 @@ final class MobileRepository {
         result.remove("secret");
         result.remove("cached_links");
         result.put("secret_configured", !source.optString("secret", "").isEmpty());
+        long next = Mobilecore.nextSubscriptionUpdate(source.optLong("last_success", 0),
+                source.optInt("interval_seconds", 0), source.optBoolean("enabled", true));
+        result.put("next_update", next > 0 ? next : JSONObject.NULL);
         return result;
     }
 

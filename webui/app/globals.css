@@ -431,6 +431,7 @@ html[data-release-channel="beta"] .input-wrap select {
 .default-source-card .action-bar { padding: 0; border: 0; background: transparent; }
 .subscription-list.editable .subscription-row { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
 .subscription-main { min-width: 0; display: grid; gap: 5px !important; }
+.subscription-update-times { display: flex; flex-wrap: wrap; gap: 3px 12px; color: var(--muted) !important; }
 .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .row-actions button { min-height: 29px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-raised); color: var(--muted); cursor: pointer; font-size: 9px; }
 .row-actions button:hover:not(:disabled) { color: var(--text); border-color: var(--line-strong); }

@@ -74,6 +74,7 @@ export type Subscription = {
   last_error?: string | null;
   last_attempt?: number;
   last_success?: number;
+  next_update?: number | null;
   last_tested?: number;
   last_available?: number;
   last_result?: string;

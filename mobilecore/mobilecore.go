@@ -86,6 +86,12 @@ func ConfirmConnectivity(inputJSON string) string {
 	return encode(map[string]any{"ok": true, "result": result})
 }
 
+// NextSubscriptionUpdate exposes the shared subscription schedule calculation
+// to Android without duplicating its semantics in Java.
+func NextSubscriptionUpdate(lastSuccess int64, intervalSeconds int, enabled bool) int64 {
+	return subscriptions.NextUpdate(lastSuccess, intervalSeconds, enabled)
+}
+
 func ParseConnectionIdentity(traceBody string) string {
 	result, err := mobileconnectivity.ParseTraceIdentity(traceBody)
 	if err != nil {

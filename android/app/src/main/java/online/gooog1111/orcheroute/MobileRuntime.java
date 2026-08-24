@@ -560,7 +560,7 @@ final class MobileRuntime {
 								: "speed_unavailable";
 						ensureRefreshContinues(allowlistScan);
 						if (restrictedScan) repository.replaceWhitelistSource(id, new JSONArray(), new JSONArray());
-						else repository.refreshUnavailable(id, links, reason, proxies.length());
+                        else repository.refreshUnavailable(id, links, reason, proxies.length(), !checkOnly);
 						updateRefresh("running", "qualification", "Подходящих серверов нет · «" + sourceName + "»", proxies.length(), proxies.length(), reason);
 						success++;
 						unavailable++;
@@ -568,7 +568,7 @@ final class MobileRuntime {
 					}
                     ensureRefreshContinues(allowlistScan);
                     if (restrictedScan) repository.replaceWhitelistSource(id, qualified, finalTests);
-                    else repository.refreshSucceeded(id, qualified, finalTests, links, proxies.length());
+                    else repository.refreshSucceeded(id, qualified, finalTests, links, proxies.length(), !checkOnly);
                     success++;
                     // Do not start the VPN from a partially built pool. The
                     // remaining probes must keep using the same physical

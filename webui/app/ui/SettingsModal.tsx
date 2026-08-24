@@ -62,6 +62,13 @@ const lines = (value: string) =>
     .split(/\r?\n/)
     .map((item) => item.trim())
     .filter(Boolean);
+const subscriptionDate = (timestamp?: number | null) =>
+  timestamp
+    ? new Intl.DateTimeFormat("ru-RU", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(timestamp * 1000)
+    : "—";
 const canonicalConfig = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(canonicalConfig);
   if (value && typeof value === "object") {
@@ -2947,6 +2954,20 @@ function SubscriptionsForm({
                       : "автоматически"}{" "}
                 · {subscription.last_links} ссылок · каждые{" "}
                 {Math.round(subscription.interval_seconds / 60)} мин
+              </small>
+              <small className="subscription-update-times">
+                <span>
+                  Обновлена: {subscription.last_success
+                    ? subscriptionDate(subscription.last_success)
+                    : "ещё не обновлялась"}
+                </span>
+                <span>
+                  Следующее обновление: {!subscription.enabled
+                    ? "отключено"
+                    : subscription.next_update
+                      ? subscriptionDate(subscription.next_update)
+                      : "после первого обновления"}
+                </span>
               </small>
               {(subscription.last_tested ?? 0) > 0 && (
                 <small className="subscription-check-result">

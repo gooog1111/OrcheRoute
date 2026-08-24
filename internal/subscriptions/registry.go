@@ -283,6 +283,16 @@ func RefreshDue(now time.Time, lastSuccess int64, intervalSeconds int, force boo
 	return force || now.Unix()-lastSuccess >= int64(intervalSeconds) || len(cachedLinks) == 0
 }
 
+// NextUpdate returns the first instant at which the subscription becomes due.
+// Zero means that no honest date exists yet: the source is disabled, has never
+// been fetched successfully, or has no valid interval.
+func NextUpdate(lastSuccess int64, intervalSeconds int, enabled bool) int64 {
+	if !enabled || lastSuccess <= 0 || intervalSeconds <= 0 {
+		return 0
+	}
+	return lastSuccess + int64(intervalSeconds)
+}
+
 func decodeBase64(value string) ([]byte, error) {
 	value = strings.TrimRight(value, "=")
 	if decoded, err := base64.RawURLEncoding.DecodeString(value); err == nil {

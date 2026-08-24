@@ -401,7 +401,8 @@ test("subscription parser is automatic and zero available nodes is a completed t
   assert.doesNotMatch(settings, /<option value="blacktemple">/);
   assert.doesNotMatch(settings, /<option value="standard">/);
   assert.match(runtime, /report\.optInt\("url_alive"\) == 0 \? "url_unavailable"/);
-  assert.match(runtime, /repository\.refreshUnavailable\(id, links, reason, proxies\.length\(\)\)/);
+  assert.match(runtime, /repository\.refreshUnavailable\(id, links, reason, proxies\.length\(\), !checkOnly\)/);
+  assert.match(repository, /if \(fetched\) subscription\.put\("last_success", now\(\)\)/);
   assert.match(repository, /node\.put\("alive", false\)/);
   assert.match(repository, /last_result", aliveCount == 0 \? "no_available_servers"/);
   assert.doesNotMatch(repository, /normalizedName/);
@@ -446,4 +447,14 @@ test("checked subscription nodes are shown by rating without retesting other sou
   assert.match(settings, /\(right\.score \?\? 0\) - \(left\.score \?\? 0\)/);
   assert.match(settings, /★\$\{Math\.round\(node\.score\)\}/);
   assert.match(settings, /проверены и добавлены в список по рейтингу/);
+});
+
+test("subscription cards show actual and next refresh timestamps", async () => {
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const mobileRepository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
+  const serverAPI = await readFile(new URL("../../internal/serverruntime/api.go", import.meta.url), "utf8");
+  assert.match(settings, /Обновлена:[\s\S]*subscription\.last_success/);
+  assert.match(settings, /Следующее обновление:[\s\S]*subscription\.next_update/);
+  assert.match(mobileRepository, /Mobilecore\.nextSubscriptionUpdate/);
+  assert.match(serverAPI, /subscriptions\.NextUpdate/);
 });
