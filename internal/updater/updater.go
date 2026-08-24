@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	coremapper "github.com/gooog1111/orcheroute/internal/core/mapper"
 	"github.com/gooog1111/orcheroute/internal/qualification"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 )
@@ -176,7 +177,7 @@ func Run(ctx context.Context, dependencies Dependencies, request Request) (Resul
 				sources = append(sources, subscriptions.SourceLinks{ID: item.ID, Name: item.Name, Links: links})
 			}
 		}
-		aggregated := subscriptions.Aggregate(sources)
+		aggregated := coremapper.Subscriptions(sources)
 		poolResult := PoolResult{Sources: aggregated.Sources, Fetched: aggregated.Fetched, Rejected: sumErrors(aggregated.Errors), Errors: aggregated.Errors}
 		if len(aggregated.Proxies) == 0 {
 			if err := poolFailure(ctx, dependencies, result.Failures, group, "group_has_no_cached_links", poolResult); err != nil {
@@ -217,7 +218,7 @@ func Run(ctx context.Context, dependencies Dependencies, request Request) (Resul
 			result.Pools[group] = poolResult
 			continue
 		}
-		retainedSources := subscriptions.RetainSources(aggregated.SourceByNode, qualified.Proxies)
+		retainedSources := coremapper.RetainSources(aggregated.SourceByNode, qualified.Proxies)
 		if err := dependencies.Providers.Write(string(group), qualified, retainedSources); err != nil {
 			return result, err
 		}
@@ -260,7 +261,7 @@ func checkSubscriptions(ctx context.Context, dependencies Dependencies, request 
 			result.Pools[item.GroupName] = pool
 			continue
 		}
-		aggregated := subscriptions.Aggregate([]subscriptions.SourceLinks{{ID: item.ID, Name: item.Name, Links: links}})
+		aggregated := coremapper.Subscriptions([]subscriptions.SourceLinks{{ID: item.ID, Name: item.Name, Links: links}})
 		pool.Fetched += aggregated.Fetched
 		pool.Rejected += sumErrors(aggregated.Errors)
 		for reason, count := range aggregated.Errors {
@@ -297,7 +298,7 @@ func checkSubscriptions(ctx context.Context, dependencies Dependencies, request 
 			result.Failures = appendUnique(result.Failures, item.ID)
 		}
 		if qualifyErr == nil {
-			retainedSources := subscriptions.RetainSources(aggregated.SourceByNode, qualified.Proxies)
+			retainedSources := coremapper.RetainSources(aggregated.SourceByNode, qualified.Proxies)
 			if mergeErr := dependencies.Providers.MergeSource(string(item.GroupName), item.ID, qualified, retainedSources); mergeErr != nil {
 				return result, fmt.Errorf("merge checked subscription %s: %w", item.ID, mergeErr)
 			}

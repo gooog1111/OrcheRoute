@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	coremapper "github.com/gooog1111/orcheroute/internal/core/mapper"
 	"github.com/gooog1111/orcheroute/internal/qualification"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"github.com/gooog1111/orcheroute/internal/whitelist"
@@ -57,7 +58,7 @@ func RunWhitelist(ctx context.Context, dependencies Dependencies, request Whitel
 			updateOneQualificationStatus(ctx, dependencies, item.ID, "error", 0, 0, &reason)
 			continue
 		}
-		aggregated := subscriptions.Aggregate([]subscriptions.SourceLinks{{ID: item.ID, Name: item.Name, Links: links}})
+		aggregated := coremapper.Subscriptions([]subscriptions.SourceLinks{{ID: item.ID, Name: item.Name, Links: links}})
 		if len(aggregated.Proxies) == 0 {
 			reason := "no_supported_nodes"
 			result.Failures[item.ID] = reason

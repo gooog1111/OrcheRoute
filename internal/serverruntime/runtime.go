@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/controller"
+	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
 	"github.com/gooog1111/orcheroute/internal/network"
 	"github.com/gooog1111/orcheroute/internal/noderank"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
@@ -182,7 +183,7 @@ func (runtime *Runtime) bootstrap(ctx context.Context, freshState bool) error {
 		if interfaceName == "" {
 			return nil
 		}
-		preview, err := network.PreviewProfile(network.DefaultProfile(interfaceName), topology)
+		preview, err := corevalidator.NetworkProfile(network.DefaultProfile(interfaceName), topology)
 		if err != nil {
 			return nil
 		}

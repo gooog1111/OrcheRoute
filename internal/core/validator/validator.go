@@ -15,6 +15,22 @@ func QualificationPolicy(policy map[string]any) (map[string]any, error) {
 	return qualification.Validate(policy)
 }
 
+func DefaultQualificationPolicy() map[string]any {
+	return qualification.DefaultPolicy()
+}
+
+func MigrateQualificationPolicy(policy map[string]any) map[string]any {
+	return qualification.MigrateLegacyPools(policy)
+}
+
+func UpdateQualificationPolicy(policy, changes map[string]any) (map[string]any, error) {
+	return qualification.Update(policy, changes)
+}
+
+func QualificationURLTestURLs(policy map[string]any) ([]string, error) {
+	return qualification.URLTestURLs(policy)
+}
+
 func EffectiveQualificationPolicy(policy map[string]any, pool string) (map[string]any, error) {
 	return qualification.Effective(policy, pool)
 }
@@ -27,12 +43,25 @@ func NetworkProfile(profile network.ProfileInput, topology network.Topology) (ne
 	return network.PreviewProfile(profile, topology)
 }
 
+func ValidateNetworkProfile(profile network.ProfileInput) (network.Profile, error) {
+	return network.ValidateProfile(profile, nil)
+}
+
 func DNS(input network.DNSInput) (network.DNSPreview, error) {
-	config, err := network.ValidateDNS(&input)
+	_, preview, err := DNSConfig(&input)
+	return preview, err
+}
+
+func DNSConfig(input *network.DNSInput) (network.DNSConfig, network.DNSPreview, error) {
+	config, err := network.ValidateDNS(input)
 	if err != nil {
-		return network.DNSPreview{}, err
+		return network.DNSConfig{}, network.DNSPreview{}, err
 	}
-	return network.PreviewDNS(config), nil
+	return config, network.PreviewDNS(config), nil
+}
+
+func PreviewDNSConfig(config network.DNSConfig) network.DNSPreview {
+	return network.PreviewDNS(config)
 }
 
 func NetworkError(err error) any {

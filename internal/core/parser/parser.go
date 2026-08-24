@@ -16,6 +16,11 @@ func DecodeSubscriptionBody(body string) []string {
 	return subscriptions.Decode([]byte(body))
 }
 
+// NormalizeInline canonicalizes a pasted list and reports removed duplicates.
+func NormalizeInline(value string) (string, int) {
+	return subscriptions.NormalizeInline(value)
+}
+
 // ParseLink converts one share link to the canonical Mihomo node shape.
 func ParseLink(link, source string, index int) (map[string]any, error) {
 	if strings.TrimSpace(source) == "" || index < 0 {

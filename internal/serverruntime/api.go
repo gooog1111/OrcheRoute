@@ -18,6 +18,9 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/components"
+	coreparser "github.com/gooog1111/orcheroute/internal/core/parser"
+	corerouting "github.com/gooog1111/orcheroute/internal/core/routing"
+	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
 	"github.com/gooog1111/orcheroute/internal/network"
 	"github.com/gooog1111/orcheroute/internal/qualification"
 	"github.com/gooog1111/orcheroute/internal/routes"
@@ -200,7 +203,7 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 				return backendError(err)
 			}
 			if len(links) == 0 && (item.Parser == subscriptions.Inline || item.Parser == subscriptions.WireGuard) {
-				links = subscriptions.Decode([]byte(item.Secret))
+				links = coreparser.DecodeSubscriptionBody(item.Secret)
 			}
 			return 200, map[string]any{"id": id, "name": item.Name, "parser": item.Parser, "secret": item.Secret, "links": links, "warning": "transport_must_be_trusted"}
 		case path == "/v1/routes/validate":
@@ -472,7 +475,7 @@ func validateRoutes(body map[string]any) (int, any) {
 	if err != nil {
 		return validationError(err)
 	}
-	compiled, err := routes.CompileLists(lists)
+	compiled, err := corerouting.CompileLists(lists)
 	if err != nil {
 		return validationError(err)
 	}
@@ -561,7 +564,7 @@ func (runtime *Runtime) validateNetwork(ctx context.Context, body map[string]any
 	if err != nil {
 		return backendError(err)
 	}
-	preview, err := network.PreviewProfile(profile, topology)
+	preview, err := corevalidator.NetworkProfile(profile, topology)
 	if err != nil {
 		return validationError(err)
 	}
@@ -638,11 +641,10 @@ func validateDNS(body map[string]any) (int, any) {
 	if err := json.Unmarshal(payload, &input); err != nil {
 		return 400, map[string]any{"error": "invalid_dns_config"}
 	}
-	config, err := network.ValidateDNS(&input)
+	config, preview, err := corevalidator.DNSConfig(&input)
 	if err != nil {
 		return validationError(err)
 	}
-	preview := network.PreviewDNS(config)
 	return 200, map[string]any{"config": config, "effective": preview.Effective}
 }
 func (runtime *Runtime) getDNS() (int, any) {
@@ -654,7 +656,7 @@ func (runtime *Runtime) getDNS() (int, any) {
 	activeJSON, _ := json.Marshal(active.DNS)
 	_, networkState := runtime.getNetwork()
 	apply := networkState.(map[string]any)["apply"]
-	return 200, map[string]any{"desired": desired.DNS, "active": active.DNS, "in_sync": string(desiredJSON) == string(activeJSON), "preview": network.PreviewDNS(active.DNS), "network_revision": desired.Revision, "apply": apply}
+	return 200, map[string]any{"desired": desired.DNS, "active": active.DNS, "in_sync": string(desiredJSON) == string(activeJSON), "preview": corevalidator.PreviewDNSConfig(active.DNS), "network_revision": desired.Revision, "apply": apply}
 }
 func (runtime *Runtime) saveDNS(body map[string]any) (int, any) {
 	desired, _, err := runtime.networkProfiles()
@@ -693,7 +695,7 @@ func (runtime *Runtime) applyNetwork(ctx context.Context, body map[string]any) (
 	if err != nil {
 		return backendError(err)
 	}
-	if _, err := network.PreviewProfile(input, topology); err != nil {
+	if _, err := corevalidator.NetworkProfile(input, topology); err != nil {
 		return validationError(err)
 	}
 	requestPath := filepath.Join(runtime.Config.StateDirectory, "network-apply-request.json")
@@ -732,16 +734,16 @@ func (runtime *Runtime) applyNetwork(ctx context.Context, body map[string]any) (
 }
 
 func (runtime *Runtime) getQualification() (int, any) {
-	policy := qualification.DefaultPolicy()
+	policy := corevalidator.DefaultQualificationPolicy()
 	_ = readJSON(filepath.Join(runtime.Config.StateDirectory, "qualification-policy.json"), &policy)
-	validated, err := qualification.Validate(qualification.MigrateLegacyPools(policy))
+	validated, err := corevalidator.QualificationPolicy(corevalidator.MigrateQualificationPolicy(policy))
 	if err != nil {
 		return validationError(err)
 	}
 	effective := map[string]any{}
 	reports := map[string]any{}
 	for _, pool := range qualification.Pools {
-		effective[pool], _ = qualification.Effective(validated, pool)
+		effective[pool], _ = corevalidator.EffectiveQualificationPolicy(validated, pool)
 		var report any
 		if readJSON(filepath.Join(runtime.Config.ProductionState, "qualification", pool+".json"), &report) != nil {
 			report = nil
@@ -753,7 +755,7 @@ func (runtime *Runtime) getQualification() (int, any) {
 func (runtime *Runtime) saveQualification(body map[string]any) (int, any) {
 	_, current := runtime.getQualification()
 	policy := current.(map[string]any)["policy"].(map[string]any)
-	updated, err := qualification.Update(policy, body)
+	updated, err := corevalidator.UpdateQualificationPolicy(policy, body)
 	if err != nil {
 		return validationError(err)
 	}
@@ -788,7 +790,7 @@ func (runtime *Runtime) setManual(ctx context.Context, body map[string]any) (int
 }
 
 func (runtime *Runtime) createSubscription(ctx context.Context, body map[string]any) (int, any) {
-	values, err := subscriptions.ValidateFields(body, false)
+	values, err := corevalidator.Subscription(body, false)
 	if err != nil {
 		return validationError(err)
 	}
@@ -823,7 +825,7 @@ func (runtime *Runtime) importSubscriptions(ctx context.Context, body map[string
 		if !ok {
 			return 400, map[string]any{"error": "invalid_subscription_batch"}
 		}
-		if _, err := subscriptions.ValidateFields(payload, false); err != nil {
+		if _, err := corevalidator.Subscription(payload, false); err != nil {
 			return validationError(err)
 		}
 	}
@@ -847,7 +849,7 @@ func (runtime *Runtime) importSubscriptions(ctx context.Context, body map[string
 	return 201, map[string]any{"created": created, "skipped": skipped, "refresh_scheduled": false, "refresh_required": len(ids) > 0}
 }
 func (runtime *Runtime) updateSubscription(ctx context.Context, id string, body map[string]any) (int, any) {
-	values, err := subscriptions.ValidateFields(body, true)
+	values, err := corevalidator.Subscription(body, true)
 	if err != nil {
 		return validationError(err)
 	}
@@ -896,11 +898,11 @@ func (runtime *Runtime) normalizeSubscription(ctx context.Context, excludeID str
 		}
 		return 0, "", nil
 	}
-	normalized, duplicates := subscriptions.NormalizeInline(*secret)
-	links := subscriptions.Decode([]byte(normalized))
+	normalized, duplicates := coreparser.NormalizeInline(*secret)
+	links := coreparser.DecodeSubscriptionBody(normalized)
 	keepOriginal := false
 	if parser == subscriptions.WireGuard {
-		links = subscriptions.Decode([]byte(*secret))
+		links = coreparser.DecodeSubscriptionBody(*secret)
 		keepOriginal = true
 	}
 	if len(links) == 0 {
@@ -917,7 +919,7 @@ func (runtime *Runtime) normalizeSubscription(ctx context.Context, excludeID str
 			return duplicates, "", cacheErr
 		}
 		if len(links) == 0 && (item.Parser == subscriptions.Inline || item.Parser == subscriptions.WireGuard) {
-			links = subscriptions.Decode([]byte(item.Secret))
+			links = coreparser.DecodeSubscriptionBody(item.Secret)
 		}
 		for _, link := range links {
 			known[link] = true

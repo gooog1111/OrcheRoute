@@ -14,6 +14,13 @@ func TestDecodeSubscriptionBody(t *testing.T) {
 	}
 }
 
+func TestNormalizeInlineDeduplicatesWithoutChangingOrder(t *testing.T) {
+	value, duplicates := NormalizeInline("vless://one\nvless://one\ntrojan://two")
+	if duplicates != 1 || value != "vless://one\ntrojan://two" {
+		t.Fatalf("value=%q duplicates=%d", value, duplicates)
+	}
+}
+
 func TestParseSubscriptionRejectsMissingSource(t *testing.T) {
 	if _, err := ParseSubscription([]string{"vless://ignored"}, ""); err == nil || err.Error() != "invalid_request" {
 		t.Fatalf("error = %v, want invalid_request", err)

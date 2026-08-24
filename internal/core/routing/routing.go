@@ -46,3 +46,7 @@ func Compile(input Input) (Plan, error) {
 func CompileLists(lists map[string][]string) (baseroutes.CompileResult, error) {
 	return baseroutes.CompileLists(lists)
 }
+
+func ParseEntry(entry string) (baseroutes.ParsedEntry, error) {
+	return baseroutes.ParseEntry(entry)
+}

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
+	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
 	"github.com/gooog1111/orcheroute/internal/network"
-	"github.com/gooog1111/orcheroute/internal/qualification"
 )
 
 // ConnectivitySnapshot is owned by the physical-network monitor. Controllers
@@ -54,10 +54,10 @@ func (runtime *Runtime) connectivityCycle(ctx context.Context) {
 		runtime.recordConnectivityError(previous, err)
 		return
 	}
-	policy := qualification.DefaultPolicy()
+	policy := corevalidator.DefaultQualificationPolicy()
 	var stored map[string]any
 	if readJSON(filepath.Join(runtime.Config.StateDirectory, "qualification-policy.json"), &stored) == nil {
-		validated, err := qualification.Validate(stored)
+		validated, err := corevalidator.QualificationPolicy(stored)
 		if err != nil {
 			runtime.recordConnectivityError(previous, err)
 			return

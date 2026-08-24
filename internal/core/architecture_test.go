@@ -3,6 +3,7 @@ package core_test
 import (
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -43,6 +44,36 @@ func TestMicroLayerDependencyDirections(t *testing.T) {
 						position = imported.Pos()
 					}
 					t.Errorf("%s: layer %s must not import sibling %s at %v", file, layer, dependency, position)
+				}
+			}
+		}
+	}
+}
+
+// Linux Server and Android must enter shared behavior through the same layer
+// facades. This prevents a later platform fix from bypassing validation or
+// mapping that the other platform still relies on.
+func TestSharedConsumersDoNotBypassLayerEntrypoints(t *testing.T) {
+	forbidden := []string{
+		"subscriptions.Decode(", "subscriptions.NormalizeInline(", "subscriptions.ValidateFields(",
+		"subscriptions.Aggregate(", "subscriptions.RetainSources(", "routes.CompileLists(",
+		"qualification.Validate(", "qualification.Effective(", "qualification.Update(",
+		"qualification.DefaultPolicy(", "qualification.MigrateLegacyPools(",
+		"network.PreviewProfile(", "network.ValidateDNS(", "network.PreviewDNS(",
+	}
+	for _, pattern := range []string{"../serverruntime/*.go", "../updater/*.go"} {
+		files, err := filepath.Glob(pattern)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, file := range files {
+			content, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, call := range forbidden {
+				if strings.Contains(string(content), call) {
+					t.Errorf("%s bypasses a core layer with %s", file, call)
 				}
 			}
 		}
