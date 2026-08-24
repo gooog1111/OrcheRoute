@@ -51,6 +51,25 @@ func TestReplaceDirectoryRejectsUnrelatedDestination(t *testing.T) {
 	}
 }
 
+func TestReplaceDirectoryAllowsVerifiedServerWebUI(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "webui", "out")
+	destination := filepath.Join(root, "dist", "verify", "windows-server", "webui")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "index.html"), []byte("shared"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceDirectory(source, destination); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(destination, "index.html"))
+	if err != nil || string(data) != "shared" {
+		t.Fatalf("server WebUI = %q, %v", data, err)
+	}
+}
+
 func TestAndroidEnvironmentUsesConfiguredSDK(t *testing.T) {
 	sdk := t.TempDir()
 	t.Setenv("ANDROID_HOME", sdk)

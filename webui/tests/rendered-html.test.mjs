@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("exports the OrcheRoute dashboard", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
-  assert.match(html, /<html lang="ru">/i);
+  assert.match(html, /<html lang="ru" data-release-channel="(?:stable|beta)">/i);
   assert.match(html, /<title>OrcheRoute<\/title>/i);
   assert.match(html, /class="matrix-rain"/i);
   assert.doesNotMatch(html, />\s*WebUI\s*</i);
@@ -60,6 +60,8 @@ test("common UI receives platform differences from one capability module", async
   for (const capability of ["networkEditor", "showAccessSettings", "editServerLists", "appUpdater"]) {
     assert.match(platform, new RegExp(capability));
   }
+  assert.match(platform, /const sharedCapabilities = \{[\s\S]*editServerLists: true,[\s\S]*controlWhitelistScan: true,[\s\S]*cancelLongOperations: true,[\s\S]*rebuildEmergencyOnSelection: false/);
+  assert.doesNotMatch(platform, /kind: "android",[\s\S]*editServerLists:/);
 });
 
 test("exposes separate subscription refresh and cached server checks", async () => {
@@ -180,29 +182,46 @@ test("android checks its selected update channel on launch and prompts on the da
   assert.match(dashboard, /Позже/);
 });
 
-test("android prerelease builds use the red interface accent without changing stable colors", async () => {
+test("all platforms derive prerelease colors from the shared release module", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const rain = await readFile(new URL("../app/ui/MatrixRain.tsx", import.meta.url), "utf8");
+  const layout = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
+  const releaseModule = await readFile(new URL("../app/platform/release.ts", import.meta.url), "utf8");
   const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
-  assert.match(css, /html\.prerelease-theme[\s\S]*--accent: #ff5b61/);
+  assert.match(css, /html\[data-release-channel="beta"\][\s\S]*--accent: #ff5b61/);
   assert.match(css, /:root[\s\S]*--accent: #45f3c2/);
-  assert.match(rain, /prerelease-theme/);
-  assert.match(activity, /BuildConfig\.VERSION_NAME\.contains\("-"\)/);
-  assert.match(activity, /class=\\"prerelease-theme\\"/);
+  assert.match(rain, /releaseBranding\.prerelease/);
+  assert.match(layout, /data-release-channel=\{releaseBranding\.channel\}/);
+  assert.match(releaseModule, /NEXT_PUBLIC_ORCHEROUTE_RELEASE_CHANNEL/);
+  assert.doesNotMatch(activity, /prerelease-theme/);
+  assert.doesNotMatch(activity, /replaceFirst\("<html"/);
 });
 
-test("android prerelease branding adds a beta header and red launcher icon", async () => {
+test("shared prerelease branding labels every UI and feeds the Android native shell", async () => {
   const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const nextConfig = await readFile(new URL("../next.config.ts", import.meta.url), "utf8");
   const gradle = await readFile(new URL("../../android/app/build.gradle", import.meta.url), "utf8");
   const manifest = await readFile(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
   const icon = await readFile(new URL("../../android/app/src/main/res/drawable/ic_launcher.xml", import.meta.url), "utf8");
-  assert.match(dashboard, /className="brand-beta">BETA/);
-  assert.match(css, /html\.prerelease-theme \.brand-beta \{ display: inline-flex/);
+  const release = JSON.parse(await readFile(new URL("../../release.json", import.meta.url), "utf8"));
+  const debianControl = await readFile(new URL("../../packaging/debian/control", import.meta.url), "utf8");
+  const builder = await readFile(new URL("../../cmd/orcheroute-build/main.go", import.meta.url), "utf8");
+  assert.match(dashboard, /releaseBranding\.badge/);
+  assert.match(nextConfig, /\.\.\/release\.json/);
+  assert.match(nextConfig, /NEXT_PUBLIC_ORCHEROUTE_RELEASE_CHANNEL/);
+  assert.match(gradle, /rootProject\.file\("\.\.\/release\.json"\)/);
+  assert.match(gradle, /canonicalWebAssets[\s\S]*\.\.\/webui\/out/);
+  assert.doesNotMatch(gradle, /generatedWebAssets\.isPresent/);
+  assert.match(gradle, /\.\.\/dist\/verify\/android[\s\S]*mobilecore\.aar/);
+  assert.doesNotMatch(gradle, /libs\/mobilecore\.aar/);
   assert.match(gradle, /orcheRoutePrerelease \? "#FF5B61" : "#45F3C2"/);
   assert.match(gradle, /orcheRoutePrerelease \? "OrcheRoute BETA" : "OrcheRoute"/);
   assert.match(manifest, /android:label="@string\/app_name"/);
   assert.match(icon, /@color\/launcher_accent/);
+  assert.equal(debianControl.match(/^Version:\s*(.+)$/m)?.[1], release.version);
+  assert.match(builder, /include shared Server WebUI/);
+  assert.match(builder, /syncDesktopWeb/);
+  assert.match(builder, /orcherouteWebAssets/);
 });
 
 test("android locks portrait mode and settings save only changed drafts", async () => {

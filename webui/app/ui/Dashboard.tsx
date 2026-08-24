@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { actions, getAndroidAppUpdateStatus, installAndroidAppUpdate, loadDashboard, loadLiveDashboard, type AndroidAppUpdateStatus, type ConnectionIdentity, type DashboardData, type Node } from "../lib/api";
 import { platformCapabilities } from "../platform/runtime";
+import { releaseBranding } from "../platform/release";
 import { ChevronIcon, CloseIcon, GlobeIcon, PowerIcon, RefreshIcon, RouteIcon, ServerIcon, SettingsIcon } from "./Icons";
 import { SettingsModal as EditableSettingsModal, type SettingsTab } from "./SettingsModal";
 import { OperationPanel, type OperationView } from "./OperationPanel";
@@ -238,7 +239,7 @@ export function Dashboard() {
       <header className="topbar">
         <a className="brand" href="#" aria-label="OrcheRoute">
           <span className="brand-mark"><span /><span /><span /></span>
-          <span><strong>OrcheRoute <em className="brand-beta">BETA</em></strong><small>traffic orchestration</small></span>
+          <span><strong>OrcheRoute {releaseBranding.badge && <em className="brand-beta">{releaseBranding.badge}</em>}</strong><small>traffic orchestration</small></span>
         </a>
         <div className="topbar-actions">
           <button className="icon-button" type="button" disabled={busy} onClick={() => setSettingsOpen(true)} aria-label="Открыть настройки">

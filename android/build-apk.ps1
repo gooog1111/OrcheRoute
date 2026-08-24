@@ -16,17 +16,11 @@ if (-not (Test-Path -LiteralPath $apk)) {
     throw "Unified build did not create $apk"
 }
 
-$gradleConfig = Get-Content -LiteralPath (Join-Path $PSScriptRoot "app\build.gradle") -Raw
-$versionMatch = [regex]::Match($gradleConfig, 'def\s+orcheRouteVersionName\s*=\s*"([^"]+)"')
-if (-not $versionMatch.Success) {
-    $versionMatch = [regex]::Match($gradleConfig, 'versionName\s+"([^"]+)"')
-}
-if (-not $versionMatch.Success) {
-    throw "Unable to read versionName from app/build.gradle"
-}
+$release = Get-Content -LiteralPath (Join-Path $root "release.json") -Raw | ConvertFrom-Json
+if (-not $release.version) { throw "release.json does not contain a version" }
 
 $dist = Join-Path $PSScriptRoot "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
-$output = Join-Path $dist ("OrcheRoute-{0}-debug.apk" -f $versionMatch.Groups[1].Value)
+$output = Join-Path $dist ("OrcheRoute-{0}-debug.apk" -f $release.version)
 Copy-Item -LiteralPath $apk -Destination $output -Force
 Write-Output "APK: $output"

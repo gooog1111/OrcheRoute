@@ -15,19 +15,23 @@ export type PlatformCapabilities = {
   rebuildEmergencyOnSelection: boolean;
 };
 
+const sharedCapabilities = {
+  editServerLists: true,
+  controlWhitelistScan: true,
+  cancelLongOperations: true,
+  rebuildEmergencyOnSelection: false,
+} as const;
+
 const hostPlatform: PlatformCapabilities = {
+  ...sharedCapabilities,
   kind: "server",
   embedded: false,
   dashboardPollMs: 5000,
   liveDashboard: false,
   networkEditor: "host",
   showAccessSettings: true,
-  editServerLists: false,
-  controlWhitelistScan: false,
-  cancelLongOperations: false,
   revealFieldsAfterKeyboard: false,
   appUpdater: "server",
-  rebuildEmergencyOnSelection: true,
 };
 
 export function platformCapabilities(): PlatformCapabilities {
@@ -42,12 +46,8 @@ export function platformCapabilities(): PlatformCapabilities {
       liveDashboard: true,
       networkEditor: "vpn-service",
       showAccessSettings: false,
-      editServerLists: true,
-      controlWhitelistScan: true,
-      cancelLongOperations: true,
       revealFieldsAfterKeyboard: true,
       appUpdater: "android",
-      rebuildEmergencyOnSelection: false,
     };
   }
   if (typeof host.runtime === "object") {

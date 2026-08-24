@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { releaseBranding } from "../platform/release";
 
 const GLYPHS = "01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホルート";
 
@@ -19,9 +20,8 @@ export function MatrixRain() {
     let columns = 0;
     let drops: number[] = [];
     const fontSize = window.innerWidth < 640 ? 14 : 17;
-    const prerelease = document.documentElement.classList.contains("prerelease-theme");
-    const rain = prerelease ? "255, 70, 78" : "24, 224, 158";
-    const highlight = prerelease ? "255, 190, 194" : "178, 255, 232";
+    const rain = releaseBranding.prerelease ? "255, 70, 78" : "24, 224, 158";
+    const highlight = releaseBranding.prerelease ? "255, 190, 194" : "178, 255, 232";
 
     const resize = () => {
       const ratio = Math.min(window.devicePixelRatio || 1, 1.5);

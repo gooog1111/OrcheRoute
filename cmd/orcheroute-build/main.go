@@ -184,6 +184,9 @@ func (b *builder) linuxDesktop() error {
 }
 
 func (b *builder) buildServer(goos string) error {
+	if err := b.web(); err != nil {
+		return err
+	}
 	return b.once("server-"+goos, func() error {
 		out := filepath.Join(b.dist, goos+"-server")
 		if err := os.MkdirAll(out, 0o755); err != nil {
@@ -198,6 +201,9 @@ func (b *builder) buildServer(goos string) error {
 			if err := b.command(b.root, nil, "go", "build", "-trimpath", "-o", filepath.Join(out, name+ext), "./cmd/"+name); err != nil {
 				return err
 			}
+		}
+		if err := replaceDirectory(filepath.Join(b.root, "webui", "out"), filepath.Join(out, "webui")); err != nil {
+			return fmt.Errorf("include shared Server WebUI: %w", err)
 		}
 		return nil
 	})
@@ -365,7 +371,7 @@ func pkgConfigExists(name string) bool {
 func replaceDirectory(source, destination string) error {
 	source = filepath.Clean(source)
 	destination = filepath.Clean(destination)
-	if source == destination || !strings.Contains(filepath.ToSlash(destination), "/desktop/frontend/dist") {
+	if source == destination || !safeGeneratedFrontendDestination(destination) {
 		return fmt.Errorf("unsafe generated frontend destination: %s", destination)
 	}
 	if info, err := os.Stat(source); err != nil || !info.IsDir() {
@@ -394,6 +400,14 @@ func replaceDirectory(source, destination string) error {
 		}
 		return copyFile(path, target)
 	})
+}
+
+func safeGeneratedFrontendDestination(destination string) bool {
+	path := filepath.ToSlash(filepath.Clean(destination))
+	if strings.Contains(path, "/desktop/frontend/dist") {
+		return true
+	}
+	return strings.Contains(path, "/dist/verify/") && strings.HasSuffix(path, "-server/webui")
 }
 
 func copyFile(source, destination string) error {

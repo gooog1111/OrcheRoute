@@ -2,8 +2,11 @@ plugins {
     id "com.android.application"
 }
 
-def orcheRouteVersionName = "0.5.11-beta.12"
-def orcheRoutePrerelease = orcheRouteVersionName.contains("-")
+import groovy.json.JsonSlurper
+
+def orcheRouteRelease = new JsonSlurper().parse(rootProject.file("../release.json"))
+def orcheRouteVersionName = orcheRouteRelease.version as String
+def orcheRoutePrerelease = orcheRouteRelease.channel == "beta"
 
 android {
     namespace "online.gooog1111.orcheroute"
@@ -43,22 +46,21 @@ android {
         ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
 
-    def generatedWebAssets = providers.gradleProperty("orcherouteWebAssets")
-    if (generatedWebAssets.isPresent()) {
-        def generatedAssetsRoot = layout.buildDirectory.dir("generated/orcherouteWebAssets").get().asFile
-        def stageWebAssets = tasks.register("stageOrcheRouteWebAssets", Sync) {
-            from(generatedWebAssets.get())
-            into(new File(generatedAssetsRoot, "web"))
-        }
-        sourceSets.main.assets.setSrcDirs([generatedAssetsRoot])
-        tasks.named("preBuild").configure {
-            dependsOn(stageWebAssets)
-        }
+    def canonicalWebAssets = providers.gradleProperty("orcherouteWebAssets")
+            .orElse(rootProject.layout.projectDirectory.dir("../webui/out").asFile.absolutePath)
+    def generatedAssetsRoot = layout.buildDirectory.dir("generated/orcherouteWebAssets").get().asFile
+    def stageWebAssets = tasks.register("stageOrcheRouteWebAssets", Sync) {
+        from(canonicalWebAssets)
+        into(new File(generatedAssetsRoot, "web"))
+    }
+    sourceSets.main.assets.setSrcDirs([generatedAssetsRoot])
+    tasks.named("preBuild").configure {
+        dependsOn(stageWebAssets)
     }
 }
 
 def mobileCoreAar = providers.gradleProperty("orcherouteMobileCoreAar")
-        .orElse(layout.projectDirectory.file("libs/mobilecore.aar").asFile.absolutePath)
+        .orElse(rootProject.layout.projectDirectory.dir("../dist/verify/android").file("mobilecore.aar").asFile.absolutePath)
 
 dependencies {
     implementation files(mobileCoreAar.get())

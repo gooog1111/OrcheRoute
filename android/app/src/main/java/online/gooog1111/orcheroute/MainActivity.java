@@ -350,21 +350,11 @@ public final class MainActivity extends ComponentActivity {
             if (unsafeAssetPath(path)) return blocked();
             try {
                 InputStream stream = getAssets().open("web/" + path);
-                if ("index.html".equals(path) && isPrereleaseBuild()) {
-                    String html = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-                    stream.close();
-                    html = html.replaceFirst("<html", "<html class=\"prerelease-theme\"");
-                    stream = new ByteArrayInputStream(html.getBytes(StandardCharsets.UTF_8));
-                }
                 return new WebResourceResponse(mimeType(path), "UTF-8", 200, "OK", Collections.singletonMap("Cache-Control", "no-cache"), stream);
             } catch (IOException ignored) {
                 return response(404, "Not Found", "text/plain", new byte[0]);
             }
         }
-    }
-
-    private static boolean isPrereleaseBuild() {
-        return BuildConfig.VERSION_NAME.contains("-");
     }
 
     public final class AndroidBridge {
