@@ -430,6 +430,15 @@ test("removes verbose dashboard and settings explanations", async () => {
   ]) assert.doesNotMatch(content, new RegExp(removed));
 });
 
+test("mobile dashboard contains long status and server names", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(dashboard, /className="connected-server" title=\{activeServerName\}/);
+  assert.match(styles, /\.hero-copy \{ width: 100%; min-width: 0;/);
+  assert.match(styles, /\.connected-server strong \{ min-width: 0; flex: 1 1 auto;[\s\S]*text-overflow: ellipsis/);
+  assert.match(styles, /\.hero-copy h1 \{ width: 100%;[\s\S]*overflow-wrap: anywhere/);
+});
+
 test("checked subscription nodes are shown by rating without retesting other sources", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");

@@ -255,7 +255,7 @@ export function Dashboard() {
             {loading ? "Подключение к серверу" : stateLabel}
           </div>
           <h1>{enabled ? "OrcheRoute включён" : "OrcheRoute выключен"}</h1>
-          {enabled && activeServerName && <p className="connected-server"><span>Сервер</span><strong>{activeServerName}</strong></p>}
+          {enabled && activeServerName && <p className="connected-server" title={activeServerName}><span>Сервер</span><strong>{activeServerName}</strong></p>}
           {enabled && <p className="connection-identity"><span>Direct</span>{identityText(data?.status.wan.identity)}</p>}
           {enabled && <p className="connection-identity"><span>Proxy</span>{identityText(data?.status.proxy.identity)}</p>}
         </div>
