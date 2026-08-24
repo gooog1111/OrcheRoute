@@ -15,14 +15,12 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import mobilecore.Mobilecore;
+import mobilecore.QualificationObserver;
 
 /**
  * Process-local Android adapter for the versioned OrcheRoute UI contract.
@@ -517,138 +515,56 @@ final class MobileRuntime {
                     JSONArray proxies = parsed.getJSONObject("result").getJSONArray("proxies");
                     if (proxies.length() == 0) throw new IllegalStateException("Подписка не содержит поддерживаемых серверов");
 					JSONObject effectivePolicy = effectiveQualification(item.optString("group", "primary"));
-					int tcpTimeoutMs = effectivePolicy.optInt("tcp_timeout_ms", 2000);
-					int urlTimeoutMs = effectivePolicy.optInt("url_timeout_ms", 3000);
-					int geoTimeoutMs = effectivePolicy.optInt("geo_timeout_ms", 5000);
-					int speedTimeoutMs = effectivePolicy.optInt("speed_timeout_ms", 15000);
+					if (restrictedScan) {
+						// Region preferences and speed requirements apply to normal
+						// Internet only. An allowlist scan retains every endpoint that
+						// is reachable through the physical network.
+						effectivePolicy.put("excluded_countries", new JSONArray());
+						effectivePolicy.put("url_limit", 0);
+						effectivePolicy.put("speed_candidates", 0);
+						effectivePolicy.put("speed_candidates_per_source", 0);
+						effectivePolicy.put("keep", 0);
+						effectivePolicy.put("skip_speed", true);
+					}
+					JSONObject sources = new JSONObject();
+					for (int index = 0; index < proxies.length(); index++) {
+						String nodeName = proxies.getJSONObject(index).optString("name");
+						if (!nodeName.isEmpty()) sources.put(nodeName, new JSONObject()
+								.put("id", id).put("name", item.optString("name")));
+					}
+					final String sourceName = item.optString("name");
+					JSONObject qualifiedEnvelope = new JSONObject(Mobilecore.qualifyNodes(
+							restrictedScan ? "whitelist" : item.optString("group", "primary"),
+							proxies.toString(), effectivePolicy.toString(), sources.toString(),
+							new QualificationObserver() {
+								@Override public boolean isCancelled() {
+									return refreshCancelRequested || (allowlistScan && !isAllowlistModeActive());
+								}
 
-                    JSONArray tcpTests = new JSONArray();
-                    final int tcpBatchSize = 128;
-                    for (int offset = 0; offset < proxies.length(); offset += tcpBatchSize) {
-                        int end = Math.min(proxies.length(), offset + tcpBatchSize);
-                        updateRefresh("running", "tcp", "TCP-проверка " + offset + "/" + proxies.length() + " · «" + item.optString("name") + "»", offset, proxies.length(), "");
-                        JSONArray batch = new JSONArray();
-                        for (int index = offset; index < end; index++) batch.put(proxies.getJSONObject(index));
-                        JSONObject tested = new JSONObject(Mobilecore.engineTestTCP(batch.toString(), tcpTimeoutMs, 128));
-                        if (!tested.optBoolean("ok")) throw new IllegalStateException(coreError(tested));
-                        ensureRefreshContinues(allowlistScan);
-                        JSONArray nodes = tested.getJSONObject("result").getJSONArray("nodes");
-                        for (int index = 0; index < nodes.length(); index++) tcpTests.put(nodes.getJSONObject(index));
-                        updateRefresh("running", "tcp", "TCP-проверка " + end + "/" + proxies.length() + " · «" + item.optString("name") + "»", end, proxies.length(), "");
-                    }
-                    JSONArray tcpAlive = filterAliveSorted(proxies, tcpTests, "delay_ms", true);
-                    if (tcpAlive.length() == 0) {
-                        ensureRefreshContinues(allowlistScan);
-                        if (restrictedScan) repository.replaceWhitelistSource(id, new JSONArray(), new JSONArray());
-                        else repository.refreshUnavailable(id, links, "tcp_unavailable", proxies.length());
-                        updateRefresh("running", "tcp", "Проверка завершена: доступных серверов нет (0/" + proxies.length() + ")", proxies.length(), proxies.length(), "");
-                        success++;
-                        unavailable++;
-                        continue;
-                    }
-
-                    if (restrictedScan) {
-                        // The user's country exclusions describe normal server
-                        // preference. During an allowlist the only valid
-                        // criterion is whether the endpoint is reachable now.
-                        effectivePolicy.put("excluded_countries", new JSONArray());
-                        effectivePolicy.put("url_limit", 0);
-                        effectivePolicy.put("speed_candidates", 0);
-                        effectivePolicy.put("speed_candidates_per_source", 0);
-                        effectivePolicy.put("keep", 0);
-                    }
-                    int urlLimit = effectivePolicy.optInt("url_limit", 0);
-                    int speedCandidates = effectivePolicy.optInt("speed_candidates", 0);
-                    int perSourceCandidates = effectivePolicy.optInt("speed_candidates_per_source", 0);
-                    int keep = effectivePolicy.optInt("keep", 0);
-                    JSONArray urlSource = limit(tcpAlive, urlLimit);
-                    JSONArray urlTests = new JSONArray();
-                    final int urlBatchSize = 80;
-					JSONArray testURLs = effectivePolicy.getJSONArray("url_test_urls");
-                    for (int offset = 0; offset < urlSource.length(); offset += urlBatchSize) {
-                        int end = Math.min(urlSource.length(), offset + urlBatchSize);
-                        updateRefresh("running", "url_test", "URL-test " + offset + "/" + urlSource.length() + " · «" + item.optString("name") + "»", offset, urlSource.length(), "");
-                        JSONArray batch = slice(urlSource, offset, end);
-                        JSONObject tested = new JSONObject(Mobilecore.engineTestProxiesMulti(batch.toString(), testURLs.toString(), urlTimeoutMs, 80));
-                        if (!tested.optBoolean("ok")) throw new IllegalStateException(coreError(tested));
-                        ensureRefreshContinues(allowlistScan);
-                        JSONArray batchTests = tested.getJSONObject("result").getJSONArray("nodes");
-                        append(urlTests, batchTests);
-                        updateRefresh("running", "url_test", "URL-test " + end + "/" + urlSource.length() + " · «" + item.optString("name") + "»", end, urlSource.length(), "");
-                    }
-                    JSONArray urlAlive = filterAliveSorted(urlSource, urlTests, "delay_ms", true);
-                    if (urlAlive.length() == 0) {
-                        ensureRefreshContinues(allowlistScan);
-                        if (restrictedScan) repository.replaceWhitelistSource(id, new JSONArray(), new JSONArray());
-                        else repository.refreshUnavailable(id, links, "url_unavailable", urlSource.length());
-                        updateRefresh("running", "url_test", "URL-test завершён: доступных серверов нет (0/" + urlSource.length() + ")", urlSource.length(), urlSource.length(), "");
-                        success++;
-                        unavailable++;
-                        continue;
-                    }
-
-                    JSONArray excludedCountries = effectivePolicy.optJSONArray("excluded_countries");
-                    if (!restrictedScan && excludedCountries != null && excludedCountries.length() > 0) {
-                        updateRefresh("running", "geo", "Определяем регионы серверов · «" + item.optString("name") + "»", 0, urlAlive.length(), "");
-                        JSONObject geoTested = new JSONObject(Mobilecore.engineFilterCountries(urlAlive.toString(), excludedCountries.toString(), geoTimeoutMs, 12));
-                        if (!geoTested.optBoolean("ok")) throw new IllegalStateException(coreError(geoTested));
-                        JSONArray geoTests = geoTested.getJSONObject("result").getJSONArray("nodes");
-                        urlAlive = filterAliveSorted(urlAlive, geoTests, "delay_ms", true);
-                        if (urlAlive.length() == 0) {
-                            repository.refreshUnavailable(id, links, "country_excluded", geoTests.length());
-                            updateRefresh("running", "geo", "После фильтра регионов доступных серверов нет", geoTests.length(), geoTests.length(), "");
-                            success++;
-                            unavailable++;
-                            continue;
-                        }
-                    }
-
-                    double minimumMbps = effectivePolicy.optDouble("min_speed_mbps", 10.0);
-                    double stabilityRatio = effectivePolicy.optDouble("stability_ratio", 0.65);
-                    final String speedURL = "https://cachefly.cachefly.net/10mb.test";
-                    updateRefresh("running", "speed_availability", "Проверяем доступность speed-test", 0, 1, "");
-                    JSONObject availability = "normal".equals(connectivityState)
-                            ? new JSONObject(Mobilecore.engineSpeedAvailable(speedURL, 8000))
-                            : new JSONObject().put("ok", true).put("result", new JSONObject().put("available", false));
-                    JSONObject availabilityResult = availability.optJSONObject("result");
-                    boolean speedAvailable = availability.optBoolean("ok") && availabilityResult != null && availabilityResult.optBoolean("available");
-                    int candidateLimit = perSourceCandidates > 0 ? perSourceCandidates : speedCandidates;
-                    JSONArray speedSource = limit(urlAlive, candidateLimit);
-                    JSONArray qualified = limit(urlAlive, keep);
-                    JSONArray finalTests = aliveTests(qualified, urlTests);
-                    if (speedAvailable) {
-                        long sampleBytes = availabilityResult.optLong("recommended_bytes", 524288);
-                        double baselineMbps = availabilityResult.optDouble("baseline_mbps", 0.0);
-                        if (baselineMbps > 0) minimumMbps = baselineMbps * 0.10;
-                        updateRefresh("running", "speed_availability", "Speed-test: " + speedSource.length() + " лучших · " + sampleBytes / 1024 + " КБ на замер · канал " + Math.round(baselineMbps) + " Мбит/с", 1, 1, "");
-                        JSONArray speedTests = new JSONArray();
-                        final int speedBatchSize = 6;
-                        for (int offset = 0; offset < speedSource.length(); offset += speedBatchSize) {
-                            int end = Math.min(speedSource.length(), offset + speedBatchSize);
-                            updateRefresh("running", "speed_test", "Speed-test " + offset + "/" + speedSource.length() + " · «" + item.optString("name") + "»", offset, speedSource.length(), "");
-                            JSONArray batch = slice(speedSource, offset, end);
-                            JSONObject tested = new JSONObject(Mobilecore.engineTestSpeedAdaptive(batch.toString(), speedURL, speedTimeoutMs, 6, minimumMbps, stabilityRatio, sampleBytes));
-                            if (!tested.optBoolean("ok")) throw new IllegalStateException(coreError(tested));
-                            ensureRefreshContinues(allowlistScan);
-                            append(speedTests, tested.getJSONObject("result").getJSONArray("nodes"));
-                            updateRefresh("running", "speed_test", "Speed-test " + end + "/" + speedSource.length() + " · «" + item.optString("name") + "»", end, speedSource.length(), "");
-                        }
-                        inheritDelay(speedTests, urlTests);
-                        qualified = limit(filterAliveSorted(speedSource, speedTests, "speed_mbps", false), keep);
-                        finalTests = aliveTests(qualified, speedTests);
-                        if (qualified.length() == 0) {
-                            repository.refreshUnavailable(id, links, "speed_unavailable", speedSource.length());
-                            updateRefresh("running", "speed_test", "Speed-test завершён: подходящих серверов нет (0/" + speedSource.length() + ")", speedSource.length(), speedSource.length(), "");
-                            success++;
-                            unavailable++;
-                            continue;
-                        }
-                    } else {
-                        String reason = "allowlist".equals(connectivityState)
-                                ? "Speed-test пропущен: обнаружен режим белых списков"
-                                : "Speed-test пропущен: тестовый файл недоступен";
-                        updateRefresh("running", "speed_skipped", reason, 1, 1, "");
-                    }
+								@Override public void onProgress(String stage, long current, long total) {
+									int safeCurrent = (int) Math.min(Integer.MAX_VALUE, current);
+									int safeTotal = (int) Math.min(Integer.MAX_VALUE, total);
+									updateRefresh("running", stage, qualificationProgressMessage(stage, current, total, sourceName), safeCurrent, safeTotal, "");
+								}
+							}));
+					if (!qualifiedEnvelope.optBoolean("ok")) throw new IllegalStateException(coreError(qualifiedEnvelope));
+					JSONObject qualificationResult = qualifiedEnvelope.getJSONObject("result");
+					JSONArray qualified = qualificationResult.getJSONArray("proxies");
+					JSONArray finalTests = qualificationResult.getJSONArray("tests");
+					JSONObject report = qualificationResult.getJSONObject("report");
+					if (qualified.length() == 0) {
+						String reason = report.optInt("tcp_alive") == 0 ? "tcp_unavailable"
+								: report.optInt("url_alive") == 0 ? "url_unavailable"
+								: report.optBoolean("geo_enabled") && report.optInt("geo_passed") == 0 ? "country_excluded"
+								: "speed_unavailable";
+						ensureRefreshContinues(allowlistScan);
+						if (restrictedScan) repository.replaceWhitelistSource(id, new JSONArray(), new JSONArray());
+						else repository.refreshUnavailable(id, links, reason, proxies.length());
+						updateRefresh("running", "qualification", "Подходящих серверов нет · «" + sourceName + "»", proxies.length(), proxies.length(), reason);
+						success++;
+						unavailable++;
+						continue;
+					}
                     ensureRefreshContinues(allowlistScan);
                     if (restrictedScan) repository.replaceWhitelistSource(id, qualified, finalTests);
                     else repository.refreshSucceeded(id, qualified, finalTests, links, proxies.length());
@@ -1119,6 +1035,16 @@ final class MobileRuntime {
         return "Обновляем геобазы · " + progress;
     }
 
+    private static String qualificationProgressMessage(String stage, long current, long total, String sourceName) {
+        String progress = current + "/" + total + " · «" + sourceName + "»";
+        if ("tcp".equals(stage)) return "TCP-проверка " + progress;
+        if ("url_test".equals(stage)) return "URL-test " + progress;
+        if ("geo".equals(stage)) return "Определяем регионы " + progress;
+        if ("baseline".equals(stage)) return "Измеряем доступную скорость " + progress;
+        if ("speed_test".equals(stage)) return "Speed-test " + progress;
+        return "Квалификация " + progress;
+    }
+
     private static String formatBytes(long bytes) {
         if (bytes < 1024) return bytes + " Б";
         if (bytes < 1024L * 1024L) return String.format(Locale.ROOT, "%.1f КБ", bytes / 1024.0);
@@ -1133,67 +1059,6 @@ final class MobileRuntime {
         JSONObject compiled = new JSONObject(Mobilecore.compileRoutes(lists.toString()));
         if (!compiled.optBoolean("ok")) throw new JSONException(coreError(compiled));
         return compiled.getJSONObject("result");
-    }
-
-    private static JSONArray slice(JSONArray source, int from, int to) throws JSONException {
-        JSONArray result = new JSONArray();
-        for (int i = from; i < to; i++) result.put(source.getJSONObject(i));
-        return result;
-    }
-
-    private static JSONArray limit(JSONArray source, int maximum) throws JSONException {
-        if (maximum <= 0 || source.length() <= maximum) return source;
-        return slice(source, 0, maximum);
-    }
-
-    private static void append(JSONArray target, JSONArray source) throws JSONException {
-        for (int i = 0; i < source.length(); i++) target.put(source.getJSONObject(i));
-    }
-
-    private static JSONArray filterAliveSorted(JSONArray proxies, JSONArray tests, String metric, boolean ascending) throws JSONException {
-        List<Integer> indices = new ArrayList<>();
-        for (int i = 0; i < proxies.length() && i < tests.length(); i++) {
-            if (tests.getJSONObject(i).optBoolean("alive", false)) indices.add(i);
-        }
-        indices.sort(Comparator.comparingDouble(index -> tests.optJSONObject(index).optDouble(metric, ascending ? Double.MAX_VALUE : 0.0)));
-        if (!ascending) java.util.Collections.reverse(indices);
-        JSONArray result = new JSONArray();
-        for (int index : indices) result.put(proxies.getJSONObject(index));
-        return result;
-    }
-
-    private static JSONArray aliveTests(JSONArray aliveProxies, JSONArray tests) throws JSONException {
-        JSONObject byName = new JSONObject();
-        for (int i = 0; i < tests.length(); i++) {
-            JSONObject test = tests.getJSONObject(i);
-            if (test.optBoolean("alive", false)) byName.put(test.optString("name"), test);
-        }
-        JSONArray result = new JSONArray();
-        for (int i = 0; i < aliveProxies.length(); i++) {
-            String name = aliveProxies.getJSONObject(i).optString("name");
-            JSONObject test = byName.optJSONObject(name);
-            result.put(test == null ? new JSONObject().put("name", name).put("alive", true) : test);
-        }
-        return result;
-    }
-
-    private static void inheritDelay(JSONArray speedTests, JSONArray urlTests) throws JSONException {
-        JSONObject delayByName = new JSONObject();
-        for (int i = 0; i < urlTests.length(); i++) {
-            JSONObject test = urlTests.getJSONObject(i);
-            if (test.has("delay_ms")) delayByName.put(test.optString("name"), test.optInt("delay_ms"));
-        }
-        for (int i = 0; i < speedTests.length(); i++) {
-            JSONObject test = speedTests.getJSONObject(i);
-            String name = test.optString("name");
-            if (delayByName.has(name)) test.put("delay_ms", delayByName.getInt(name));
-        }
-    }
-
-    private static int aliveCount(JSONArray tests) {
-        int result = 0;
-        for (int i = 0; i < tests.length(); i++) if (tests.optJSONObject(i) != null && tests.optJSONObject(i).optBoolean("alive")) result++;
-        return result;
     }
 
     private void restartIfEnabled() { if (desiredEnabled) OrcheRouteVpnService.reload(context); }

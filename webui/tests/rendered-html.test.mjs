@@ -97,20 +97,13 @@ test("renders automatic and manual modes without a redundant emergency-only sett
 test("android qualification checks the complete parsed set in ordered stages", async () => {
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   assert.doesNotMatch(runtime, /sampleProxies/);
-  assert.match(runtime, /engineTestTCP/);
-  assert.match(runtime, /engineTestTCP\(batch\.toString\(\), tcpTimeoutMs, 128\)/);
-  assert.match(runtime, /engineTestProxiesMulti/);
-  assert.match(runtime, /final int urlBatchSize = 80/);
-  assert.match(runtime, /engineTestProxiesMulti\(batch\.toString\(\), testURLs\.toString\(\), urlTimeoutMs, 80\)/);
-  assert.match(runtime, /effectivePolicy\.optInt\("url_limit", 0\)/);
-  assert.match(runtime, /effectivePolicy\.optInt\("speed_candidates", 0\)/);
-  assert.match(runtime, /effectivePolicy\.optInt\("keep", 0\)/);
-  assert.match(runtime, /engineSpeedAvailable/);
-  assert.match(runtime, /engineTestSpeed/);
-  assert.match(runtime, /engineTestSpeedAdaptive/);
-  assert.match(runtime, /baselineMbps \* 0\.10/);
+  assert.match(runtime, /Mobilecore\.qualifyNodes/);
+  assert.match(runtime, /new QualificationObserver\(\)/);
+  assert.match(runtime, /qualificationProgressMessage/);
   assert.match(runtime, /speed_candidates_per_source/);
-  assert.match(runtime, /Speed-test пропущен/);
+  assert.doesNotMatch(runtime, /Mobilecore\.engineTestTCP/);
+  assert.doesNotMatch(runtime, /Mobilecore\.engineTestProxiesMulti/);
+  assert.doesNotMatch(runtime, /Mobilecore\.engineTestSpeedAdaptive/);
 });
 
 test("android connectivity monitor binds DNS and HTTP to a physical network", async () => {
@@ -307,11 +300,8 @@ test("qualification UI exposes connectivity anchors and emergency per-source top
   assert.match(settings, /Контрольные ссылки/);
   assert.match(settings, /Добавить ссылку/);
   assert.match(settings, /Удалить URL-test/);
-  assert.match(runtime, /effectivePolicy\.getJSONArray\("url_test_urls"\)/);
-  assert.match(runtime, /engineTestTCP\(batch\.toString\(\), tcpTimeoutMs, 128\)/);
-  assert.match(runtime, /engineTestProxiesMulti\(batch\.toString\(\), testURLs\.toString\(\), urlTimeoutMs, 80\)/);
-  assert.match(runtime, /engineFilterCountries\(urlAlive\.toString\(\), excludedCountries\.toString\(\), geoTimeoutMs, 12\)/);
-  assert.match(runtime, /engineTestSpeedAdaptive\(batch\.toString\(\), speedURL, speedTimeoutMs, 6/);
+  assert.match(runtime, /Mobilecore\.qualifyNodes/);
+  assert.match(runtime, /effectivePolicy\.put\("skip_speed", true\)/);
   assert.match(settings, /nodes\.slice\(0, 5\)/);
   assert.match(settings, /className={`node-list-toggle/);
   assert.match(settings, /aria-expanded={expanded}/);
@@ -388,7 +378,8 @@ test("subscription parser is automatic and zero available nodes is a completed t
   assert.doesNotMatch(settings, /name\.trim\(\).*black/);
   assert.doesNotMatch(settings, /<option value="blacktemple">/);
   assert.doesNotMatch(settings, /<option value="standard">/);
-  assert.match(runtime, /refreshUnavailable\(id, links, "url_unavailable", urlSource\.length\(\)\)/);
+  assert.match(runtime, /report\.optInt\("url_alive"\) == 0 \? "url_unavailable"/);
+  assert.match(runtime, /repository\.refreshUnavailable\(id, links, reason, proxies\.length\(\)\)/);
   assert.match(repository, /node\.put\("alive", false\)/);
   assert.match(repository, /last_result", aliveCount == 0 \? "no_available_servers"/);
   assert.doesNotMatch(repository, /normalizedName/);

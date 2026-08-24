@@ -153,17 +153,10 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		return Result{}, validation("invalid_min_speed_mbps")
 	}
 	thresholdSource := "configured_fallback"
-	baselineMbps := float64(0)
-	if provider, ok := backend.(BaselineBackend); ok && !skipSpeed {
-		if baseline, baselineErr := provider.Baseline(ctx); baselineErr == nil && baseline.OK && baseline.BytesPerSecond > 0 {
-			baselineMbps = baseline.BytesPerSecond * 8 / 1_000_000
-			minimumMbps = baselineMbps * BaselineRatio
-			thresholdSource = "wan_baseline"
-			if sizer, ok := backend.(SpeedSizer); ok {
-				sizer.SetSpeedBytes(AdaptiveSpeedBytes(baseline.BytesPerSecond))
-			}
-		}
+	if skipSpeed {
+		thresholdSource = "skipped"
 	}
+	baselineMbps := float64(0)
 	stabilityRatio, err := valueFloat(settings["stability_ratio"])
 	if err != nil {
 		return Result{}, validation("invalid_stability_ratio")
@@ -312,6 +305,23 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		}
 	}
 
+	if !skipSpeed {
+		if provider, ok := backend.(BaselineBackend); ok {
+			baseline, baselineErr := provider.Baseline(ctx)
+			if baselineErr != nil || !baseline.OK || baseline.BytesPerSecond <= 0 {
+				skipSpeed = true
+				thresholdSource = "speed_unavailable"
+			} else {
+				baselineMbps = baseline.BytesPerSecond * 8 / 1_000_000
+				minimumMbps = baselineMbps * BaselineRatio
+				thresholdSource = "wan_baseline"
+				if sizer, ok := backend.(SpeedSizer); ok {
+					sizer.SetSpeedBytes(AdaptiveSpeedBytes(baseline.BytesPerSecond))
+				}
+			}
+		}
+	}
+
 	if skipSpeed {
 		retained := geoAlive
 		if keep > 0 && len(retained) > keep {
@@ -328,7 +338,7 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 			Pool: pool, StartedAt: started, FinishedAt: now().Unix(), Input: len(proxies), TCPAlive: len(tcpAlive), URLAlive: len(urlAlive),
 			GeoEnabled: len(excluded) > 0, GeoPassed: geoPassed, ExcludedCountries: excludedList, ExcludedByCountry: excludedCounts,
 			SpeedRuns: 0, SpeedTested: 0, Qualified: len(geoAlive), Retained: len(qualified),
-			ThresholdMbps: 0, ThresholdSource: "skipped", StabilityRatio: stabilityRatio,
+			ThresholdMbps: 0, ThresholdSource: thresholdSource, StabilityRatio: stabilityRatio,
 			Outcomes: geoOutcomes, Sources: sourceReports,
 		}}, nil
 	}
