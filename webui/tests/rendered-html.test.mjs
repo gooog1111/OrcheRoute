@@ -220,8 +220,9 @@ test("shared prerelease branding labels every UI and feeds the Android native sh
   assert.match(icon, /@color\/launcher_accent/);
   assert.equal(debianControl.match(/^Version:\s*(.+)$/m)?.[1], release.version);
   assert.match(builder, /include shared Server WebUI/);
-  assert.match(builder, /syncDesktopWeb/);
-  assert.match(builder, /orcherouteWebAssets/);
+  assert.match(builder, /filepath\.Join\(b\.dist, "linux-server"\)/);
+  assert.match(builder, /-PorcherouteWebAssets=/);
+  assert.doesNotMatch(builder, /syncDesktopWeb|windowsDesktop|linuxDesktop/);
 });
 
 test("android locks portrait mode and settings save only changed drafts", async () => {

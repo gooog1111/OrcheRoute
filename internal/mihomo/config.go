@@ -49,7 +49,6 @@ type Network struct {
 
 type Input struct {
 	StateDir     string  `json:"state_dir"`
-	Platform     string  `json:"platform,omitempty"`
 	TestURL      string  `json:"test_url"`
 	Secret       string  `json:"secret"`
 	RouteDefault string  `json:"route_default"`
@@ -77,10 +76,7 @@ func Build(input Input) (map[string]any, error) {
 	}
 
 	provider := func(name string, interval int) map[string]any {
-		override := map[string]any{"interface-name": vpnRole.Interface}
-		if input.Platform != "windows" {
-			override["routing-mark"] = vpnRole.Mark
-		}
+		override := map[string]any{"interface-name": vpnRole.Interface, "routing-mark": vpnRole.Mark}
 		return map[string]any{
 			"type":     "file",
 			"path":     configPath(input.StateDir, "providers", name+".json"),
@@ -108,10 +104,8 @@ func Build(input Input) (map[string]any, error) {
 		"name": "VPN-UNDERLAY-DNS", "type": "direct", "udp": true, "ip-version": "ipv4",
 		"interface-name": vpnRole.Interface,
 	}
-	if input.Platform != "windows" {
-		directEgress["routing-mark"] = directRole.Mark
-		underlayDNS["routing-mark"] = vpnRole.Mark
-	}
+	directEgress["routing-mark"] = directRole.Mark
+	underlayDNS["routing-mark"] = vpnRole.Mark
 	config := map[string]any{
 		"mixed-port": 21080, "bind-address": "127.0.0.1", "allow-lan": false,
 		"mode": "rule", "log-level": "info", "ipv6": input.Network.DNS.Config.IPv6,
@@ -193,11 +187,9 @@ func Build(input Input) (map[string]any, error) {
 		"auto-detect-interface": false, "strict-route": capture.StrictRoute,
 		"route-exclude-address": filterByIPv6(input.Network.EffectiveBypassCIDRs, input.Network.DNS.Config.IPv6),
 	}
-	if input.Platform != "windows" {
-		tun["auto-redirect"] = true
-		tun["iproute2-table-index"] = 5353
-		tun["iproute2-rule-index"] = 9200
-	}
+	tun["auto-redirect"] = true
+	tun["iproute2-table-index"] = 5353
+	tun["iproute2-rule-index"] = 9200
 	if capture.DNSHijack {
 		tun["dns-hijack"] = []string{"any:53", "tcp://any:53"}
 	}

@@ -1,6 +1,5 @@
-// Command orcheroute-build is the single local and CI entry point for checking
-// every supported OrcheRoute platform. Platform jobs intentionally call this
-// same program so the developer and CI build graphs cannot drift apart.
+// Command orcheroute-build is the single local entry point for checking the
+// supported OrcheRoute targets: Android and Linux Server.
 package main
 
 import (
@@ -29,7 +28,7 @@ type builder struct {
 }
 
 func main() {
-	target := flag.String("target", "all", "all, windows, linux, their server/desktop variants, android, web, or common")
+	target := flag.String("target", "all", "all, linux-server, android, web, or common")
 	skipWeb := flag.Bool("skip-web", false, "reuse an already verified webui/out (used by local WSL dispatch)")
 	wslDistro := flag.String("wsl-distro", "Ubuntu-24.04", "WSL distribution used by target=all on Windows")
 	flag.Parse()
@@ -57,18 +56,8 @@ func (b *builder) run() error {
 		return b.common()
 	case "web":
 		return b.web()
-	case "windows":
-		return b.windows()
-	case "windows-server":
-		return b.windowsServer()
-	case "windows-desktop":
-		return b.windowsDesktop()
-	case "linux":
-		return b.linux()
 	case "linux-server":
 		return b.linuxServer()
-	case "linux-desktop":
-		return b.linuxDesktop()
 	case "android":
 		return b.android()
 	case "all":
@@ -80,26 +69,38 @@ func (b *builder) run() error {
 
 func (b *builder) all() error {
 	if runtime.GOOS == "windows" {
-		if err := b.windows(); err != nil {
-			return err
-		}
 		if err := b.android(); err != nil {
 			return err
 		}
 		return b.linuxViaWSL()
 	}
 	if runtime.GOOS == "linux" {
-		if err := b.linux(); err != nil {
+		if err := b.linuxServer(); err != nil {
 			return err
 		}
 		return b.android()
 	}
-	return fmt.Errorf("target=all supports Windows+WSL or Linux; run platform targets in CI on %s", runtime.GOOS)
+	return fmt.Errorf("target=all supports Windows+WSL or Linux, got %s", runtime.GOOS)
 }
 
 func (b *builder) common() error {
 	return b.once("common-"+runtime.GOOS, func() error {
-		return b.command(b.root, nil, "go", "test", "./cmd/...", "./internal/...", "./mobilecore/...")
+		patterns := []string{"./cmd/...", "./internal/...", "./mobilecore/..."}
+		if runtime.GOOS != "windows" {
+			return b.command(b.root, nil, "go", append([]string{"test"}, patterns...)...)
+		}
+		listed, err := outputIn(b.root, "go", append([]string{"list"}, patterns...)...)
+		if err != nil {
+			return err
+		}
+		packages := make([]string, 0, len(strings.Fields(listed)))
+		for _, packagePath := range strings.Fields(listed) {
+			if strings.HasSuffix(packagePath, "/internal/serverruntime") {
+				continue
+			}
+			packages = append(packages, packagePath)
+		}
+		return b.command(b.root, nil, "go", append([]string{"test"}, packages...)...)
 	})
 }
 
@@ -123,43 +124,6 @@ func (b *builder) web() error {
 	})
 }
 
-func (b *builder) windows() error {
-	if err := b.windowsServer(); err != nil {
-		return err
-	}
-	return b.windowsDesktop()
-}
-
-func (b *builder) windowsServer() error {
-	if runtime.GOOS != "windows" {
-		return fmt.Errorf("Windows target must run on Windows, got %s", runtime.GOOS)
-	}
-	if err := b.common(); err != nil {
-		return err
-	}
-	return b.buildServer("windows")
-}
-
-func (b *builder) windowsDesktop() error {
-	if runtime.GOOS != "windows" {
-		return fmt.Errorf("Windows target must run on Windows, got %s", runtime.GOOS)
-	}
-	if err := b.common(); err != nil {
-		return err
-	}
-	if err := b.web(); err != nil {
-		return err
-	}
-	return b.buildDesktop("windows")
-}
-
-func (b *builder) linux() error {
-	if err := b.linuxServer(); err != nil {
-		return err
-	}
-	return b.linuxDesktop()
-}
-
 func (b *builder) linuxServer() error {
 	if runtime.GOOS != "linux" {
 		return fmt.Errorf("Linux target must run on Linux, got %s", runtime.GOOS)
@@ -167,38 +131,21 @@ func (b *builder) linuxServer() error {
 	if err := b.common(); err != nil {
 		return err
 	}
-	return b.buildServer("linux")
+	return b.buildServer()
 }
 
-func (b *builder) linuxDesktop() error {
-	if runtime.GOOS != "linux" {
-		return fmt.Errorf("Linux target must run on Linux, got %s", runtime.GOOS)
-	}
-	if err := b.common(); err != nil {
-		return err
-	}
+func (b *builder) buildServer() error {
 	if err := b.web(); err != nil {
 		return err
 	}
-	return b.buildDesktop("linux")
-}
-
-func (b *builder) buildServer(goos string) error {
-	if err := b.web(); err != nil {
-		return err
-	}
-	return b.once("server-"+goos, func() error {
-		out := filepath.Join(b.dist, goos+"-server")
+	return b.once("linux-server", func() error {
+		out := filepath.Join(b.dist, "linux-server")
 		if err := os.MkdirAll(out, 0o755); err != nil {
 			return err
 		}
 		commands := []string{"orcheroute-server", "orcheroute-components-go", "orcheroute-network-go", "orcheroute-update-go", "orcheroute-self-update"}
 		for _, name := range commands {
-			ext := ""
-			if goos == "windows" {
-				ext = ".exe"
-			}
-			if err := b.command(b.root, nil, "go", "build", "-trimpath", "-o", filepath.Join(out, name+ext), "./cmd/"+name); err != nil {
+			if err := b.command(b.root, nil, "go", "build", "-trimpath", "-o", filepath.Join(out, name), "./cmd/"+name); err != nil {
 				return err
 			}
 		}
@@ -206,27 +153,6 @@ func (b *builder) buildServer(goos string) error {
 			return fmt.Errorf("include shared Server WebUI: %w", err)
 		}
 		return nil
-	})
-}
-
-func (b *builder) buildDesktop(goos string) error {
-	return b.once("desktop-"+goos, func() error {
-		if err := b.syncDesktopWeb(); err != nil {
-			return err
-		}
-		dir := filepath.Join(b.root, "desktop")
-		if err := b.command(dir, nil, "go", "test", "./..."); err != nil {
-			return err
-		}
-		output := "OrcheRoute-" + goos + "-amd64"
-		if goos == "windows" {
-			output += ".exe"
-		}
-		args := []string{"build", "-s", "-skipbindings", "-nopackage", "-trimpath", "-o", output}
-		if goos == "linux" && !pkgConfigExists("webkit2gtk-4.0") && pkgConfigExists("webkit2gtk-4.1") {
-			args = append(args, "-tags", "webkit2_41")
-		}
-		return b.command(dir, nil, "wails", args...)
 	})
 }
 
@@ -271,19 +197,6 @@ func (b *builder) android() error {
 	})
 }
 
-func (b *builder) syncDesktopWeb() error {
-	if err := b.web(); err != nil {
-		return err
-	}
-	source := filepath.Join(b.root, "webui", "out")
-	destination := filepath.Join(b.root, "desktop", "frontend", "dist")
-	if err := replaceDirectory(source, destination); err != nil {
-		return fmt.Errorf("sync Desktop WebUI: %w", err)
-	}
-	fmt.Printf("Desktop frontend synced: %s\n", destination)
-	return nil
-}
-
 func (b *builder) linuxViaWSL() error {
 	if runtime.GOOS != "windows" {
 		return errors.New("WSL dispatch is only available on Windows")
@@ -293,7 +206,7 @@ func (b *builder) linuxViaWSL() error {
 		return fmt.Errorf("WSL %s is unavailable: %w", b.wslDistro, err)
 	}
 	quotedRoot := shellQuote(strings.TrimSpace(linuxRoot))
-	command := "export PATH=\"$HOME/go/bin:$PATH\"; cd " + quotedRoot + " && go run ./cmd/orcheroute-build -target linux -skip-web"
+	command := "export PATH=\"$HOME/go/bin:$PATH\"; cd " + quotedRoot + " && go run ./cmd/orcheroute-build -target linux-server -skip-web"
 	return b.command(b.root, nil, "wsl.exe", "-d", b.wslDistro, "--exec", "bash", "-lc", command)
 }
 
@@ -332,7 +245,13 @@ func repositoryRoot() (string, error) {
 }
 
 func output(name string, args ...string) (string, error) {
-	data, err := exec.Command(name, args...).CombinedOutput()
+	return outputIn("", name, args...)
+}
+
+func outputIn(dir, name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	data, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("%s: %w: %s", name, err, strings.TrimSpace(string(data)))
 	}
@@ -361,11 +280,6 @@ func androidEnvironment() ([]string, error) {
 		return nil, fmt.Errorf("Android SDK directory is unavailable: %s", sdk)
 	}
 	return []string{"ANDROID_HOME=" + sdk, "ANDROID_SDK_ROOT=" + sdk}, nil
-}
-
-func pkgConfigExists(name string) bool {
-	cmd := exec.Command("pkg-config", "--exists", name)
-	return cmd.Run() == nil
 }
 
 func replaceDirectory(source, destination string) error {
@@ -404,10 +318,7 @@ func replaceDirectory(source, destination string) error {
 
 func safeGeneratedFrontendDestination(destination string) bool {
 	path := filepath.ToSlash(filepath.Clean(destination))
-	if strings.Contains(path, "/desktop/frontend/dist") {
-		return true
-	}
-	return strings.Contains(path, "/dist/verify/") && strings.HasSuffix(path, "-server/webui")
+	return strings.Contains(path, "/dist/verify/") && strings.HasSuffix(path, "/linux-server/webui")
 }
 
 func copyFile(source, destination string) error {

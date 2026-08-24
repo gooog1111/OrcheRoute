@@ -3,8 +3,8 @@
 
 The script preserves Unix metadata from the template archive, replaces the
 portable Go runtime and WebUI, refreshes maintainer scripts/md5sums, and writes
-a regular ar-based .deb. It intentionally leaves the bundled Mihomo/Desktop
-binary untouched unless an explicit replacement is supplied.
+a regular ar-based .deb. It intentionally leaves the bundled Mihomo binary
+untouched unless an explicit replacement is supplied.
 """
 
 from __future__ import annotations

@@ -61,8 +61,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Desktop generated binaries; UI snapshots remain tracked for the baseline
-/desktop/build/bin/
+# Retired platform artifacts may remain in old local workspaces
+/desktop/
+/apple/
+/packaging/debian-desktop/
+/packaging/windows-desktop/
+/packaging/windows-server/
 
 # IDE and OS noise
 .idea/

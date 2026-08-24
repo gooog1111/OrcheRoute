@@ -1,5 +1,5 @@
 // Package transport defines the side-effect boundary around the embedded VPN
-// engine. Implementations may use Mihomo and an Android/Apple tunnel, while
+// engine. Android uses the embedded Mihomo tunnel, while
 // callers depend only on this lifecycle and probe contract.
 package transport
 

@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
@@ -31,12 +30,8 @@ func TestGeneratedCleanInstallConfigWithMihomo(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	platform := ""
-	if runtime.GOOS == "windows" {
-		platform = "windows"
-	}
 	config, err := Build(Input{
-		StateDir: directory, Platform: platform, TestURL: "https://www.gstatic.com/generate_204",
+		StateDir: directory, TestURL: "https://www.gstatic.com/generate_204",
 		Secret: "integration-secret", RouteDefault: "proxy",
 		Network: Network{
 			Profile:              Profile{Capture: Capture{Mode: "system", DNSHijack: true, StrictRoute: true}},

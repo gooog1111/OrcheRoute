@@ -46,8 +46,7 @@ type Config struct {
 	ConnectivityEvery   time.Duration
 	ConnectivityTimeout time.Duration
 	// RequireAPIAuth protects the control API with the token from runtime.env.
-	// It may only be disabled for an API bound exclusively to loopback, as the
-	// Linux/Windows desktop packages do.
+	// It may only be disabled for an API bound exclusively to loopback.
 	RequireAPIAuth bool
 }
 

@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestCleanDesktopReturnsEmptyPoolsWhenTransportIsNotStarted(t *testing.T) {
+func TestCleanRuntimeReturnsEmptyPoolsWhenTransportIsNotStarted(t *testing.T) {
 	directory := t.TempDir()
 	runtimeEnv := filepath.Join(directory, "runtime.env")
 	if err := os.WriteFile(runtimeEnv, []byte("api_token=test-token\ncontroller_secret=test-secret\n"), 0o600); err != nil {
@@ -132,7 +132,7 @@ func TestRoutesSaveSucceedsWhileTransportIsStopped(t *testing.T) {
 	}
 }
 
-func TestLoopbackDesktopAPIWorksWithoutBearerToken(t *testing.T) {
+func TestLoopbackAPIWorksWithoutBearerToken(t *testing.T) {
 	directory := t.TempDir()
 	runtimeEnv := filepath.Join(directory, "runtime.env")
 	if err := os.WriteFile(runtimeEnv, []byte("controller_secret=test-secret\n"), 0o600); err != nil {

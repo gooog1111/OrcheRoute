@@ -145,9 +145,22 @@ QR-кода.
 - [ANDROID_ARCHITECTURE.md](ANDROID_ARCHITECTURE.md) — устройство Android-приложения;
 - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — сторонние компоненты и лицензии.
 
+## Локальная проверка и сборка
+
+Единая точка входа проверяет только поддерживаемые цели — Android и Linux Server:
+
+```powershell
+.\scripts\build-all.ps1 -Target all
+```
+
+На Windows Android собирается локально, а Linux Server — в WSL
+`Ubuntu-24.04`. Отдельные цели: `android`, `linux-server`, `web` и `common`.
+На Linux используется `./scripts/build-all.sh all`. Сборка через GitHub Actions
+в проекте запрещена.
+
 Актуальная разработка ведётся в единственной ветке `main`. Стабильные версии
 зафиксированы тегами `v*`, а тестовые Android-сборки — тегом `android-beta`.
-Сборки и проверки выполняются локально; GitHub Actions в репозитории отключены.
+Сборки и проверки выполняются только локально; workflow GitHub Actions удалены.
 
 ## Лицензии и авторство
 

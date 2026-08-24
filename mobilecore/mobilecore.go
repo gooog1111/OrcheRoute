@@ -251,8 +251,8 @@ func WhitelistTransition(stateJSON, commandJSON string) string {
 }
 
 // OrchestratorTransition owns normal/allowlist/offline transitions and emits
-// a single platform action. Android, Apple and desktop adapters execute that
-// action without duplicating failover policy.
+// a single platform action. Android executes that action without duplicating
+// failover policy.
 func OrchestratorTransition(stateJSON, eventJSON string) string {
 	var state orchestrator.State
 	var event orchestrator.Event
@@ -325,7 +325,7 @@ func PreviewDNS(dnsJSON string) string {
 }
 
 // GenerateMihomoConfig accepts a resolved, platform-neutral network profile.
-// The same function is used by server, desktop and mobile frontends.
+// The same function is available to Linux Server and Android adapters.
 func GenerateMihomoConfig(inputJSON string) string {
 	var input mihomo.Input
 	if json.Unmarshal([]byte(inputJSON), &input) != nil {

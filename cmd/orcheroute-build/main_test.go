@@ -11,7 +11,7 @@ import (
 func TestReplaceDirectoryCopiesFreshTreeAndRemovesStaleFiles(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "webui", "out")
-	destination := filepath.Join(root, "desktop", "frontend", "dist")
+	destination := filepath.Join(root, "dist", "verify", "linux-server", "webui")
 	if err := os.MkdirAll(filepath.Join(source, "assets"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestReplaceDirectoryRejectsUnrelatedDestination(t *testing.T) {
 func TestReplaceDirectoryAllowsVerifiedServerWebUI(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "webui", "out")
-	destination := filepath.Join(root, "dist", "verify", "windows-server", "webui")
+	destination := filepath.Join(root, "dist", "verify", "linux-server", "webui")
 	if err := os.MkdirAll(source, 0o755); err != nil {
 		t.Fatal(err)
 	}

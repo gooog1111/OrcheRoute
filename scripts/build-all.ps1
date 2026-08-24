@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("all", "windows", "windows-server", "windows-desktop", "linux", "linux-server", "linux-desktop", "android", "web", "common")]
+    [ValidateSet("all", "linux-server", "android", "web", "common")]
     [string]$Target = "all",
     [string]$WslDistro = "Ubuntu-24.04"
 )

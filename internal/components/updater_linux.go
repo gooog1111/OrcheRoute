@@ -200,7 +200,7 @@ func (current updater) latest(ctx context.Context) (Release, error) {
 }
 
 func selectLinuxAsset(assets []releaseAsset, architecture, tag string) releaseAsset {
-	// The unqualified amd64 release may require x86-64-v3. Desktop/server
+	// The unqualified amd64 release may require x86-64-v3. Linux Server
 	// packages must run on older AMD64 CPUs, so prefer compatible whenever the
 	// upstream release provides it, regardless of GitHub asset ordering.
 	wanted := "mihomo-linux-" + architecture + "-" + tag + ".gz"
