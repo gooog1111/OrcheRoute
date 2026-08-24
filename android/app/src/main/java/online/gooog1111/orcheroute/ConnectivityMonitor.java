@@ -143,6 +143,7 @@ final class ConnectivityMonitor {
             Network underlay = physicalNetwork(settings.transport);
             activePhysicalNetwork = underlay;
             JSONObject observation = emptyObservation();
+            observation.put("physical_network_available", underlay != null);
             if (underlay != null) {
                 List<Future<Boolean>> results = new ArrayList<>();
                 for (int i = 0; i < targets.length(); i++) {
@@ -247,6 +248,7 @@ final class ConnectivityMonitor {
 
     private static JSONObject emptyObservation() throws JSONException {
         return new JSONObject()
+                .put("physical_network_available", false)
                 .put("allowlist_available", false)
                 .put("configured_open_available", false)
                 .put("open_anchor_github_available", false)

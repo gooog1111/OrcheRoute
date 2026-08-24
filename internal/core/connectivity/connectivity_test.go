@@ -16,7 +16,8 @@ func TestClassifyThreeStates(t *testing.T) {
 		{"normal tolerates one unavailable anchor", Observation{AllowlistAvailable: true, ConfiguredOpenAvailable: true, OpenAnchorGitHubAvailable: true}, Normal},
 		{"allowlist", Observation{AllowlistAvailable: true, ConfiguredOpenAvailable: false, OpenAnchorGitHubAvailable: false, OpenAnchorMozillaAvailable: false}, Allowlist},
 		{"offline", Observation{}, Offline},
-		{"configured open without independent anchor is restricted", Observation{ConfiguredOpenAvailable: true}, Allowlist},
+		{"configured open target proves normal Internet", Observation{ConfiguredOpenAvailable: true}, Normal},
+		{"physical network without reachable HTTP anchors is restricted", Observation{PhysicalNetworkAvailable: true}, Allowlist},
 		{"single reachable anchor proves a restricted network", Observation{OpenAnchorMozillaAvailable: true}, Allowlist},
 	}
 	for _, test := range tests {
@@ -77,7 +78,7 @@ func TestConfirmRejectsTransientOffline(t *testing.T) {
 	}
 }
 
-func TestConfirmNetworkModeNeedsTwoSamplesAndRecoversImmediately(t *testing.T) {
+func TestConfirmRestrictionNeedsTwoSamplesAndNormalRecoversImmediately(t *testing.T) {
 	first, err := Confirm(ConfirmationInput{ConfirmedState: Normal, ObservedState: Allowlist})
 	if err != nil || first.State != Normal || first.CandidateCount != 1 {
 		t.Fatalf("first=%#v err=%v", first, err)
@@ -89,6 +90,10 @@ func TestConfirmNetworkModeNeedsTwoSamplesAndRecoversImmediately(t *testing.T) {
 	recovered, err := Confirm(ConfirmationInput{ConfirmedState: Offline, ObservedState: Normal})
 	if err != nil || recovered.State != Normal || !recovered.Changed {
 		t.Fatalf("recovered=%#v err=%v", recovered, err)
+	}
+	recovered, err = Confirm(ConfirmationInput{ConfirmedState: Allowlist, ObservedState: Normal})
+	if err != nil || recovered.State != Normal || !recovered.Changed {
+		t.Fatalf("allowlist recovery=%#v err=%v", recovered, err)
 	}
 }
 

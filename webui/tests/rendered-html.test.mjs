@@ -113,6 +113,7 @@ test("android connectivity monitor binds DNS and HTTP to a physical network", as
   assert.match(monitor, /Mobilecore\.connectivityTargets/);
   assert.match(monitor, /Mobilecore\.classifyConnectivity/);
   assert.match(monitor, /Mobilecore\.confirmConnectivity/);
+  assert.match(monitor, /physical_network_available[\s\S]*underlay != null/);
   assert.match(monitor, /observed=[\s\S]*confirmed=[\s\S]*candidate=[\s\S]*streak=/);
   assert.doesNotMatch(monitor, /probeConnectivity/);
 });
@@ -122,6 +123,8 @@ test("android whitelist scan finishes before VPN connect and checks one source c
   const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
   assert.match(runtime, /allowlistRouteOverride[\s\S]*scheduleRefresh\(subscriptionId, true, null, true, false, false\)/);
   assert.match(runtime, /scheduleRefresh\(subscriptionId, true, null, true, false, false\)/);
+  assert.match(runtime, /boolean restrictedScan = allowlistScan;/);
+  assert.match(runtime, /restrictedScan[\s\S]*repository\.replaceWhitelistSource/);
   assert.doesNotMatch(runtime, /Найден доступный сервер, подключаемся/);
   assert.match(repository, /\.put\("selected", !whitelistMode && poolSelected\)/);
   assert.match(repository, /\.put\("selected", whitelistMode\)/);

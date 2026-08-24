@@ -35,6 +35,7 @@ type Target struct {
 }
 
 type Observation struct {
+	PhysicalNetworkAvailable   bool `json:"physical_network_available"`
 	AllowlistAvailable         bool `json:"allowlist_available"`
 	ConfiguredOpenAvailable    bool `json:"configured_open_available"`
 	OpenAnchorGitHubAvailable  bool `json:"open_anchor_github_available"`
@@ -43,6 +44,7 @@ type Observation struct {
 
 type Result struct {
 	State                      State `json:"state"`
+	PhysicalNetworkAvailable   bool  `json:"physical_network_available"`
 	AllowlistAvailable         bool  `json:"allowlist_available"`
 	OpenInternetAvailable      bool  `json:"open_internet_available"`
 	ConfiguredOpenAvailable    bool  `json:"configured_open_available"`
@@ -132,8 +134,12 @@ func Diagnose(ctx context.Context, config Config, probe Probe) (Result, error) {
 
 func Classify(observation Observation) Result {
 	anchors := observation.OpenAnchorGitHubAvailable || observation.OpenAnchorMozillaAvailable
-	open := observation.ConfiguredOpenAvailable && anchors
-	anyReachable := observation.AllowlistAvailable || observation.ConfiguredOpenAvailable ||
+	// The user-configured open-Internet target is deliberately chosen to be
+	// unreachable through an operator allowlist. Requiring a second public
+	// anchor made recovery depend on GitHub/Mozilla as well and delayed normal
+	// mode even after this authoritative target had recovered.
+	open := observation.ConfiguredOpenAvailable
+	anyReachable := observation.PhysicalNetworkAvailable || observation.AllowlistAvailable || observation.ConfiguredOpenAvailable ||
 		observation.OpenAnchorGitHubAvailable || observation.OpenAnchorMozillaAvailable
 	state := Offline
 	if open {
@@ -143,6 +149,7 @@ func Classify(observation Observation) Result {
 	}
 	return Result{
 		State:                      state,
+		PhysicalNetworkAvailable:   observation.PhysicalNetworkAvailable,
 		AllowlistAvailable:         observation.AllowlistAvailable,
 		OpenInternetAvailable:      open,
 		ConfiguredOpenAvailable:    observation.ConfiguredOpenAvailable,
@@ -176,6 +183,11 @@ func Confirm(input ConfirmationInput) (ConfirmationResult, error) {
 	}
 	required := 2
 	if confirmed == Offline {
+		required = 1
+	} else if input.ObservedState == Normal {
+		// A successful request to the explicitly configured open-Internet
+		// target is positive evidence, so recovery must not wait for another
+		// periodic monitor cycle.
 		required = 1
 	} else if input.ObservedState == Offline && confirmed != "unknown" {
 		required = 3

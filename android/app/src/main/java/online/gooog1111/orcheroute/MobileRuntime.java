@@ -484,7 +484,12 @@ final class MobileRuntime {
                 ensureRefreshContinues(allowlistScan);
                 JSONObject item = items.getJSONObject(i);
                 String id = item.getString("id");
-                boolean restrictedScan = allowlistScan && "allowlist".equals(connectivityState);
+                // A per-source allowlist check must always write its qualified
+                // nodes to the derived allowlist list. The monitor already
+                // validated the mode before this loop; tying persistence to a
+                // captured label caused successful manual checks to update only
+                // the normal list after a transient monitor transition.
+                boolean restrictedScan = allowlistScan;
                 updateRefresh("running", checkOnly ? "parse" : "fetch",
                         (checkOnly ? "Подготавливаем сохранённые серверы «" : "Загружается «") + item.optString("name") + "»",
                         i, items.length(), "");
