@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gooog1111/orcheroute/internal/mobile/routing"
+	"github.com/gooog1111/orcheroute/internal/core/routing"
 )
 
 const (

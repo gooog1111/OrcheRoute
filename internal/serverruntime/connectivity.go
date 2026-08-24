@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	mobileconnectivity "github.com/gooog1111/orcheroute/internal/mobile/connectivity"
+	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
 	"github.com/gooog1111/orcheroute/internal/network"
 	"github.com/gooog1111/orcheroute/internal/qualification"
 )

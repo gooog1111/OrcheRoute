@@ -3,7 +3,7 @@ package constructor
 import (
 	"testing"
 
-	"github.com/gooog1111/orcheroute/internal/mobile/routing"
+	"github.com/gooog1111/orcheroute/internal/core/routing"
 )
 
 func TestBuildKeepsRoutingAndDNSInputs(t *testing.T) {

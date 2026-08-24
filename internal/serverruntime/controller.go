@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/controller"
-	mobileconnectivity "github.com/gooog1111/orcheroute/internal/mobile/connectivity"
+	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
 	"github.com/gooog1111/orcheroute/internal/whitelist"
 )

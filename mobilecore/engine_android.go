@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	mobileconnectivity "github.com/gooog1111/orcheroute/internal/mobile/connectivity"
+	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/component/dialer"

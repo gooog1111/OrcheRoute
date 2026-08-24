@@ -1,4 +1,4 @@
-package mobile_test
+package core_test
 
 import (
 	"go/parser"
@@ -32,7 +32,7 @@ func TestMicroLayerDependencyDirections(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				const prefix = "github.com/gooog1111/orcheroute/internal/mobile/"
+				const prefix = "github.com/gooog1111/orcheroute/internal/core/"
 				if !strings.HasPrefix(path, prefix) {
 					continue
 				}

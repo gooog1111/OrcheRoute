@@ -1,6 +1,6 @@
 package mobilecore
 
-import mobiletransport "github.com/gooog1111/orcheroute/internal/mobile/transport"
+import mobiletransport "github.com/gooog1111/orcheroute/internal/core/transport"
 
 type transportContractCheck struct{}
 

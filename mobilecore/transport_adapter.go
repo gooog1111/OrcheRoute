@@ -1,7 +1,7 @@
 package mobilecore
 
 import (
-	mobiletransport "github.com/gooog1111/orcheroute/internal/mobile/transport"
+	mobiletransport "github.com/gooog1111/orcheroute/internal/core/transport"
 	"github.com/metacubex/mihomo/tunnel/statistic"
 )
 

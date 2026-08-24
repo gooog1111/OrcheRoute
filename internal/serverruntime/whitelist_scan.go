@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/gooog1111/orcheroute/internal/mobile/connectivity"
+	"github.com/gooog1111/orcheroute/internal/core/connectivity"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"github.com/gooog1111/orcheroute/internal/updater"
 	"github.com/gooog1111/orcheroute/internal/whitelist"
