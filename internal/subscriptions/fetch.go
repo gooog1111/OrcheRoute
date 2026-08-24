@@ -83,9 +83,22 @@ func (fetcher HTTPFetcher) Fetch(ctx context.Context, subscription Subscription)
 type FetcherMap map[Parser]Fetcher
 
 func (fetchers FetcherMap) Fetch(ctx context.Context, subscription Subscription) ([]string, error) {
+	result, err := fetchers.FetchDetected(ctx, subscription)
+	return result.Links, err
+}
+
+func (fetchers FetcherMap) FetchDetected(ctx context.Context, subscription Subscription) (FetchResult, error) {
+	if subscription.Parser == Standard {
+		standard := fetchers[Standard]
+		if standard == nil {
+			return FetchResult{}, fmt.Errorf("unsupported_parser")
+		}
+		return DetectAndFetch(ctx, subscription, standard, fetchers[BlackTemple])
+	}
 	fetcher := fetchers[subscription.Parser]
 	if fetcher == nil {
-		return nil, fmt.Errorf("unsupported_parser")
+		return FetchResult{}, fmt.Errorf("unsupported_parser")
 	}
-	return fetcher.Fetch(ctx, subscription)
+	links, err := fetcher.Fetch(ctx, subscription)
+	return FetchResult{Parser: subscription.Parser, Links: links}, err
 }

@@ -110,7 +110,16 @@ func Run(ctx context.Context, dependencies Dependencies, request Request) (Resul
 		if !subscriptions.RefreshDue(now(), item.LastSuccess, item.IntervalSeconds, request.Force, cached) {
 			continue
 		}
-		links, fetchErr := dependencies.Fetcher.Fetch(ctx, item)
+		detectedParser := item.Parser
+		var links []string
+		var fetchErr error
+		if detector, ok := dependencies.Fetcher.(subscriptions.DetectingFetcher); ok {
+			var detected subscriptions.FetchResult
+			detected, fetchErr = detector.FetchDetected(ctx, item)
+			links, detectedParser = detected.Links, detected.Parser
+		} else {
+			links, fetchErr = dependencies.Fetcher.Fetch(ctx, item)
+		}
 		if fetchErr == nil && len(links) == 0 {
 			fetchErr = fmt.Errorf("parser returned no links")
 		}
@@ -129,6 +138,11 @@ func Run(ctx context.Context, dependencies Dependencies, request Request) (Resul
 		if err := dependencies.Cache.Write(ctx, item.ID, cache); err != nil {
 			result.Failures = appendUnique(result.Failures, item.ID)
 			continue
+		}
+		if detectedParser != "" && detectedParser != item.Parser {
+			// Detection is already confirmed by a successful protocol fetch. Cache
+			// remains usable even if this best-effort metadata migration fails.
+			_, _ = dependencies.Repository.Update(ctx, item.ID, map[string]any{"parser": string(detectedParser)})
 		}
 		count := len(cache.Links)
 		if dependencies.UpdateStatus != nil {

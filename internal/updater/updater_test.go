@@ -11,7 +11,10 @@ import (
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 )
 
-type fakeRepository struct{ items []subscriptions.Subscription }
+type fakeRepository struct {
+	items   []subscriptions.Subscription
+	updates map[string]map[string]any
+}
 
 func (repository *fakeRepository) List(context.Context, bool) ([]subscriptions.Subscription, error) {
 	return append([]subscriptions.Subscription{}, repository.items...), nil
@@ -28,7 +31,21 @@ func (repository *fakeRepository) Get(_ context.Context, id string, _ bool) (*su
 func (repository *fakeRepository) Create(context.Context, subscriptions.Subscription) (*subscriptions.Subscription, error) {
 	return nil, nil
 }
-func (repository *fakeRepository) Update(context.Context, string, map[string]any) (*subscriptions.Subscription, error) {
+func (repository *fakeRepository) Update(_ context.Context, id string, changes map[string]any) (*subscriptions.Subscription, error) {
+	if repository.updates == nil {
+		repository.updates = map[string]map[string]any{}
+	}
+	repository.updates[id] = changes
+	for index := range repository.items {
+		if repository.items[index].ID != id {
+			continue
+		}
+		if parser, ok := changes["parser"].(string); ok {
+			repository.items[index].Parser = subscriptions.Parser(parser)
+		}
+		copy := repository.items[index]
+		return &copy, nil
+	}
 	return nil, nil
 }
 func (repository *fakeRepository) Delete(context.Context, string) (bool, error) { return false, nil }
@@ -36,6 +53,18 @@ func (repository *fakeRepository) Delete(context.Context, string) (bool, error) 
 type fakeFetcher struct {
 	calls []string
 	links map[string][]string
+}
+
+type detectingFakeFetcher struct {
+	result subscriptions.FetchResult
+}
+
+func (fetcher *detectingFakeFetcher) Fetch(context.Context, subscriptions.Subscription) ([]string, error) {
+	return fetcher.result.Links, nil
+}
+
+func (fetcher *detectingFakeFetcher) FetchDetected(context.Context, subscriptions.Subscription) (subscriptions.FetchResult, error) {
+	return fetcher.result, nil
 }
 
 func (fetcher *fakeFetcher) Fetch(_ context.Context, item subscriptions.Subscription) ([]string, error) {
@@ -166,6 +195,31 @@ func TestSuccessfulFetchReplacesPreviousCache(t *testing.T) {
 	stored, err := cache.Read(ctx, "due")
 	if err != nil || len(stored) != 1 || stored[0] != newLink {
 		t.Fatalf("cache=%v err=%v", stored, err)
+	}
+}
+
+func TestSuccessfulAutomaticDetectionPersistsConfirmedParser(t *testing.T) {
+	ctx := context.Background()
+	directory := t.TempDir()
+	repository := &fakeRepository{items: []subscriptions.Subscription{{
+		ID: "black", Name: "BlackTemple", GroupName: subscriptions.Primary,
+		Parser: subscriptions.Standard, Secret: "https://example.test/opaque", Enabled: true,
+		IntervalSeconds: 300, LastSuccess: 1,
+	}}}
+	link := "vless://11111111-1111-1111-1111-111111111111@one.example:443#One"
+	_, err := Run(ctx, Dependencies{
+		Repository: repository,
+		Cache:      subscriptions.FileCache{Directory: filepath.Join(directory, "cache")},
+		Fetcher:    &detectingFakeFetcher{result: subscriptions.FetchResult{Parser: subscriptions.BlackTemple, Links: []string{link}}},
+		Qualifier:  fakeQualifier{},
+		Providers:  FileProviderStore{ProvidersDirectory: filepath.Join(directory, "providers")},
+		Now:        func() time.Time { return time.Unix(1000, 0) },
+	}, Request{Groups: []subscriptions.Group{subscriptions.Primary}, RequestedGroups: map[subscriptions.Group]bool{subscriptions.Primary: true}, Policies: map[subscriptions.Group]map[string]any{subscriptions.Primary: {}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repository.items[0].Parser != subscriptions.BlackTemple {
+		t.Fatalf("parser was not persisted: %#v", repository.updates)
 	}
 }
 

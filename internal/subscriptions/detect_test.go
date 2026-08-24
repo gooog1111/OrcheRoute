@@ -51,3 +51,16 @@ func TestDetectAndFetchDoesNotProbeOrdinarySubscription(t *testing.T) {
 		t.Fatalf("ordinary source was probed: %#v err=%v calls=%d", result, err, special.calls)
 	}
 }
+
+func TestFetcherMapUsesAutomaticDetectionForStandardSubscription(t *testing.T) {
+	standard := &detectionFetcher{links: []string{"vless://bootstrap"}}
+	special := &detectionFetcher{links: []string{"vless://one", "vless://two"}}
+	fetchers := FetcherMap{Standard: standard, BlackTemple: special}
+	result, err := fetchers.FetchDetected(context.Background(), Subscription{
+		Parser: Standard,
+		Secret: "https://provider.invalid/sub/abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-",
+	})
+	if err != nil || result.Parser != BlackTemple || len(result.Links) != 2 {
+		t.Fatalf("automatic fetch failed: %#v err=%v", result, err)
+	}
+}

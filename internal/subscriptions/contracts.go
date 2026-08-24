@@ -20,6 +20,13 @@ type Fetcher interface {
 	Fetch(ctx context.Context, subscription Subscription) ([]string, error)
 }
 
+// DetectingFetcher reports the adapter that actually accepted an automatic
+// subscription. Platform updaters use this to persist a confirmed protocol
+// instead of repeating detection on every refresh.
+type DetectingFetcher interface {
+	FetchDetected(ctx context.Context, subscription Subscription) (FetchResult, error)
+}
+
 type CacheRepository interface {
 	Read(ctx context.Context, subscriptionID string) ([]string, error)
 	Write(ctx context.Context, subscriptionID string, cache Cache) error
