@@ -3,6 +3,8 @@ package mihomo
 import (
 	"fmt"
 	"path"
+
+	"github.com/gooog1111/orcheroute/internal/core/constructor"
 )
 
 type Role struct {
@@ -106,30 +108,13 @@ func Build(input Input) (map[string]any, error) {
 	}
 	directEgress["routing-mark"] = directRole.Mark
 	underlayDNS["routing-mark"] = vpnRole.Mark
-	config := map[string]any{
+	config := constructor.CommonConfig(input.Network.DNS.Config.IPv6, "memconservative", true)
+	for key, value := range map[string]any{
 		"mixed-port": 21080, "bind-address": "127.0.0.1", "allow-lan": false,
-		"mode": "rule", "log-level": "info", "ipv6": input.Network.DNS.Config.IPv6,
-		"unified-delay": true, "tcp-concurrent": true, "geodata-mode": true,
-		"geodata-loader": "memconservative", "geo-auto-update": true, "geo-update-interval": 24,
-		"geox-url": map[string]any{
-			"geoip":   "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat",
-			"geosite": "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat",
-			"mmdb":    "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/country.mmdb",
-		},
+		"geo-update-interval": 24, "geox-url": constructor.GeoURLs(true),
 		"etag-support": true, "external-controller": "127.0.0.1:19090", "secret": input.Secret,
 		"profile": map[string]any{"store-selected": true, "store-fake-ip": false},
-		"sniffer": map[string]any{
-			"enable": true, "force-dns-mapping": true, "parse-pure-ip": true, "override-destination": true,
-			"sniff": map[string]any{
-				"HTTP": map[string]any{"ports": []any{80, "8080-8880"}, "override-destination": true},
-				"TLS":  map[string]any{"ports": []any{443, 8443}},
-				"QUIC": map[string]any{"ports": []any{443, 8443}},
-			},
-			"skip-dst-address": []string{
-				"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
-				"169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4",
-			},
-		},
+		"sniffer": constructor.Sniffer(true),
 		"dns": map[string]any{
 			"enable": true, "listen": "127.0.0.1:21053", "ipv6": input.Network.DNS.Config.IPv6,
 			"enhanced-mode": "normal", "cache-algorithm": input.Network.DNS.Config.CacheAlgorithm,
@@ -179,6 +164,8 @@ func Build(input Input) (map[string]any, error) {
 			"RULE-SET,routes-block,REJECT", "RULE-SET,routes-direct,DIRECT-EGRESS",
 			"RULE-SET,routes-proxy,ACTIVE", "MATCH,DEFAULT",
 		},
+	} {
+		config[key] = value
 	}
 
 	capture := input.Network.Profile.Capture

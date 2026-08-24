@@ -60,17 +60,11 @@ func Build(request Request) (Result, error) {
 	if dns.Cache != "arc" && dns.Cache != "lru" {
 		dns.Cache = "arc"
 	}
-	config := map[string]any{
-		"mode": "rule", "log-level": "info", "ipv6": dns.IPv6, "find-process-mode": "off", "unified-delay": true, "tcp-concurrent": true,
-		"geodata-mode": true, "geodata-loader": "standard", "geo-auto-update": false,
-		"geox-url": map[string]any{"geoip": GeoIPURL, "geosite": GeoSiteURL},
-		"sniffer": map[string]any{
-			"enable": true, "force-dns-mapping": true, "parse-pure-ip": true, "override-destination": true,
-			"sniff": map[string]any{
-				"HTTP": map[string]any{"ports": []any{80, "8080-8880"}, "override-destination": true},
-				"TLS":  map[string]any{"ports": []any{443, 8443}}, "QUIC": map[string]any{"ports": []any{443, 8443}},
-			},
-		},
+	config := CommonConfig(dns.IPv6, "standard", false)
+	config["find-process-mode"] = "off"
+	config["geox-url"] = GeoURLs(false)
+	config["sniffer"] = Sniffer(false)
+	for key, value := range map[string]any{
 		"dns": map[string]any{
 			"enable": true, "ipv6": dns.IPv6, "enhanced-mode": "fake-ip", "fake-ip-range": "198.18.0.1/16", "respect-rules": true,
 			"default-nameserver": dns.Bootstrap, "proxy-server-nameserver": dns.VPNUnderlay, "nameserver": dns.Proxy, "direct-nameserver": dns.Direct,
@@ -78,6 +72,8 @@ func Build(request Request) (Result, error) {
 		},
 		"proxies": []any{request.Proxy}, "proxy-groups": []any{map[string]any{"name": "ACTIVE", "type": "select", "proxies": []string{name}}},
 		"rules": request.Routing.Rules,
+	} {
+		config[key] = value
 	}
 	return Result{Config: config, Node: name}, nil
 }
