@@ -5,6 +5,7 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -256,9 +257,10 @@ func (b *builder) android() error {
 			"-PorcherouteMobileCoreAar="+aar, "-PorcherouteWebAssets="+webOut); err != nil {
 			return err
 		}
-		return verifyArchiveEntry(
+		return verifyArchiveFileMatches(
 			filepath.Join(androidDir, "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
 			"assets/web/index.html",
+			filepath.Join(webOut, "index.html"),
 		)
 	})
 }
@@ -426,6 +428,40 @@ func verifyArchiveEntry(path, required string) error {
 		if entry.Name == required {
 			return nil
 		}
+	}
+	return fmt.Errorf("Android artifact %s does not contain required %s", path, required)
+}
+
+func verifyArchiveFileMatches(path, required, source string) error {
+	expected, err := os.ReadFile(source)
+	if err != nil {
+		return fmt.Errorf("read canonical WebUI asset %s: %w", source, err)
+	}
+	archive, err := zip.OpenReader(path)
+	if err != nil {
+		return fmt.Errorf("open Android artifact %s: %w", path, err)
+	}
+	defer archive.Close()
+	for _, entry := range archive.File {
+		if entry.Name != required {
+			continue
+		}
+		reader, err := entry.Open()
+		if err != nil {
+			return fmt.Errorf("open Android WebUI asset %s: %w", required, err)
+		}
+		actual, readErr := io.ReadAll(reader)
+		closeErr := reader.Close()
+		if readErr != nil {
+			return fmt.Errorf("read Android WebUI asset %s: %w", required, readErr)
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		if !bytes.Equal(actual, expected) {
+			return fmt.Errorf("Android WebUI asset %s differs from canonical WebUI", required)
+		}
+		return nil
 	}
 	return fmt.Errorf("Android artifact %s does not contain required %s", path, required)
 }

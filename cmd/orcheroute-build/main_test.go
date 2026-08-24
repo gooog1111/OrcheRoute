@@ -102,3 +102,39 @@ func TestVerifyArchiveEntryRequiresEmbeddedAndroidIndex(t *testing.T) {
 		t.Fatal("missing root asset was accepted")
 	}
 }
+
+func TestVerifyArchiveFileMatchesCanonicalWebUI(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "app.apk")
+	source := filepath.Join(directory, "index.html")
+	if err := os.WriteFile(source, []byte("canonical"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archive := zip.NewWriter(file)
+	entry, err := archive.Create("assets/web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := entry.Write([]byte("canonical")); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyArchiveFileMatches(path, "assets/web/index.html", source); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("newer"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyArchiveFileMatches(path, "assets/web/index.html", source); err == nil {
+		t.Fatal("stale Android WebUI was accepted")
+	}
+}
