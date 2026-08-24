@@ -71,6 +71,28 @@ func TestWhitelistTransitionBindingPreventsParallelSelection(t *testing.T) {
 	}
 }
 
+func TestFailoverStepBindingUsesSharedFailureThreshold(t *testing.T) {
+	observation := `{"now":100,"wan_available":true,"active_ok":false,"active":"old","active_pool":"primary","nodes":[{"name":"old","pool":"primary","alive":true},{"name":"next","pool":"primary","alive":true}],"control":{"enabled":true,"mode":"auto"}}`
+	var first map[string]any
+	if err := json.Unmarshal([]byte(FailoverStep(`{}`, observation)), &first); err != nil || first["ok"] != true {
+		t.Fatalf("first step failed: %v %#v", err, first)
+	}
+	result := first["result"].(map[string]any)
+	decision := result["decision"].(map[string]any)
+	if decision["action"] != "keep" {
+		t.Fatalf("first failure switched node: %#v", decision)
+	}
+	state, _ := json.Marshal(result["state"])
+	var second map[string]any
+	if err := json.Unmarshal([]byte(FailoverStep(string(state), observation)), &second); err != nil || second["ok"] != true {
+		t.Fatalf("second step failed: %v %#v", err, second)
+	}
+	decision = second["result"].(map[string]any)["decision"].(map[string]any)
+	if decision["action"] != "select" || decision["target"] != "next" {
+		t.Fatalf("unexpected second decision: %#v", decision)
+	}
+}
+
 func TestParseLinkBinding(t *testing.T) {
 	result := ParseLink(
 		"vless://b831381d-6324-4d53-ad4f-8cda48b30811@example.com:443?security=tls&type=tcp&sni=example.com#Mobile",

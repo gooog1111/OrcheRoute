@@ -67,7 +67,6 @@ public final class OrcheRouteVpnService extends VpnService {
     private volatile boolean connected;
     private volatile boolean starting;
     private volatile boolean stopping;
-    private volatile int healthFailureStreak;
     private ScheduledFuture<?> healthMonitor;
     private ScheduledFuture<?> trafficMonitor;
     private ScheduledFuture<?> identityMonitor;
@@ -398,14 +397,12 @@ public final class OrcheRouteVpnService extends VpnService {
         ScheduledFuture<?> monitor = healthMonitor;
         healthMonitor = null;
         if (monitor != null) monitor.cancel(false);
-        healthFailureStreak = 0;
     }
 
     private void probeActiveProxy() {
         if (!connected || stopping) return;
         MobileRuntime runtime = MobileRuntime.get(this);
         if (!runtime.automaticFailoverEnabled()) {
-            healthFailureStreak = 0;
             return;
         }
         HttpURLConnection connection = null;
@@ -414,11 +411,9 @@ public final class OrcheRouteVpnService extends VpnService {
 			boolean restrictedNetwork = "allowlist".equals(networkMode);
 			if (restrictedNetwork) {
 				boolean changed = runtime.enterAllowlistMode();
-				healthFailureStreak = 0;
 				if (changed) return;
 			}
 			if ("normal".equals(networkMode) && runtime.leaveAllowlistMode()) {
-				healthFailureStreak = 0;
 				if (connected && !stopping) reload(this);
 				return;
 			}
@@ -428,8 +423,7 @@ public final class OrcheRouteVpnService extends VpnService {
             connection.setInstanceFollowRedirects(false);
             int status = connection.getResponseCode();
             if (status == 204 || (status >= 200 && status < 400)) {
-				runtime.onProxyHealth(true);
-                healthFailureStreak = 0;
+				if ("select".equals(runtime.onProxyHealth(true)) && connected && !stopping) reload(this);
                 return;
             }
             throw new IllegalStateException("HTTP " + status);
@@ -437,7 +431,6 @@ public final class OrcheRouteVpnService extends VpnService {
 			String networkMode = runtime.connectivityState();
 			if ("offline".equals(networkMode)) {
 				runtime.onUnderlyingOfflineDetected();
-                healthFailureStreak = 0;
 				return;
 			}
 			if ("allowlist".equals(networkMode)) {
@@ -449,18 +442,9 @@ public final class OrcheRouteVpnService extends VpnService {
 				} catch (Throwable error) {
 					runtime.onEngineError(error.getMessage());
 				}
-				healthFailureStreak = 0;
 				return;
 			}
-			runtime.onProxyHealth(false);
-			if (++healthFailureStreak < 2) return;
-            healthFailureStreak = 0;
-            try {
-                String next = runtime.failoverActiveNode();
-                if (!next.isEmpty() && connected && !stopping) reload(this);
-            } catch (Throwable error) {
-                runtime.onEngineError(error.getMessage());
-            }
+			if ("select".equals(runtime.onProxyHealth(false)) && connected && !stopping) reload(this);
         } finally {
             if (connection != null) connection.disconnect();
         }

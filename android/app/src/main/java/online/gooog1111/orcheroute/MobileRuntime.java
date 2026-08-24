@@ -53,10 +53,7 @@ final class MobileRuntime {
     private long allowlistLastScanAt;
     private boolean whitelistConnectPending;
     private String connectedNodeID = "";
-	private int stableHealthChecks;
-	private long lastPrimaryRecoveryAt;
-	private long primaryRecoveryStartedAt;
-	private boolean primaryRecoveryActive;
+	private boolean controllerQualificationActive;
     private boolean componentActive;
     private String componentStatus = "idle";
     private String componentPhase = "idle";
@@ -158,7 +155,6 @@ final class MobileRuntime {
         whitelistConnectPending = false;
         if (!connectedNodeID.equals(nodeID == null ? "" : nodeID)) proxyIdentity = new JSONObject();
         connectedNodeID = nodeID == null ? "" : nodeID;
-		stableHealthChecks = 0;
         if (allowlistRouteOverride) {
             try { repository.confirmWhitelistNode(connectedNodeID); } catch (JSONException error) { refreshError = readable(error); }
         }
@@ -505,7 +501,7 @@ final class MobileRuntime {
                         links = fetchResult.getJSONArray("links");
                         repository.updateDetectedParser(id, fetchResult.optString("parser", item.optString("parser", "standard")));
                         repository.cacheRefreshSucceeded(id, links);
-						if (!primaryRecoveryActive) {
+						if (!controllerQualificationActive) {
 							success++;
 							continue;
 						}
@@ -610,8 +606,6 @@ final class MobileRuntime {
                     }
                 }
                 updateRefresh("success", "complete", "Список для белых списков готов: " + repository.whitelistCount() + " серверов", items.length(), items.length(), "");
-			} else if (primaryRecoveryActive && success > 0) {
-				if (repository.preferPrimaryIfAvailable(primaryRecoveryStartedAt)) restartIfEnabled();
 			} else if (checkOnly && success > 0) {
 				restartIfEnabled();
 			}
@@ -625,7 +619,7 @@ final class MobileRuntime {
                     try { repository.completeWhitelistScan(); } catch (JSONException ignored) { }
                 }
                 refreshActive = false; refreshAllowlistScan = false; refreshUpdatedAt = now();
-				primaryRecoveryActive = false;
+				controllerQualificationActive = false;
                 refreshCancelRequested = false;
                 if (allowlistScan && allowlistRouteOverride) {
                     allowlistWorkingFound = repository.whitelistCount() > 0;
@@ -920,16 +914,7 @@ final class MobileRuntime {
 		OrcheRouteVpnService.pauseForNetwork(context);
     }
 
-    synchronized String failoverActiveNode() throws JSONException {
-		stableHealthChecks = 0;
-        JSONObject next = repository.failoverActiveNode();
-        if (next != null) return next.optString("display_name");
-        scheduleRefresh(null, true, "emergency".equals(repository.mode()) ? "emergency" : null);
-        return "";
-    }
-
     synchronized String failoverWhitelistNode() throws JSONException {
-		stableHealthChecks = 0;
         whitelistConnectPending = false;
         JSONObject next = repository.failoverWhitelistNode();
         if (next != null) {
@@ -1063,30 +1048,24 @@ final class MobileRuntime {
 
     private void restartIfEnabled() { if (desiredEnabled) OrcheRouteVpnService.reload(context); }
 
-	synchronized void onProxyHealth(boolean successful) {
-		String activePool = "";
+	synchronized String onProxyHealth(boolean successful) {
 		try {
 			repository.recordHealth(connectedNodeID, allowlistRouteOverride, successful);
-			activePool = repository.activePool();
+			if (allowlistRouteOverride || !"normal".equals(connectivityState()) || !"auto".equals(repository.mode())) return "keep";
+			JSONObject decision = repository.failoverStep(successful);
+			String action = decision.optString("action", "keep");
+			if ("refresh".equals(action) && !refreshActive) {
+				controllerQualificationActive = true;
+				String pool = decision.optString("pool", "");
+				JSONObject scheduled = scheduleRefresh(null, false, pool.isEmpty() ? null : pool);
+				if (!scheduled.optBoolean("accepted", false)) controllerQualificationActive = false;
+			}
+			return action;
 		}
-		catch (JSONException error) { refreshError = readable(error); }
-		if (!successful) {
-			stableHealthChecks = 0;
-			return;
-		}
-		stableHealthChecks++;
-		if (allowlistRouteOverride || stableHealthChecks < 8 || refreshActive
-				|| !"normal".equals(connectivityState()) || !"auto".equals(repository.mode())
-				|| !"emergency".equals(activePool) || now() - lastPrimaryRecoveryAt < 300) return;
-		lastPrimaryRecoveryAt = now();
-		primaryRecoveryStartedAt = lastPrimaryRecoveryAt;
-		primaryRecoveryActive = true;
-		try {
-			JSONObject scheduled = scheduleRefresh(null, false, "primary");
-			if (!scheduled.optBoolean("accepted", false)) primaryRecoveryActive = false;
-		} catch (JSONException error) {
-			primaryRecoveryActive = false;
+		catch (JSONException error) {
+			controllerQualificationActive = false;
 			refreshError = readable(error);
+			return "keep";
 		}
 	}
 

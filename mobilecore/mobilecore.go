@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gooog1111/orcheroute/internal/controller"
 	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
 	mobileconstructor "github.com/gooog1111/orcheroute/internal/core/constructor"
 	mobilemapper "github.com/gooog1111/orcheroute/internal/core/mapper"
@@ -278,6 +279,19 @@ func NetworkDecision(inputJSON string) string {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
 	return encode(map[string]any{"ok": true, "result": result})
+}
+
+// FailoverStep applies the same automatic server selection, cooldown and
+// failback policy as Linux Server. Native adapters only provide observations
+// and execute the returned select/refresh/keep action.
+func FailoverStep(stateJSON, observationJSON string) string {
+	var state controller.State
+	var observation controller.Observation
+	if json.Unmarshal([]byte(stateJSON), &state) != nil || json.Unmarshal([]byte(observationJSON), &observation) != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_failover_step"}})
+	}
+	next, decision := controller.Step(state, observation, controller.DefaultPolicy())
+	return encode(map[string]any{"ok": true, "result": map[string]any{"state": next, "decision": decision}})
 }
 
 // RankNodes orders available nodes by shared latency, throughput and

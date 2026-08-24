@@ -198,6 +198,17 @@ test("android delegates network and DNS validation to the shared Go validator", 
   assert.doesNotMatch(repository, /new String\[\]\{"direct", "proxy", "vpn_underlay", "bootstrap"\}/);
 });
 
+test("android and linux use the shared failover controller", async () => {
+  const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
+  const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
+  const server = await readFile(new URL("../../internal/serverruntime/controller.go", import.meta.url), "utf8");
+  assert.match(repository, /Mobilecore\.failoverStep/);
+  assert.match(server, /controller\.Step/);
+  assert.doesNotMatch(service, /healthFailureStreak/);
+  assert.doesNotMatch(repository, /failoverActiveNode/);
+  assert.doesNotMatch(repository, /preferPrimaryIfAvailable/);
+});
+
 test("shared prerelease branding labels every UI and feeds the Android native shell", async () => {
   const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
   const nextConfig = await readFile(new URL("../next.config.ts", import.meta.url), "utf8");

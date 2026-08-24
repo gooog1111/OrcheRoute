@@ -566,24 +566,6 @@ final class MobileRepository {
 		}
 	}
 
-	synchronized boolean preferPrimaryIfAvailable(long testedAfter) throws JSONException {
-		if (!"auto".equals(mode())) return false;
-		JSONObject current = findNode(root.optString("selected_node", ""));
-		if (current != null && "primary".equals(current.optString("pool")) && current.optBoolean("alive", false)) return false;
-		rankNodesLocked("nodes");
-		JSONArray nodes = root.getJSONArray("nodes");
-		for (int i = 0; i < nodes.length(); i++) {
-			JSONObject node = nodes.getJSONObject(i);
-			if (node.optBoolean("alive", false) && "primary".equals(node.optString("pool"))
-					&& node.optLong("last_tested_at", 0) >= testedAfter) {
-				root.put("selected_node", node.getString("id"));
-				save();
-				return true;
-			}
-		}
-		return false;
-	}
-
 	synchronized boolean serviceDesired() { return root.optBoolean("service_desired", false); }
 
 	synchronized void setServiceDesired(boolean desired) throws JSONException {
@@ -717,22 +699,6 @@ final class MobileRepository {
     }
 
     synchronized String mode() { return root.optString("mode", "auto"); }
-
-	synchronized String activePool() throws JSONException {
-		JSONObject node = findNode(root.optString("selected_node", ""));
-		return node == null ? "" : node.optString("pool", "");
-	}
-
-    synchronized JSONObject failoverActiveNode() throws JSONException {
-        if ("manual".equals(mode())) return null;
-        JSONObject active = findNode(root.optString("selected_node", ""));
-		if (active != null) active.put("alive", false).put("delay_ms", JSONObject.NULL);
-        root.remove("selected_node");
-		rankNodesLocked("nodes");
-        JSONObject next = selectBestLocked();
-        save();
-        return next == null ? null : new JSONObject(next.toString());
-    }
 
     synchronized JSONArray pools() throws JSONException { return pools(false); }
 
@@ -894,6 +860,45 @@ final class MobileRepository {
 		JSONObject envelope = new JSONObject(Mobilecore.validateMobileNetworkProfile(profile.toString()));
 		if (!envelope.optBoolean("ok")) throw new JSONException(coreError(envelope));
     }
+
+	synchronized JSONObject failoverStep(boolean activeOK) throws JSONException {
+		JSONArray observations = new JSONArray();
+		JSONArray stored = root.getJSONArray("nodes");
+		for (int i = 0; i < stored.length(); i++) {
+			JSONObject node = stored.getJSONObject(i);
+			observations.put(new JSONObject()
+					.put("name", node.optString("id"))
+					.put("pool", node.optString("pool"))
+					.put("alive", node.optBoolean("alive", false))
+					.put("delay_ms", node.optInt("delay_ms", 0))
+					.put("speed_mbps", node.optDouble("speed_mbps", 0))
+					.put("stability_ratio", node.optDouble("stability_ratio", 0))
+					.put("health_successes", node.optInt("health_successes", 0))
+					.put("health_failures", node.optInt("health_failures", 0))
+					.put("last_tested_at", node.optLong("last_tested_at", 0)));
+		}
+		String active = root.optString("selected_node", "");
+		JSONObject activeNode = findNode(active);
+		JSONObject observation = new JSONObject()
+				.put("now", now()).put("wan_available", true).put("active_ok", activeOK)
+				.put("active", active).put("active_pool", activeNode == null ? "" : activeNode.optString("pool"))
+				.put("nodes", observations)
+				.put("control", new JSONObject().put("enabled", serviceDesired()).put("mode", mode()));
+		JSONObject previous = root.optJSONObject("failover_state");
+		JSONObject envelope = new JSONObject(Mobilecore.failoverStep(
+				(previous == null ? new JSONObject() : previous).toString(), observation.toString()));
+		if (!envelope.optBoolean("ok")) throw new JSONException(coreError(envelope));
+		JSONObject result = envelope.getJSONObject("result");
+		root.put("failover_state", result.getJSONObject("state"));
+		JSONObject decision = result.getJSONObject("decision");
+		if ("select".equals(decision.optString("action"))) {
+			JSONObject target = findNode(decision.optString("target"));
+			if (target == null || !target.optBoolean("alive", false)) throw new JSONException("failover_target_unavailable");
+			root.put("selected_node", target.getString("id"));
+		}
+		if (!activeOK || !"keep".equals(decision.optString("action"))) save();
+		return new JSONObject(decision.toString());
+	}
 
     private static void validateDNS(JSONObject dns) throws JSONException {
 		JSONObject envelope = new JSONObject(Mobilecore.validateMobileDNSProfile(dns.toString()));
