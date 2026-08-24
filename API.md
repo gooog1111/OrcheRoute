@@ -1,17 +1,14 @@
 # OrcheRoute API
 
-> На 11.08.2026 контракт обслуживается production Go runtime на
-> `127.0.0.1:19100`. Ответ `/v1/status` возвращает `runtime: "go"`; активный
-> capture profile — `system`. Единственный control plane реализован на Go.
-
-> Общий статус архитектуры, клиентов и production: [PROJECT_STATUS.md](PROJECT_STATUS.md).
-
-Документ описывает локальный HTTP API бэкенда OrcheRoute, модель состояний,
-управление подписками и политикой проверки серверов.
+Документ описывает версионированный контракт между общим интерфейсом OrcheRoute
+и поддерживаемыми платформами: Linux Server и Android. Платформенные адаптеры
+могут по-разному запускать транспорт, но публичные модели и действия API должны
+оставаться одинаковыми.
 
 - Версия API: `1`
-- Актуализировано: `2026-08-08`
-- Реализация: `cmd/orcheroute-server` и `internal/serverruntime`
+- Актуализировано: `2026-08-24`
+- Реализация Linux Server: `cmd/orcheroute-server` и `internal/serverruntime`
+- Реализация Android: локальный bridge и `mobilecore`
 
 ## Подключение и авторизация
 
@@ -1580,9 +1577,9 @@ curl -sS -H "$AUTH" "$API/v1/dns"
 ## Режим белых списков операторов
 
 Модель производного пула общая для всех runtime-ов и находится в Go-пакете
-`internal/whitelist`. Android получает её через `mobilecore`, Linux/Windows
-server используют напрямую, а Desktop — через локальный серверный bridge.
-Платформенный код только выполняет сетевую проверку и запускает выбранный узел.
+`internal/whitelist`. Android получает её через `mobilecore`, а Linux Server
+использует напрямую. Платформенный код только выполняет сетевую проверку и
+запускает выбранный узел.
 
 Переходы автомата: `begin`, `add_source`/`replace_source`, `request`, `confirm`,
 `fail`, `complete`, `deactivate`. После `request` выбранный узел сохраняется как

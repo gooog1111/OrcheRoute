@@ -6,9 +6,9 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
 рабочее соединение и направляет трафик по правилам `direct`, `proxy` и
 `block`.
 
-> Сейчас основной пользовательский выпуск — Android для `arm64`. Linux Server,
-> Linux Desktop и Windows находятся в репозитории, но пока не считаются такими
-> же завершёнными, как Android-версия.
+> Поддерживаемые цели проекта — Android `arm64` и Linux Server `amd64`.
+> Остальные платформенные заготовки временно выведены из разработки, чтобы
+> общий Go-код и два рабочих адаптера развивались без расхождений.
 
 ## Скачать
 
@@ -136,18 +136,14 @@ QR-кода.
   выдачи разрешений;
 - передача VPN в мобильную точку доступа зависит от реализации прошивки Android и без
   системных прав может быть недоступна;
-- Linux Desktop, Linux Server и Windows ещё проходят выравнивание с Android.
+- Linux Server и Android используют разные системные транспортные адаптеры;
+  их общий функционал последовательно переносится в единые Go-модули.
 
 ## Документация для разработки
 
 - [API.md](API.md) — локальный HTTP API;
-- [BUILD.md](BUILD.md) — единая локальная сборка и проверки;
-- [android/README.md](android/README.md) — Android-сборка;
 - [ANDROID_ARCHITECTURE.md](ANDROID_ARCHITECTURE.md) — устройство Android-приложения;
-- [MOBILE.md](MOBILE.md) — общий мобильный runtime;
-- [desktop/README.md](desktop/README.md) — Desktop-оболочка;
-- [apple/README.md](apple/README.md) — заготовка iOS/macOS;
-- [webui/README.md](webui/README.md) — общий интерфейс.
+- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — сторонние компоненты и лицензии.
 
 Актуальная разработка ведётся в единственной ветке `main`. Стабильные версии
 зафиксированы тегами `v*`, а тестовые Android-сборки — тегом `android-beta`.
