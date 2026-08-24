@@ -41,6 +41,12 @@ type SpeedEvidence struct {
 	Downloads []Download `json:"downloads"`
 }
 
+type GeoEvidence struct {
+	OK      bool   `json:"ok"`
+	Country string `json:"country,omitempty"`
+	Status  string `json:"status,omitempty"`
+}
+
 type Measurement struct {
 	Status         string  `json:"status"`
 	BytesPerSecond float64 `json:"bytes_per_second"`
@@ -50,7 +56,11 @@ type Measurement struct {
 type Backend interface {
 	TCP(ctx context.Context, proxies []map[string]any) ([]Latency, error)
 	URL(ctx context.Context, proxies []map[string]any) ([]Latency, error)
-	Speed(ctx context.Context, proxies []map[string]any, geoEnabled bool) ([]SpeedEvidence, error)
+	Speed(ctx context.Context, proxies []map[string]any) ([]SpeedEvidence, error)
+}
+
+type GeoBackend interface {
+	Geo(ctx context.Context, proxies []map[string]any) ([]GeoEvidence, error)
 }
 
 type BaselineBackend interface {
@@ -175,6 +185,9 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	for _, value := range excludedValues {
 		excluded[strings.ToUpper(valueString(value))] = true
 	}
+	if pool == "whitelist" {
+		excluded = map[string]bool{}
+	}
 	excludedList := make([]string, 0, len(excluded))
 	for code := range excluded {
 		excludedList = append(excludedList, code)
@@ -252,13 +265,60 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		getSourceReport(item.proxy).URLAlive++
 	}
 
+	geoAlive := urlAlive
+	geoPassed := 0
+	excludedCounts := map[string]int{}
+	geoOutcomes := map[string]int{}
+	if len(excluded) > 0 {
+		geoBackend, ok := backend.(GeoBackend)
+		if !ok {
+			return Result{}, fmt.Errorf("geo backend is required when country exclusions are enabled")
+		}
+		geoProxies := proxiesFromRanked(urlAlive)
+		geoResults, geoErr := geoBackend.Geo(ctx, geoProxies)
+		if geoErr != nil {
+			return Result{}, geoErr
+		}
+		if len(geoResults) != len(geoProxies) {
+			return Result{}, fmt.Errorf("geo result count mismatch")
+		}
+		geoAlive = make([]rankedProxy, 0, len(urlAlive))
+		for index, evidence := range geoResults {
+			country := strings.ToUpper(strings.TrimSpace(evidence.Country))
+			status := evidence.Status
+			switch {
+			case status != "":
+			case !evidence.OK || country == "":
+				status = "country_unknown"
+			case excluded[country]:
+				status = "country_excluded"
+			default:
+				status = "geo_qualified"
+			}
+			proxy := urlAlive[index].proxy
+			current := metrics[proxyName(proxy)]
+			current.Country = country
+			metrics[proxyName(proxy)] = current
+			geoOutcomes[status]++
+			source := getSourceReport(proxy)
+			source.Outcomes[status]++
+			if status == "geo_qualified" {
+				geoPassed++
+				source.GeoPassed++
+				geoAlive = append(geoAlive, urlAlive[index])
+			} else if status == "country_excluded" && country != "" {
+				excludedCounts[country]++
+			}
+		}
+	}
+
 	if skipSpeed {
-		retained := urlAlive
+		retained := geoAlive
 		if keep > 0 && len(retained) > keep {
 			retained = retained[:keep]
 		}
 		qualified := proxiesFromRanked(retained)
-		for _, item := range urlAlive {
+		for _, item := range geoAlive {
 			getSourceReport(item.proxy).Qualified++
 		}
 		for _, proxy := range qualified {
@@ -266,19 +326,19 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		}
 		return Result{Proxies: qualified, Metrics: metrics, Report: Report{
 			Pool: pool, StartedAt: started, FinishedAt: now().Unix(), Input: len(proxies), TCPAlive: len(tcpAlive), URLAlive: len(urlAlive),
-			GeoEnabled: false, ExcludedCountries: []string{}, ExcludedByCountry: map[string]int{},
-			SpeedRuns: 0, SpeedTested: 0, Qualified: len(urlAlive), Retained: len(qualified),
+			GeoEnabled: len(excluded) > 0, GeoPassed: geoPassed, ExcludedCountries: excludedList, ExcludedByCountry: excludedCounts,
+			SpeedRuns: 0, SpeedTested: 0, Qualified: len(geoAlive), Retained: len(qualified),
 			ThresholdMbps: 0, ThresholdSource: "skipped", StabilityRatio: stabilityRatio,
-			Outcomes: map[string]int{"url_qualified": len(urlAlive)}, Sources: sourceReports,
+			Outcomes: geoOutcomes, Sources: sourceReports,
 		}}, nil
 	}
 
-	speedSource := urlAlive
+	speedSource := geoAlive
 	if speedCandidates > 0 && len(speedSource) > speedCandidates {
 		speedSource = speedSource[:speedCandidates]
 	}
 	speedProxies := proxiesFromRanked(speedSource)
-	evidence, err := backend.Speed(ctx, speedProxies, len(excluded) > 0)
+	evidence, err := backend.Speed(ctx, speedProxies)
 	if err != nil {
 		return Result{}, err
 	}
@@ -288,13 +348,11 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 	threshold := int(minimumMbps * 1_000_000 / 8)
 	measurements := make([]Measurement, len(evidence))
 	for index, current := range evidence {
-		measurements[index] = EvaluateSpeed(current, threshold, stabilityRatio, excluded)
+		measurements[index] = EvaluateSpeed(current, threshold, stabilityRatio, nil)
 	}
-	outcomes := map[string]int{}
-	excludedCounts := map[string]int{}
+	outcomes := geoOutcomes
 	fast := []rankedProxy{}
 	fastest := float64(0)
-	geoPassed := 0
 	for index, measurement := range measurements {
 		proxy := speedProxies[index]
 		current := metrics[proxyName(proxy)]
@@ -307,18 +365,13 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 				current.StabilityRatio = math.Round(math.Min(first, second)/math.Max(first, second)*10000) / 10000
 			}
 		}
-		current.Country = strings.ToUpper(strings.TrimSpace(evidence[index].Country))
+		if country := strings.ToUpper(strings.TrimSpace(evidence[index].Country)); country != "" {
+			current.Country = country
+		}
 		metrics[proxyName(proxy)] = current
 		outcomes[measurement.Status]++
-		if measurement.Status == "country_excluded" && measurement.Country != "" {
-			excludedCounts[measurement.Country]++
-		}
 		source := getSourceReport(proxy)
 		source.SpeedTested++
-		if len(excluded) > 0 && measurement.Status != "country_excluded" && evidence[index].CoreOK && evidence[index].GeoStatus == "" && current.Country != "" {
-			geoPassed++
-			source.GeoPassed++
-		}
 		source.Outcomes[measurement.Status]++
 		if measurement.BytesPerSecond > fastest {
 			fastest = measurement.BytesPerSecond

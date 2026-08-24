@@ -9,7 +9,10 @@ import (
 type fakeBackend struct {
 	tcp        []Latency
 	url        []Latency
+	geo        []GeoEvidence
 	speed      []SpeedEvidence
+	geoInput   int
+	speedInput int
 	speedCalls int
 	speedBytes int64
 }
@@ -30,8 +33,13 @@ func (backend fakeBackend) URL(context.Context, []map[string]any) ([]Latency, er
 	return backend.url, nil
 }
 
-func (backend *fakeBackend) Speed(context.Context, []map[string]any, bool) ([]SpeedEvidence, error) {
+func (backend *fakeBackend) Geo(_ context.Context, proxies []map[string]any) ([]GeoEvidence, error) {
+	backend.geoInput = len(proxies)
+	return backend.geo, nil
+}
+func (backend *fakeBackend) Speed(_ context.Context, proxies []map[string]any) ([]SpeedEvidence, error) {
 	backend.speedCalls++
+	backend.speedInput = len(proxies)
 	return backend.speed, nil
 }
 func (backend *fakeBackend) SetSpeedBytes(value int64) { backend.speedBytes = value }
@@ -64,9 +72,10 @@ func TestQualificationPipelineAndReport(t *testing.T) {
 	backend := &fakeBackend{
 		tcp: []Latency{{Alive: true, Seconds: .3}, {Alive: false}, {Alive: true, Seconds: .1}},
 		url: []Latency{{Alive: true, Seconds: .2}, {Alive: true, Seconds: .1}},
+		geo: []GeoEvidence{{OK: true, Country: "DE"}, {OK: true, Country: "NL"}},
 		speed: []SpeedEvidence{
-			{CoreOK: true, Country: "DE", Downloads: goodDownloads(2_000_000, 1_800_000)},
-			{CoreOK: true, Country: "NL", Downloads: goodDownloads(3_000_000, 2_800_000)},
+			{CoreOK: true, Downloads: goodDownloads(2_000_000, 1_800_000)},
+			{CoreOK: true, Downloads: goodDownloads(3_000_000, 2_800_000)},
 		},
 	}
 	settings := map[string]any{"min_speed_mbps": float64(10), "stability_ratio": .65, "excluded_countries": []any{"RU"}, "url_limit": float64(0), "speed_candidates": float64(0), "keep": float64(1)}
@@ -87,6 +96,23 @@ func TestQualificationPipelineAndReport(t *testing.T) {
 	}
 	if result.Metrics["C"].DelayMS != 200 || result.Metrics["C"].SpeedMbps != 22.4 || result.Metrics["C"].StabilityRatio < 0.93 || result.Metrics["C"].Country != "NL" {
 		t.Fatalf("unexpected retained metrics: %#v", result.Metrics["C"])
+	}
+}
+
+func TestGeoRunsBeforeSpeedCandidateLimit(t *testing.T) {
+	backend := &fakeBackend{
+		tcp:   []Latency{{Alive: true}, {Alive: true}, {Alive: true}},
+		url:   []Latency{{Alive: true}, {Alive: true}, {Alive: true}},
+		geo:   []GeoEvidence{{OK: true, Country: "DE"}, {OK: true, Country: "NL"}, {OK: true, Country: "US"}},
+		speed: []SpeedEvidence{{CoreOK: true, Downloads: goodDownloads(2_000_000, 2_000_000)}},
+	}
+	settings := map[string]any{"min_speed_mbps": float64(10), "stability_ratio": .65, "excluded_countries": []any{"RU"}, "url_limit": float64(0), "speed_candidates": float64(1), "keep": float64(1)}
+	_, err := Qualify(context.Background(), "emergency", []map[string]any{{"name": "A"}, {"name": "B"}, {"name": "C"}}, settings, nil, backend, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backend.geoInput != 3 || backend.speedInput != 1 {
+		t.Fatalf("geo=%d speed=%d", backend.geoInput, backend.speedInput)
 	}
 }
 

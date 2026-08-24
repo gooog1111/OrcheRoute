@@ -97,24 +97,34 @@ func (backend *Backend) Baseline(ctx context.Context) (qualification.Download, e
 	backend.baseline, backend.baselineAt = download, time.Now()
 	return download, nil
 }
-func (backend *Backend) Speed(ctx context.Context, proxies []map[string]any, geoEnabled bool) ([]qualification.SpeedEvidence, error) {
+func (backend *Backend) Geo(ctx context.Context, proxies []map[string]any) ([]qualification.GeoEvidence, error) {
+	config := backend.normalized()
+	return parallel(proxies, config.SpeedWorkers, func(_ int, item map[string]any) qualification.GeoEvidence {
+		evidence := qualification.GeoEvidence{}
+		err := withCore(ctx, item, config, func(client *http.Client, proxyAddress string) error {
+			country, status := traceCountry(client, config.TraceURL)
+			if status != "" {
+				country, status = curlCountry(ctx, proxyAddress, config.TraceURL)
+			}
+			evidence.Country = country
+			evidence.Status = status
+			evidence.OK = status == "" && country != ""
+			return nil
+		})
+		if err != nil {
+			evidence = qualification.GeoEvidence{Status: "country_unknown"}
+		}
+		return evidence
+	}, backend.stage("geo")), nil
+}
+
+func (backend *Backend) Speed(ctx context.Context, proxies []map[string]any) ([]qualification.SpeedEvidence, error) {
 	config := backend.normalized()
 	speedBytes := backend.currentSpeedBytes()
 	return parallel(proxies, config.SpeedWorkers, func(_ int, item map[string]any) qualification.SpeedEvidence {
 		evidence := qualification.SpeedEvidence{}
 		err := withCore(ctx, item, config, func(client *http.Client, proxyAddress string) error {
 			evidence.CoreOK = true
-			if geoEnabled {
-				country, status := traceCountry(client, config.TraceURL)
-				if status != "" {
-					country, status = curlCountry(ctx, proxyAddress, config.TraceURL)
-				}
-				evidence.Country = country
-				evidence.GeoStatus = status
-				if status != "" {
-					return nil
-				}
-			}
 			for index := 0; index < 2; index++ {
 				download := downloadSpeed(client, config.SpeedURL, speedBytes)
 				if !download.OK || (download.HTTPCode != http.StatusOK && download.HTTPCode != http.StatusPartialContent) || download.Bytes < speedBytes {
