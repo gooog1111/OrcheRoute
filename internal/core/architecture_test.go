@@ -14,7 +14,7 @@ import (
 // sibling dependencies. Explicit edges form the small shared pipeline.
 func TestMicroLayerDependencyDirections(t *testing.T) {
 	allowed := map[string]map[string]bool{
-		"parser": {}, "validator": {"qualification": true}, "mapper": {}, "routing": {},
+		"parser": {}, "validator": {"qualification": true}, "mapper": {"qualification": true}, "routing": {},
 		"constructor": {"routing": true}, "transport": {}, "connectivity": {},
 		"qualification": {}, "noderank": {}, "whitelist": {"noderank": true}, "orchestrator": {"whitelist": true},
 	}

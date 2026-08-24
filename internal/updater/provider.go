@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	coremapper "github.com/gooog1111/orcheroute/internal/core/mapper"
 	"github.com/gooog1111/orcheroute/internal/core/noderank"
 	"github.com/gooog1111/orcheroute/internal/core/qualification"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
@@ -80,21 +81,7 @@ func providerMetadata(result qualification.Result, sources map[string]subscripti
 	if nodes == nil {
 		nodes = map[string]map[string]any{}
 	}
-	for name, source := range sources {
-		value := map[string]any{"id": source.ID, "name": source.Name}
-		if previous := nodes[name]; previous != nil {
-			for _, key := range []string{"health_successes", "health_failures"} {
-				if current, ok := previous[key]; ok {
-					value[key] = current
-				}
-			}
-		}
-		if metrics, ok := result.Metrics[name]; ok {
-			value["delay_ms"] = metrics.DelayMS
-			value["speed_mbps"] = metrics.SpeedMbps
-			value["stability_ratio"] = metrics.StabilityRatio
-			value["country"] = metrics.Country
-		}
+	for name, value := range coremapper.QualificationMetadata(result, sources, nodes) {
 		nodes[name] = value
 	}
 	return nodes
