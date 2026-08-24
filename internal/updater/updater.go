@@ -22,6 +22,7 @@ type ProviderStore interface {
 	Exists(pool string) bool
 	WriteReport(pool string, report qualification.Report) error
 	Write(pool string, result qualification.Result, sources map[string]subscriptions.SourceIdentity) error
+	MergeSource(pool, sourceID string, result qualification.Result, sources map[string]subscriptions.SourceIdentity) error
 }
 
 type Dependencies struct {
@@ -294,6 +295,12 @@ func checkSubscriptions(ctx context.Context, dependencies Dependencies, request 
 			pool.Reason = reason
 			pool.Errors[reason]++
 			result.Failures = appendUnique(result.Failures, item.ID)
+		}
+		if qualifyErr == nil {
+			retainedSources := subscriptions.RetainSources(aggregated.SourceByNode, qualified.Proxies)
+			if mergeErr := dependencies.Providers.MergeSource(string(item.GroupName), item.ID, qualified, retainedSources); mergeErr != nil {
+				return result, fmt.Errorf("merge checked subscription %s: %w", item.ID, mergeErr)
+			}
 		}
 		updateOneQualificationStatus(ctx, dependencies, item.ID, status, tested, available, statusError)
 		pool.Accepted += available

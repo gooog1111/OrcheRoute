@@ -53,6 +53,9 @@ export type Node = {
   priority: number;
   alive: boolean;
   delay_ms: number | null;
+  speed_mbps?: number;
+  stability_ratio?: number;
+  score?: number;
   country?: string;
   selected: boolean;
   source_id?: string | null;

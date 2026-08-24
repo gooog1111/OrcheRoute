@@ -396,3 +396,12 @@ test("removes verbose dashboard and settings explanations", async () => {
     "Обновление загружает новые данные и сохраняет прежние серверы",
   ]) assert.doesNotMatch(content, new RegExp(removed));
 });
+
+test("checked subscription nodes are shown by rating without retesting other sources", async () => {
+  const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  assert.match(api, /score\?: number/);
+  assert.match(settings, /\(right\.score \?\? 0\) - \(left\.score \?\? 0\)/);
+  assert.match(settings, /★\$\{Math\.round\(node\.score\)\}/);
+  assert.match(settings, /проверены и добавлены в список по рейтингу/);
+});

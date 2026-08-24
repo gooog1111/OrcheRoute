@@ -2,6 +2,7 @@ package updater
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -93,7 +94,7 @@ func (qualifier *recordingQualifier) Qualify(_ context.Context, pool string, pro
 	return qualification.Result{Proxies: proxies, Report: qualification.Report{Pool: pool, Input: len(proxies), Qualified: len(proxies), Retained: len(proxies), Sources: reports}}, nil
 }
 
-func TestCheckOnlyQualifiesRequestedSubscriptionWithoutReplacingPool(t *testing.T) {
+func TestCheckOnlyMergesRequestedSubscriptionWithoutReplacingOtherSources(t *testing.T) {
 	ctx := context.Background()
 	directory := t.TempDir()
 	cache := subscriptions.FileCache{Directory: filepath.Join(directory, "cache")}
@@ -110,10 +111,11 @@ func TestCheckOnlyQualifiesRequestedSubscriptionWithoutReplacingPool(t *testing.
 		{ID: "two", Name: "Two", GroupName: subscriptions.Primary, Enabled: true},
 	}}
 	providers := FileProviderStore{ProvidersDirectory: filepath.Join(directory, "providers")}
-	if err := atomicJSON(filepath.Join(directory, "providers", "primary.json"), map[string]any{"proxies": []any{map[string]any{"name": "existing"}}}); err != nil {
+	if err := providers.Write("primary", qualification.Result{Proxies: []map[string]any{{"name": "existing"}}}, map[string]subscriptions.SourceIdentity{
+		"existing": {ID: "two", Name: "Two"},
+	}); err != nil {
 		t.Fatal(err)
 	}
-	before, _ := os.ReadFile(filepath.Join(directory, "providers", "primary.json"))
 	qualifier := &recordingQualifier{}
 	statusID, tested, available := "", 0, 0
 	result, err := Run(ctx, Dependencies{
@@ -132,9 +134,35 @@ func TestCheckOnlyQualifiesRequestedSubscriptionWithoutReplacingPool(t *testing.
 	if result.Pools[subscriptions.Primary].Accepted != 1 {
 		t.Fatalf("result=%#v", result)
 	}
-	after, _ := os.ReadFile(filepath.Join(directory, "providers", "primary.json"))
-	if string(before) != string(after) {
-		t.Fatal("single-subscription check replaced the active pool")
+	payload, err := os.ReadFile(filepath.Join(directory, "providers", "primary.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var provider struct {
+		Proxies []map[string]any `json:"proxies"`
+	}
+	if err := json.Unmarshal(payload, &provider); err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.Proxies) != 2 {
+		t.Fatalf("merged provider=%#v", provider.Proxies)
+	}
+	metadataPayload, err := os.ReadFile(filepath.Join(directory, "providers", "primary.sources.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata struct {
+		Nodes map[string]map[string]any `json:"nodes"`
+	}
+	if err := json.Unmarshal(metadataPayload, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int{}
+	for _, value := range metadata.Nodes {
+		counts[value["id"].(string)]++
+	}
+	if counts["one"] != 1 || counts["two"] != 1 {
+		t.Fatalf("source counts=%#v", counts)
 	}
 }
 

@@ -1000,7 +1000,17 @@ function PoolNodes({
   const [expanded, setExpanded] = useState(false);
   const [deletingNode, setDeletingNode] = useState<Node | null>(null);
   const canEditPool = platformCapabilities().editServerLists;
-  const allNodes = data?.nodes.filter((node) => node.pool === pool) ?? [];
+  const allNodes = [...(data?.nodes.filter((node) => node.pool === pool) ?? [])]
+    .sort((left, right) => {
+      if (left.alive !== right.alive) return left.alive ? -1 : 1;
+      if ((left.score ?? 0) !== (right.score ?? 0)) {
+        return (right.score ?? 0) - (left.score ?? 0);
+      }
+      if ((left.delay_ms ?? Number.MAX_SAFE_INTEGER) !== (right.delay_ms ?? Number.MAX_SAFE_INTEGER)) {
+        return (left.delay_ms ?? Number.MAX_SAFE_INTEGER) - (right.delay_ms ?? Number.MAX_SAFE_INTEGER);
+      }
+      return left.display_name.localeCompare(right.display_name);
+    });
   const unavailable = allNodes.filter((node) => !node.alive).length;
   const nodes = showUnavailable
     ? allNodes
@@ -1078,7 +1088,10 @@ function PoolNodes({
                   {node.country ? ` · GEO ${node.country}` : ""}
                 </small>
               </span>
-              <em>{node.delay_ms ? `${node.delay_ms} мс` : "—"}</em>
+              <em>
+                {node.delay_ms ? `${node.delay_ms} мс` : "—"}
+                {node.score ? ` · ★${Math.round(node.score)}` : ""}
+              </em>
             </button>
             {canEditPool && (
               <button
@@ -2947,7 +2960,7 @@ function SubscriptionsForm({
                   onClick={() =>
                     void run(
                       () => actions.checkSubscription(subscription.id),
-                      `Сохранённые серверы «${subscription.name}» проверены без обновления подписки.`,
+                      `Серверы «${subscription.name}» проверены и добавлены в список по рейтингу.`,
                       { title: "Проверяем подписку", waitFor: "servers" },
                     )
                   }

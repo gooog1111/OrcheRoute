@@ -984,6 +984,7 @@ func (runtime *Runtime) startUpdate(ids []string, updateMode string, groups ...s
 	}
 	_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": "running", "phase": "starting", "message": message, "updated_at": time.Now().Unix()})
 	_ = os.Remove(cancelPath)
+	reloadGroups := runtime.subscriptionProviderGroups(ids, groups)
 	go func() {
 		arguments := []string{
 			"--state-dir", runtime.Config.ProductionState,
@@ -1008,6 +1009,9 @@ func (runtime *Runtime) startUpdate(ids []string, updateMode string, groups ...s
 		}
 		command := exec.Command(runtime.Config.UpdateBinary, arguments...)
 		output, err := command.CombinedOutput()
+		if updateMode == "check" && err == nil {
+			runtime.reloadSubscriptionProviders(reloadGroups)
+		}
 		if _, cancelErr := os.Stat(cancelPath); cancelErr == nil {
 			_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": "cancelled", "phase": "cancelled", "message": "Операция остановлена пользователем. Завершённые результаты сохранены.", "error": "", "output": truncate(string(output), 4000), "updated_at": time.Now().Unix()})
 			_ = os.Remove(cancelPath)
@@ -1037,6 +1041,45 @@ func (runtime *Runtime) startUpdate(ids []string, updateMode string, groups ...s
 		_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": status, "phase": "complete", "message": message, "error": errorText, "output": truncate(string(output), 4000), "updated_at": time.Now().Unix()})
 	}()
 	return 202, map[string]any{"accepted": true, "system_mutated": true}
+}
+
+func (runtime *Runtime) subscriptionProviderGroups(ids, groups []string) []string {
+	selected := map[string]bool{}
+	for _, group := range groups {
+		if group == "primary" || group == "emergency" {
+			selected[group] = true
+		}
+	}
+	if len(ids) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		for _, id := range ids {
+			item, err := runtime.Store.Get(ctx, id, false)
+			if err == nil && item != nil {
+				group := string(item.GroupName)
+				if group == "primary" || group == "emergency" {
+					selected[group] = true
+				}
+			}
+		}
+	} else if len(groups) == 0 {
+		selected["primary"], selected["emergency"] = true, true
+	}
+	result := []string{}
+	for _, group := range []string{"primary", "emergency"} {
+		if selected[group] {
+			result = append(result, group)
+		}
+	}
+	return result
+}
+
+func (runtime *Runtime) reloadSubscriptionProviders(groups []string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, group := range groups {
+		_, _ = runtime.mihomo(ctx, http.MethodPut, "/providers/proxies/"+group, nil)
+	}
 }
 
 func (runtime *Runtime) cancelSubscriptionUpdate() (int, any) {
