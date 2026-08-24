@@ -11,8 +11,12 @@ fi
 chmod 0755 "$ROOT/DEBIAN"
 chmod 0644 "$ROOT/DEBIAN/control" "$ROOT/DEBIAN/md5sums"
 chmod 0755 "$ROOT/opt/orcheroute/bin/"*
-chmod 0644 "$ROOT/lib/systemd/system/"*
+for SYSTEMD_DIR in "$ROOT/lib/systemd/system" "$ROOT/usr/lib/systemd/system"; do
+    if [ -d "$SYSTEMD_DIR" ]; then
+        chmod 0644 "$SYSTEMD_DIR/"*
+    fi
+done
 test -x "$ROOT/opt/orcheroute/bin/orcheroute-server"
 test -x "$ROOT/opt/orcheroute/bin/mihomo"
 test -f "$ROOT/opt/orcheroute/webui/index.html"
-dpkg-deb --build --root-owner-group "$ROOT" "$OUTPUT"
+dpkg-deb --build --root-owner-group -Zxz "$ROOT" "$OUTPUT"
