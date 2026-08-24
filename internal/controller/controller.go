@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gooog1111/orcheroute/internal/noderank"
+	"github.com/gooog1111/orcheroute/internal/core/noderank"
 )
 
 const (

@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/core/connectivity"
+	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"github.com/gooog1111/orcheroute/internal/updater"
-	"github.com/gooog1111/orcheroute/internal/whitelist"
 )
 
 func (runtime *Runtime) startWhitelistScan(ids []string) (int, any) {

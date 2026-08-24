@@ -6,8 +6,8 @@ package validator
 import (
 	"errors"
 
+	"github.com/gooog1111/orcheroute/internal/core/qualification"
 	"github.com/gooog1111/orcheroute/internal/network"
-	"github.com/gooog1111/orcheroute/internal/qualification"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 )
 

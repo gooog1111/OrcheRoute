@@ -11,8 +11,8 @@ import (
 
 	"github.com/gooog1111/orcheroute/internal/controller"
 	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
+	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
-	"github.com/gooog1111/orcheroute/internal/whitelist"
 )
 
 func (runtime *Runtime) RunController(ctx context.Context) {

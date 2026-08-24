@@ -6,7 +6,7 @@ import (
 	"time"
 
 	coremapper "github.com/gooog1111/orcheroute/internal/core/mapper"
-	"github.com/gooog1111/orcheroute/internal/qualification"
+	"github.com/gooog1111/orcheroute/internal/core/qualification"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 )
 

@@ -14,11 +14,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gooog1111/orcheroute/internal/core/qualification"
 	"github.com/gooog1111/orcheroute/internal/linuxnetwork"
 	"github.com/gooog1111/orcheroute/internal/linuxqualify"
 	"github.com/gooog1111/orcheroute/internal/network"
 	"github.com/gooog1111/orcheroute/internal/operationcancel"
-	"github.com/gooog1111/orcheroute/internal/qualification"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"github.com/gooog1111/orcheroute/internal/updater"

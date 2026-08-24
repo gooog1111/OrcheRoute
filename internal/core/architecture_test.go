@@ -10,13 +10,13 @@ import (
 	"testing"
 )
 
-// Micro-layers may share lower-level internal packages, but must not grow
-// hidden dependencies on sibling layers. Constructor is the sole exception:
-// it consumes the immutable plan produced by routing.
+// Micro-layers may share lower-level domain packages, but must not grow hidden
+// sibling dependencies. Explicit edges form the small shared pipeline.
 func TestMicroLayerDependencyDirections(t *testing.T) {
 	allowed := map[string]map[string]bool{
-		"parser": {}, "validator": {}, "mapper": {}, "routing": {},
+		"parser": {}, "validator": {"qualification": true}, "mapper": {}, "routing": {},
 		"constructor": {"routing": true}, "transport": {}, "connectivity": {},
+		"qualification": {}, "noderank": {}, "whitelist": {"noderank": true}, "orchestrator": {"whitelist": true},
 	}
 	for layer, layerAllowed := range allowed {
 		files, err := filepath.Glob(filepath.Join(layer, "*.go"))

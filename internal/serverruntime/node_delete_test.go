@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gooog1111/orcheroute/internal/whitelist"
+	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 )
 
 func TestDeletePrimaryNodeUpdatesProviderAndMetadata(t *testing.T) {

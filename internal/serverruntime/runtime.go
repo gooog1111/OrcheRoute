@@ -18,12 +18,12 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/controller"
+	"github.com/gooog1111/orcheroute/internal/core/noderank"
 	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
+	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/network"
-	"github.com/gooog1111/orcheroute/internal/noderank"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
-	"github.com/gooog1111/orcheroute/internal/whitelist"
 	"golang.org/x/net/proxy"
 )
 

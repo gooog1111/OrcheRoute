@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gooog1111/orcheroute/internal/qualification"
+	"github.com/gooog1111/orcheroute/internal/core/qualification"
 )
 
 type request struct {

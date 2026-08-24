@@ -19,13 +19,13 @@ import (
 
 	"github.com/gooog1111/orcheroute/internal/components"
 	coreparser "github.com/gooog1111/orcheroute/internal/core/parser"
+	"github.com/gooog1111/orcheroute/internal/core/qualification"
 	corerouting "github.com/gooog1111/orcheroute/internal/core/routing"
 	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
+	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/network"
-	"github.com/gooog1111/orcheroute/internal/qualification"
 	"github.com/gooog1111/orcheroute/internal/routes"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
-	"github.com/gooog1111/orcheroute/internal/whitelist"
 )
 
 func (runtime *Runtime) APIHandler() http.Handler {

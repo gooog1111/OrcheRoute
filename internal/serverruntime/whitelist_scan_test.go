@@ -3,8 +3,8 @@ package serverruntime
 import (
 	"testing"
 
+	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/updater"
-	"github.com/gooog1111/orcheroute/internal/whitelist"
 )
 
 func TestApplyWhitelistResultReplacesOnlyCompletedSources(t *testing.T) {

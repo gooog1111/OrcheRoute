@@ -43,7 +43,9 @@ func Latest(ctx context.Context, client *http.Client, beta bool, arch string) (R
 		client = &http.Client{Timeout: 15 * time.Second}
 	}
 	url := StableManifestURL
-	if beta { url = BetaManifestURL }
+	if beta {
+		url = BetaManifestURL
+	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", "OrcheRoute self updater")
 	res, err := client.Do(req)

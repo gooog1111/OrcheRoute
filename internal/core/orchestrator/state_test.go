@@ -1,7 +1,7 @@
 package orchestrator
 
 import (
-	"github.com/gooog1111/orcheroute/internal/whitelist"
+	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"testing"
 )
 

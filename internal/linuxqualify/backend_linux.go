@@ -21,7 +21,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gooog1111/orcheroute/internal/qualification"
+	"github.com/gooog1111/orcheroute/internal/core/qualification"
 	"golang.org/x/net/proxy"
 	"golang.org/x/sys/unix"
 )

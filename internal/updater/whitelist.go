@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	coremapper "github.com/gooog1111/orcheroute/internal/core/mapper"
-	"github.com/gooog1111/orcheroute/internal/qualification"
+	"github.com/gooog1111/orcheroute/internal/core/qualification"
+	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
-	"github.com/gooog1111/orcheroute/internal/whitelist"
 )
 
 // WhitelistResult contains complete, source-scoped replacements. A caller may

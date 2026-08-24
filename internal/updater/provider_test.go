@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gooog1111/orcheroute/internal/qualification"
+	"github.com/gooog1111/orcheroute/internal/core/qualification"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 )
 

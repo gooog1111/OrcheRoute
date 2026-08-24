@@ -14,15 +14,15 @@ import (
 	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
 	mobileconstructor "github.com/gooog1111/orcheroute/internal/core/constructor"
 	mobilemapper "github.com/gooog1111/orcheroute/internal/core/mapper"
+	"github.com/gooog1111/orcheroute/internal/core/noderank"
+	"github.com/gooog1111/orcheroute/internal/core/orchestrator"
 	mobileparser "github.com/gooog1111/orcheroute/internal/core/parser"
 	mobilerouting "github.com/gooog1111/orcheroute/internal/core/routing"
 	mobilevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
+	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/mihomo"
 	"github.com/gooog1111/orcheroute/internal/network"
-	"github.com/gooog1111/orcheroute/internal/noderank"
-	"github.com/gooog1111/orcheroute/internal/orchestrator"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
-	"github.com/gooog1111/orcheroute/internal/whitelist"
 )
 
 func Capabilities() string {
