@@ -891,30 +891,13 @@ final class MobileRepository {
     }
 
     private static void validateNetworkProfile(JSONObject profile) throws JSONException {
-        JSONObject roles = profile.optJSONObject("roles");
-        JSONObject capture = profile.optJSONObject("capture");
-        JSONObject dns = profile.optJSONObject("dns");
-        if (roles == null || capture == null || dns == null) throw new JSONException("invalid_network_profile");
-        for (String role : new String[]{"direct", "vpn_underlay"}) {
-            JSONObject value = roles.optJSONObject(role);
-            if (value == null || !validTransport(value.optString("interface", "auto"))) throw new JSONException("invalid_android_transport");
-        }
-        if (!"system".equals(capture.optString("mode"))) throw new JSONException("android_capture_must_be_system");
-        validateDNS(dns);
-    }
-
-    private static boolean validTransport(String value) {
-        return "auto".equals(value) || "wifi".equals(value) || "cellular".equals(value) || "ethernet".equals(value);
+		JSONObject envelope = new JSONObject(Mobilecore.validateMobileNetworkProfile(profile.toString()));
+		if (!envelope.optBoolean("ok")) throw new JSONException(coreError(envelope));
     }
 
     private static void validateDNS(JSONObject dns) throws JSONException {
-        for (String key : new String[]{"direct", "proxy", "vpn_underlay", "bootstrap"}) {
-            JSONArray values = dns.optJSONArray(key);
-            if (values == null || values.length() == 0) throw new JSONException("dns_" + key + "_required");
-            for (int i = 0; i < values.length(); i++) if (values.optString(i).trim().isEmpty()) throw new JSONException("invalid_dns_value");
-        }
-        String cache = dns.optString("cache_algorithm", "arc");
-        if (!"arc".equals(cache) && !"lru".equals(cache)) throw new JSONException("invalid_dns_cache");
+		JSONObject envelope = new JSONObject(Mobilecore.validateMobileDNSProfile(dns.toString()));
+		if (!envelope.optBoolean("ok")) throw new JSONException(coreError(envelope));
     }
 
     private JSONObject selectBestLocked() throws JSONException {
@@ -1051,6 +1034,11 @@ final class MobileRepository {
         String value = payload.optString(key, "").trim();
         if (value.isEmpty()) throw new JSONException("missing_" + key);
         return value;
+    }
+
+    private static String coreError(JSONObject value) {
+        JSONObject error = value.optJSONObject("error");
+        return error == null ? "Ошибка ядра" : error.optString("error", "Ошибка ядра");
     }
 
     private String subscriptionName(JSONObject payload) throws JSONException {

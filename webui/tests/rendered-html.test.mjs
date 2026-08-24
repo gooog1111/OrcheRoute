@@ -190,6 +190,14 @@ test("all platforms derive prerelease colors from the shared release module", as
   assert.doesNotMatch(activity, /replaceFirst\("<html"/);
 });
 
+test("android delegates network and DNS validation to the shared Go validator", async () => {
+  const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
+  assert.match(repository, /Mobilecore\.validateMobileNetworkProfile/);
+  assert.match(repository, /Mobilecore\.validateMobileDNSProfile/);
+  assert.doesNotMatch(repository, /"wifi"\.equals\(value\)/);
+  assert.doesNotMatch(repository, /new String\[\]\{"direct", "proxy", "vpn_underlay", "bootstrap"\}/);
+});
+
 test("shared prerelease branding labels every UI and feeds the Android native shell", async () => {
   const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
   const nextConfig = await readFile(new URL("../next.config.ts", import.meta.url), "utf8");

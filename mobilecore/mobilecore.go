@@ -324,6 +324,28 @@ func PreviewDNS(dnsJSON string) string {
 	return encode(map[string]any{"ok": true, "result": preview})
 }
 
+func ValidateMobileNetworkProfile(profileJSON string) string {
+	var profile map[string]any
+	if json.Unmarshal([]byte(profileJSON), &profile) != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_network_profile"}})
+	}
+	if err := mobilevalidator.MobileNetworkProfile(profile); err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	return encode(map[string]any{"ok": true})
+}
+
+func ValidateMobileDNSProfile(dnsJSON string) string {
+	var dns map[string]any
+	if json.Unmarshal([]byte(dnsJSON), &dns) != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_dns_profile"}})
+	}
+	if err := mobilevalidator.MobileDNSProfile(dns); err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	return encode(map[string]any{"ok": true})
+}
+
 // GenerateMihomoConfig accepts a resolved, platform-neutral network profile.
 // The same function is available to Linux Server and Android adapters.
 func GenerateMihomoConfig(inputJSON string) string {
