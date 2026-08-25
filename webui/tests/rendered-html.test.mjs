@@ -208,6 +208,8 @@ test("android updater selects a persistent prerelease channel with a stable-to-b
   assert.match(settings, /appUpdate\?\.current_prerelease/);
   assert.match(settings, /Это тестовая сборка с непроверенными изменениями VPN-автоматики/);
   assert.match(settings, /Понимаю риск, включить Beta/);
+	assert.match(settings, /actions\.setAppUpdateChannel\(enabled\)/);
+	assert.match(settings, /setBetaChannel\(true\)/);
 	assert.match(updater, /releases\/download\/android-beta\/android-update\.json/);
 	assert.match(updater, /Канал manifest не совпадает/);
   assert.match(updater, /preferences\.getBoolean\(BETA_ENABLED, currentVersion\.contains\("-"\)\)/);

@@ -515,6 +515,7 @@ export const actions = {
   },
   checkAppUpdate(beta_enabled: boolean) { return request<{accepted:boolean}>("/v1/app-update/check", {method:"POST", body:JSON.stringify({beta_enabled})}); },
   installAppUpdate(beta_enabled: boolean) { return request<{accepted:boolean}>("/v1/app-update/install", {method:"POST", body:JSON.stringify({beta_enabled})}); },
+  setAppUpdateChannel(beta_enabled: boolean) { return request<AndroidAppUpdateStatus>("/v1/app-update/channel", {method:"PUT", body:JSON.stringify({beta_enabled})}); },
   updateComponentSettings(payload: { geo_auto_update: boolean; geo_interval_hours: number; geo_source: string; geoip_url?: string; geosite_url?: string }) {
     return request<{ updated: boolean }>("/v1/components/settings", {
       method: "PUT",

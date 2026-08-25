@@ -241,6 +241,8 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.saveDefaultEmergency(ctx, body)
 		case "/v1/qualification/policy":
 			return runtime.saveQualification(body)
+		case "/v1/app-update/channel":
+			return runtime.saveAppUpdateChannel(body)
 		case "/v1/routes":
 			return runtime.saveRoutes(body)
 		case "/v1/network/profile":

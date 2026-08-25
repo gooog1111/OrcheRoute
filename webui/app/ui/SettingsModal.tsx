@@ -3131,6 +3131,17 @@ function ComponentsForm({
   const [geoSiteURL, setGeoSiteURL] = useState("");
   const [appUpdate, setAppUpdate] = useState(() => embedded ? getAndroidAppUpdateStatus() : data?.appUpdate ?? null);
 	const [betaWarning, setBetaWarning] = useState(false);
+	const setBetaChannel = (enabled: boolean) => {
+		if (embedded) {
+			setAndroidAppUpdateBetaEnabled(enabled);
+			setAppUpdate(getAndroidAppUpdateStatus());
+			return;
+		}
+		setAppUpdate((value) => value ? {...value, beta_enabled: enabled} : value);
+		void actions.setAppUpdateChannel(enabled).then(setAppUpdate).catch(() => {
+			void getServerAppUpdateStatus().then(setAppUpdate).catch(() => {});
+		});
+	};
   useEffect(() => {
     const refresh = () => embedded ? setAppUpdate(getAndroidAppUpdateStatus()) : void getServerAppUpdateStatus().then(setAppUpdate).catch(() => {});
     refresh();
@@ -3285,11 +3296,11 @@ function ComponentsForm({
               disabled={Boolean(appUpdate?.active)}
               onChange={(event) => {
                 if (!event.target.checked) {
-                  if (embedded) setAndroidAppUpdateBetaEnabled(false); else setAppUpdate((value) => value ? {...value, beta_enabled:false} : value);
+				  setBetaChannel(false);
                   return;
                 }
                 if (appUpdate?.current_prerelease) {
-                  if (embedded) setAndroidAppUpdateBetaEnabled(true); else setAppUpdate((value) => value ? {...value, beta_enabled:true} : value);
+				  setBetaChannel(true);
                   return;
                 }
                 setBetaWarning(true);
@@ -3349,7 +3360,7 @@ function ComponentsForm({
 				type="button"
 				onClick={() => {
 				  setBetaWarning(false);
-				  setAndroidAppUpdateBetaEnabled(true);
+				  setBetaChannel(true);
 				}}
 			  >
 				Понимаю риск, включить Beta

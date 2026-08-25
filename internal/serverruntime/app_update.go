@@ -67,9 +67,34 @@ func (r *Runtime) getAppUpdate() (int, any) {
 	_ = readJSON(filepath.Join(r.Config.StateDirectory, "app-update.json"), &v)
 	if version := currentPackageVersion(); version != "" {
 		v["current_version"] = version
+		v["current_prerelease"] = strings.Contains(version, "-")
 	}
 	v["active"] = containsString([]string{"checking", "downloading", "installing"}, stringValue(v["state"]))
 	return 200, v
+}
+
+func (r *Runtime) saveAppUpdateChannel(body map[string]any) (int, any) {
+	enabled, ok := body["beta_enabled"].(bool)
+	if !ok {
+		return 400, map[string]any{"error": "invalid_update_channel"}
+	}
+	_, value := r.getAppUpdate()
+	current := value.(map[string]any)
+	if current["active"] == true {
+		return 409, map[string]any{"error": "app_update_in_progress"}
+	}
+	current["beta_enabled"] = enabled
+	current["state"] = "idle"
+	current["message"] = map[bool]string{true: "Выбран канал Beta", false: "Выбран канал Stable"}[enabled]
+	current["active"] = false
+	current["updated_at"] = time.Now().Unix()
+	delete(current, "latest_version")
+	delete(current, "update_available")
+	delete(current, "error")
+	if err := atomicJSON(filepath.Join(r.Config.StateDirectory, "app-update.json"), current); err != nil {
+		return backendError(err)
+	}
+	return 200, current
 }
 
 func (r *Runtime) startAppUpdate(action string, body map[string]any) (int, any) {
@@ -84,7 +109,8 @@ func (r *Runtime) startAppUpdate(action string, body map[string]any) (int, any) 
 	if enabled, _ := body["beta_enabled"].(bool); enabled {
 		args = append(args, "--beta")
 	}
-	if err := atomicJSON(filepath.Join(r.Config.StateDirectory, "app-update.json"), map[string]any{"state": "checking", "message": "Запускаем проверку обновления", "active": true, "updated_at": time.Now().Unix()}); err != nil {
+	beta, _ := body["beta_enabled"].(bool)
+	if err := atomicJSON(filepath.Join(r.Config.StateDirectory, "app-update.json"), map[string]any{"state": "checking", "message": "Запускаем проверку обновления", "active": true, "beta_enabled": beta, "updated_at": time.Now().Unix()}); err != nil {
 		return backendError(err)
 	}
 	cmd := exec.Command(r.Config.SelfUpdateBinary, args...)
