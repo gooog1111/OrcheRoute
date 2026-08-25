@@ -118,16 +118,42 @@ test("android connectivity monitor binds DNS and HTTP to a physical network", as
   assert.doesNotMatch(monitor, /probeConnectivity/);
 });
 
+test("android qualification sockets use the physical network selected by the monitor", async () => {
+  const vpnService = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
+  const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
+  assert.match(vpnService, /engineInit\(home\.getAbsolutePath\(\), fd -> protectAndBind\(\(int\) fd\)\)/);
+  assert.match(vpnService, /Network network = MobileRuntime\.get\(this\)\.identityPhysicalNetwork\(\)/);
+  assert.match(vpnService, /network\.bindSocket\(duplicate\.getFileDescriptor\(\)\)/);
+  assert.match(vpnService, /if \(!protect\(fd\)\) return false/);
+  assert.match(runtime, /initializeQualificationTransport\(\)/);
+  assert.match(runtime, /engineInit\([\s\S]*fd -> bindPhysicalSocket\(\(int\) fd\)\)/);
+  assert.match(runtime, /Network network = connectivityMonitor\.activePhysicalNetwork\(\)/);
+  assert.match(runtime, /network\.bindSocket\(duplicate\.getFileDescriptor\(\)\)/);
+});
+
 test("android whitelist scan finishes before VPN connect and checks one source contextually", async () => {
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
-  assert.match(runtime, /allowlistRouteOverride[\s\S]*scheduleRefresh\(subscriptionId, true, null, true, false, false\)/);
+  assert.match(runtime, /boolean restricted = "allowlist"\.equals\(connectivityState\(\)\)/);
+  assert.match(runtime, /if \(restricted\) enterAllowlistMode\(\)/);
   assert.match(runtime, /scheduleRefresh\(subscriptionId, true, null, true, false, false\)/);
   assert.match(runtime, /boolean restrictedScan = allowlistScan;/);
   assert.match(runtime, /restrictedScan[\s\S]*repository\.replaceWhitelistSource/);
+	assert.match(runtime, /awaitStableWhitelistConnection\(45_000\)/);
+	assert.match(runtime, /whitelistHealthSuccesses >= 2/);
+	assert.match(runtime, /if \(desiredEnabled\) onWhitelistPoolEmpty\(\)/);
+	assert.match(runtime, /if \("allowlist"\.equals\(current\.state\)\) enterAllowlistMode\(\)/);
   assert.doesNotMatch(runtime, /Найден доступный сервер, подключаемся/);
   assert.match(repository, /\.put\("selected", !whitelistMode && poolSelected\)/);
   assert.match(repository, /\.put\("selected", whitelistMode\)/);
+});
+
+test("android status polling never claims VPN ownership", async () => {
+  const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
+  const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
+  assert.doesNotMatch(runtime, /VpnService\.prepare/);
+  assert.match(runtime, /permission_granted", vpnPermissionGranted/);
+  assert.match(activity, /VpnService\.prepare\(this\)/);
 });
 
 test("android settings expose a signed GitHub release updater without transport explanation", async () => {

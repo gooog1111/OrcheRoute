@@ -23,6 +23,7 @@ type QualificationObserver interface {
 type mobileQualificationBackend struct {
 	settings   map[string]any
 	observer   QualificationObserver
+	failures   map[string]string
 	speedBytes int64
 	baseline   qualification.Download
 	baselineOK bool
@@ -66,7 +67,7 @@ func QualifyNodes(pool, proxiesJSON, settingsJSON, sourcesJSON string, observer 
 	if valueInt(settings["speed_candidates_per_source"], 0) > 0 {
 		settings["speed_candidates"] = settings["speed_candidates_per_source"]
 	}
-	backend := &mobileQualificationBackend{settings: settings, observer: observer}
+	backend := &mobileQualificationBackend{settings: settings, observer: observer, failures: map[string]string{}}
 	result, err := qualification.Qualify(context.Background(), pool, proxies, settings, sources, backend, time.Now)
 	if err != nil {
 		return qualificationError(err.Error())
@@ -78,7 +79,7 @@ func QualifyNodes(pool, proxiesJSON, settingsJSON, sourcesJSON string, observer 
 		tests = append(tests, qualificationProbe{Name: name, Alive: true, DelayMS: metric.DelayMS,
 			SpeedMbps: metric.SpeedMbps, StabilityRatio: metric.StabilityRatio, Country: metric.Country})
 	}
-	return encode(map[string]any{"ok": true, "result": map[string]any{"proxies": result.Proxies, "tests": tests, "report": result.Report, "metrics": result.Metrics}})
+	return encode(map[string]any{"ok": true, "result": map[string]any{"proxies": result.Proxies, "tests": tests, "report": result.Report, "metrics": result.Metrics, "failures": backend.failures}})
 }
 
 func (backend *mobileQualificationBackend) TCP(ctx context.Context, proxies []map[string]any) ([]qualification.Latency, error) {
@@ -91,6 +92,9 @@ func (backend *mobileQualificationBackend) TCP(ctx context.Context, proxies []ma
 	result := make([]qualification.Latency, len(probes))
 	for index, probe := range probes {
 		result[index] = qualification.Latency{Alive: probe.Alive, Seconds: float64(probe.DelayMS) / 1000}
+		if !probe.Alive && probe.Error != "" {
+			backend.failures["tcp:"+probe.Name] = probe.Error
+		}
 	}
 	return result, nil
 }
@@ -106,6 +110,9 @@ func (backend *mobileQualificationBackend) URL(ctx context.Context, proxies []ma
 	result := make([]qualification.Latency, len(probes))
 	for index, probe := range probes {
 		result[index] = qualification.Latency{Alive: probe.Alive, Seconds: float64(probe.DelayMS) / 1000}
+		if !probe.Alive && probe.Error != "" {
+			backend.failures["url:"+probe.Name] = probe.Error
+		}
 	}
 	return result, nil
 }

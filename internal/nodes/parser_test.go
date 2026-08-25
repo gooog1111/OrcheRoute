@@ -32,6 +32,17 @@ func TestSupportedProtocolLinks(t *testing.T) {
 	}
 }
 
+func TestVLESSGRPCCustomPathKeepsLeadingSlash(t *testing.T) {
+	proxy, err := ParseLink("vless://00000000-0000-0000-0000-000000000001@192.0.2.1:443?type=grpc&security=reality&serviceName=%2Fapi%2Fv1%2Fstream&sni=example.com&pbk=test#custom", "test", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts, ok := proxy["grpc-opts"].(map[string]any)
+	if !ok || opts["grpc-service-name"] != "/api/v1/stream" {
+		t.Fatalf("custom gRPC path was changed: %#v", proxy["grpc-opts"])
+	}
+}
+
 func TestHysteria2Fields(t *testing.T) {
 	proxy, err := ParseLink("hysteria2://password@example.com:8443?sni=cdn.example&obfs=salamander&obfs-password=secret&insecure=true", "test", 1)
 	if err != nil || proxy["type"] != "hysteria2" || proxy["sni"] != "cdn.example" || proxy["skip-cert-verify"] != true {

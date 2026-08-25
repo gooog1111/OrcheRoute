@@ -486,7 +486,10 @@ func applyTransport(proxy map[string]any, query url.Values) error {
 		proxy["ws-opts"] = opts
 	case "grpc", "gun":
 		proxy["network"] = "grpc"
-		service := strings.TrimPrefix(unescapeDefault(firstNonEmpty(query.Get("serviceName"), query.Get("service_name"), query.Get("path")), ""), "/")
+		// Mihomo treats a leading slash as an explicit custom gRPC path. It
+		// must not be normalized away: "service" maps to /service/Tun while
+		// "/api/v1/stream" must remain exactly /api/v1/stream.
+		service := unescapeDefault(firstNonEmpty(query.Get("serviceName"), query.Get("service_name"), query.Get("path")), "")
 		opts := map[string]any{"grpc-service-name": service}
 		copyIf(opts, "grpc-authority", query.Get("authority"))
 		proxy["grpc-opts"] = opts

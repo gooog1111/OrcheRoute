@@ -198,14 +198,19 @@ export function Dashboard() {
     const target = !enabled;
     setBusy(true);
     setError(null);
-    setOperationView({ state: "running", title: target ? "Включаем OrcheRoute" : "Выключаем OrcheRoute", detail: "Передаём команду контроллеру…", step: 0, steps: ["Отправляем команду", "Контроллер меняет режим", "Проверяем соединение"] });
+    setOperationView({ state: "running", title: target ? "Включаем OrcheRoute" : "Выключаем OrcheRoute", detail: "Передаём команду службе…", step: 0, steps: ["Отправляем команду", target ? "Подключаем VPN" : "Останавливаем VPN", "Проверяем соединение"] });
     try {
       await actions.setEnabled(target);
-      setOperationView((current) => current && ({ ...current, step: 1, detail: target ? "Контроллер выбирает рабочий VPN-сервер…" : "Переводим трафик на прямой выход…" }));
+      setOperationView((current) => current && ({ ...current, step: 1, detail: target ? "Выбираем и подключаем VPN-сервер…" : "Закрываем VPN-профиль…" }));
       let next: DashboardData | null = null;
       for (let attempt = 0; attempt < 90; attempt += 1) {
         next = await loadDashboard();
         setData(next);
+		const subscriptionUpdate = next.operations?.subscription_update;
+		const progressMessage = subscriptionUpdate?.message;
+		if (target && subscriptionUpdate?.active && progressMessage) {
+			setOperationView((current) => current && ({ ...current, detail: progressMessage }));
+		}
         if (next.status.connectivity === "controller_error") {
           throw new Error(next.status.mobile?.message || "Мобильный VPN runtime не запущен.");
         }

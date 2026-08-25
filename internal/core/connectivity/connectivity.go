@@ -249,7 +249,12 @@ func normalizeOpenURL(value string) string {
 	lower := strings.ToLower(value)
 	if strings.Contains(lower, "gstatic.com/generate_204") ||
 		strings.Contains(lower, "connectivitycheck.gstatic.com") ||
-		strings.Contains(lower, "clients3.google.com/generate_204") {
+		strings.Contains(lower, "clients3.google.com/generate_204") ||
+		strings.Contains(lower, "github.com/") ||
+		strings.Contains(lower, "raw.githubusercontent.com/") {
+		// Android connectivity endpoints and GitHub are commonly present in
+		// operator allowlists. A successful response from either therefore does
+		// not prove unrestricted Internet access.
 		return "https://www.cloudflare.com/cdn-cgi/trace"
 	}
 	return value

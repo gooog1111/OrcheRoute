@@ -63,6 +63,16 @@ func TestConnectivityCheckEndpointIsNotOpenInternetAnchor(t *testing.T) {
 	}
 }
 
+func TestGitHubCannotProveOpenInternet(t *testing.T) {
+	targets, err := Targets(Config{AllowlistURL: "https://allowed.example/", OpenInternetURL: "https://github.com/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if targets[1].URL != "https://www.cloudflare.com/cdn-cgi/trace" {
+		t.Fatalf("open target=%q", targets[1].URL)
+	}
+}
+
 func TestConfirmRejectsTransientOffline(t *testing.T) {
 	result, err := Confirm(ConfirmationInput{ConfirmedState: Allowlist, ObservedState: Offline})
 	if err != nil || result.State != Allowlist || result.CandidateCount != 1 {

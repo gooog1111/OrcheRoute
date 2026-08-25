@@ -177,7 +177,7 @@ public final class OrcheRouteVpnService extends VpnService {
 			if ("normal".equals(initialNetworkMode)) runtime.leaveAllowlistMode();
             MobileRuntime.EngineProfile profile = runtime.engineProfile();
             Log.i("OrcheRouteEngine", "profile selected proxy=" + profile.proxy() + " node=" + profile.nodeName);
-            requireOk(Mobilecore.engineInit(home.getAbsolutePath(), fd -> protect((int) fd)));
+            requireOk(Mobilecore.engineInit(home.getAbsolutePath(), fd -> protectAndBind((int) fd)));
             Log.i("OrcheRouteEngine", "native engine initialized");
             requireOk(Mobilecore.engineLoadConfig(profile.proxy() ? profile.config : DIRECT_TEST_CONFIG));
             Log.i("OrcheRouteEngine", "configuration loaded");
@@ -304,6 +304,25 @@ public final class OrcheRouteVpnService extends VpnService {
             setUnderlyingNetworks(null);
             connected = false;
             notificationNode = "";
+        }
+    }
+
+    /**
+     * Keeps every Mihomo outbound socket outside the Android TUN and on the
+     * physical network selected by the connectivity monitor. Protecting the
+     * descriptor alone is insufficient while Wi-Fi is the system default: a
+     * cellular qualification would otherwise produce Wi-Fi false positives.
+     */
+    private boolean protectAndBind(int fd) {
+        if (!protect(fd)) return false;
+        Network network = MobileRuntime.get(this).identityPhysicalNetwork();
+        if (network == null) return false;
+        try (ParcelFileDescriptor duplicate = ParcelFileDescriptor.fromFd(fd)) {
+            network.bindSocket(duplicate.getFileDescriptor());
+            return true;
+        } catch (Exception error) {
+            Log.w("OrcheRouteEngine", "Unable to bind outbound socket to selected physical network", error);
+            return false;
         }
     }
 

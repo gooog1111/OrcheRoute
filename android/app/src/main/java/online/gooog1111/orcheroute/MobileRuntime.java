@@ -6,8 +6,8 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
-import android.net.VpnService;
 import android.net.Uri;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -52,6 +52,8 @@ final class MobileRuntime {
     private boolean allowlistWorkingFound;
     private long allowlistLastScanAt;
     private boolean whitelistConnectPending;
+	private int whitelistHealthSuccesses;
+	private boolean vpnPermissionGranted;
     private String connectedNodeID = "";
 	private boolean controllerQualificationActive;
     private boolean componentActive;
@@ -90,6 +92,32 @@ final class MobileRuntime {
             GeoUpdateScheduler.apply(this.context, settings.optBoolean("geo_auto_update", true), settings.optInt("geo_interval_hours", 24));
         } catch (JSONException ignored) { }
         this.connectivityMonitor.start();
+        initializeQualificationTransport();
+    }
+
+    private void initializeQualificationTransport() {
+        File home = context.getDir("mihomo", Context.MODE_PRIVATE);
+        try {
+            JSONObject result = new JSONObject(Mobilecore.engineInit(
+                    home.getAbsolutePath(), fd -> bindPhysicalSocket((int) fd)));
+            if (!result.optBoolean("ok")) {
+                Log.w("OrcheRouteEngine", "Qualification transport initialization failed: " + coreError(result));
+            }
+        } catch (Throwable error) {
+            Log.w("OrcheRouteEngine", "Qualification transport initialization failed", error);
+        }
+    }
+
+    private boolean bindPhysicalSocket(int fd) {
+        Network network = connectivityMonitor.activePhysicalNetwork();
+        if (network == null) return false;
+        try (ParcelFileDescriptor duplicate = ParcelFileDescriptor.fromFd(fd)) {
+            network.bindSocket(duplicate.getFileDescriptor());
+            return true;
+        } catch (Exception error) {
+            Log.w("OrcheRouteEngine", "Unable to bind qualification socket to selected physical network", error);
+            return false;
+        }
     }
 
     static MobileRuntime get(Context context) {
@@ -104,18 +132,21 @@ final class MobileRuntime {
     }
 
     synchronized void onPermissionRequired() {
+		vpnPermissionGranted = false;
 		setDesiredEnabled(true);
         state = "permission_required";
         message = "Подтвердите системное разрешение Android на создание VPN";
     }
 
     synchronized void onPermissionGranted() {
+		vpnPermissionGranted = true;
 		setDesiredEnabled(true);
         state = "starting";
         message = "Разрешение получено, запускается VPN-служба";
     }
 
     synchronized void onPermissionDenied() {
+		vpnPermissionGranted = false;
 		setDesiredEnabled(false);
         state = "error";
         message = "Разрешение Android на создание VPN не предоставлено";
@@ -143,6 +174,7 @@ final class MobileRuntime {
     }
 
     synchronized void onDirectTestConnected() {
+		vpnPermissionGranted = true;
 		setDesiredEnabled(true);
         state = "direct_test";
         message = "Mihomo подключён к Android TUN в диагностическом режиме DIRECT";
@@ -150,6 +182,7 @@ final class MobileRuntime {
     }
 
     synchronized void onProxyConnected(String nodeName, String nodeID) {
+		vpnPermissionGranted = true;
 		setDesiredEnabled(true);
         state = "connected";
         whitelistConnectPending = false;
@@ -366,7 +399,9 @@ final class MobileRuntime {
             if ("POST".equals(verb) && subscriptionId != null) return response(202, scheduleRefresh(subscriptionId, false, null));
             subscriptionId = subscriptionId(path, "/check");
             if ("POST".equals(verb) && subscriptionId != null) {
-                return response(202, allowlistRouteOverride
+                boolean restricted = "allowlist".equals(connectivityState());
+                if (restricted) enterAllowlistMode();
+                return response(202, restricted
                         ? scheduleRefresh(subscriptionId, true, null, true, false, false)
                         : scheduleRefresh(subscriptionId, true, null));
             }
@@ -554,6 +589,15 @@ final class MobileRuntime {
 					JSONArray finalTests = qualificationResult.getJSONArray("tests");
 					JSONObject report = qualificationResult.getJSONObject("report");
 					if (qualified.length() == 0) {
+						JSONObject failures = qualificationResult.optJSONObject("failures");
+						if (failures != null) {
+							int logged = 0;
+							java.util.Iterator<String> keys = failures.keys();
+							while (keys.hasNext() && logged++ < 12) {
+								String failed = keys.next();
+								Log.w("OrcheRouteScan", "Qualification rejected " + failed + ": " + failures.optString(failed));
+							}
+						}
 						String reason = report.optInt("tcp_alive") == 0 ? "tcp_unavailable"
 								: report.optInt("url_alive") == 0 ? "url_unavailable"
 								: report.optBoolean("geo_enabled") && report.optInt("geo_passed") == 0 ? "country_excluded"
@@ -589,16 +633,22 @@ final class MobileRuntime {
                     : "";
             String finalMessage = finalError.isEmpty() ? text : text + " · " + finalError;
             updateRefresh(success == items.length() ? "success" : "warning", "complete", finalMessage, items.length(), items.length(), finalError);
-            if (allowlistScan) {
+			if (allowlistScan) {
                 int working = repository.whitelistCount();
 				if (working == 0) {
-					onWhitelistPoolEmpty();
+					if (desiredEnabled) onWhitelistPoolEmpty();
+					else updateRefresh("success", "complete",
+							"В выбранной подписке нет серверов, доступных в белых списках",
+							items.length(), items.length(), "");
 					return;
                 }
                 allowlistWorkingFound = true;
                 updateRefresh("running", "whitelist_pool", "Список для белых списков сформирован: " + working + " серверов", items.length(), items.length(), "");
-                if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
-                boolean connectionConfirmed = awaitWhitelistConnection(30_000);
+                boolean connectionConfirmed = false;
+                if (desiredEnabled) {
+                    if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
+                    connectionConfirmed = awaitStableWhitelistConnection(45_000);
+                }
                 ensureRefreshContinues(true);
                 if (!connectionConfirmed && repository.whitelistCount() == 0) {
 					onWhitelistPoolEmpty(); return;
@@ -634,11 +684,13 @@ final class MobileRuntime {
         }
     }
 
-    private boolean awaitWhitelistConnection(long timeoutMs) throws InterruptedException {
+    private boolean awaitStableWhitelistConnection(long timeoutMs) throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline && isAllowlistModeActive()) {
             if (refreshCancelRequested) return false;
-            synchronized (this) { if ("connected".equals(state)) return true; }
+            synchronized (this) {
+                if ("connected".equals(state) && whitelistHealthSuccesses >= 2) return true;
+            }
             Thread.sleep(500);
         }
         return false;
@@ -790,10 +842,11 @@ final class MobileRuntime {
     synchronized boolean enterAllowlistMode() {
         boolean changed = !allowlistRouteOverride;
         allowlistRouteOverride = true;
-        message = "Обнаружены белые списки. Ищем доступный сервер без региональных ограничений";
+        if (desiredEnabled) message = "Обнаружены белые списки. Ищем доступный сервер без региональных ограничений";
         if (changed) {
             allowlistWorkingFound = repository.whitelistCount() > 0;
             allowlistLastScanAt = 0;
+			whitelistHealthSuccesses = 0;
         }
         return changed;
     }
@@ -830,6 +883,7 @@ final class MobileRuntime {
         if (candidate == null) return false;
         if ("connected".equals(state) && connectedNodeID.equals(candidate.optString("id"))) return false;
         whitelistConnectPending = true;
+		whitelistHealthSuccesses = 0;
 		setDesiredEnabled(true);
         state = "starting";
         message = "Подключаемся через " + candidate.optString("display_name") + " из списка для белых списков";
@@ -841,8 +895,9 @@ final class MobileRuntime {
         allowlistRouteOverride = false;
         allowlistWorkingFound = repository.whitelistCount() > 0;
         allowlistLastScanAt = 0;
+		whitelistHealthSuccesses = 0;
         try { repository.deactivateWhitelist(); } catch (JSONException ignored) { }
-        if (changed) message = "Обычный интернет восстановлен. Возвращаем пользовательскую маршрутизацию";
+        if (changed && desiredEnabled) message = "Обычный интернет восстановлен. Возвращаем пользовательскую маршрутизацию";
         return changed;
     }
 
@@ -853,7 +908,8 @@ final class MobileRuntime {
         detectedInternetMode = current.state;
         Log.i("OrcheRouteNet", "state " + previous.state + " -> " + current.state);
         if (!desiredEnabled) {
-            if ("normal".equals(current.state) && allowlistRouteOverride) leaveAllowlistMode();
+			if ("allowlist".equals(current.state)) enterAllowlistMode();
+			else if ("normal".equals(current.state) && allowlistRouteOverride) leaveAllowlistMode();
             return;
         }
 		try {
@@ -921,6 +977,7 @@ final class MobileRuntime {
 
     synchronized String failoverWhitelistNode() throws JSONException {
         whitelistConnectPending = false;
+		whitelistHealthSuccesses = 0;
         JSONObject next = repository.failoverWhitelistNode();
         if (next != null) {
             whitelistConnectPending = true;
@@ -1055,6 +1112,9 @@ final class MobileRuntime {
 
 	synchronized String onProxyHealth(boolean successful) {
 		try {
+			if (allowlistRouteOverride) {
+				whitelistHealthSuccesses = successful ? whitelistHealthSuccesses + 1 : 0;
+			}
 			repository.recordHealth(connectedNodeID, allowlistRouteOverride, successful);
 			if (allowlistRouteOverride || !"normal".equals(connectivityState()) || !"auto".equals(repository.mode())) return "keep";
 			JSONObject decision = repository.failoverStep(successful);
@@ -1127,7 +1187,6 @@ final class MobileRuntime {
 
     private JSONObject status() throws JSONException {
         long now = System.currentTimeMillis() / 1000L;
-        boolean permissionGranted = VpnService.prepare(context) == null;
         ConnectivityMonitor.Snapshot connectivitySnapshot = connectivityMonitor.snapshot();
         boolean internet = "normal".equals(connectivitySnapshot.state) || "allowlist".equals(connectivitySnapshot.state);
         String connectivity;
@@ -1140,7 +1199,7 @@ final class MobileRuntime {
         JSONObject mobile = new JSONObject()
                 .put("state", state)
                 .put("message", message)
-                .put("permission_granted", permissionGranted)
+                .put("permission_granted", vpnPermissionGranted)
                 .put("engine_ready", true);
         JSONObject network = new JSONObject()
                 .put("capture_mode", "system")
