@@ -16,7 +16,7 @@ android {
         applicationId "online.gooog1111.orcheroute"
         minSdk 26
         targetSdk 36
-		versionCode 58
+		versionCode 59
 		versionName orcheRouteVersionName
 		resValue "color", "launcher_accent", orcheRoutePrerelease ? "#FF5B61" : "#45F3C2"
 		resValue "string", "app_name", orcheRoutePrerelease ? "OrcheRoute BETA" : "OrcheRoute"
