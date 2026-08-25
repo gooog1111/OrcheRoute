@@ -527,6 +527,21 @@ test("shared UI exposes and persists all six appearance themes", async () => {
   assert.match(dashboard, /document\.documentElement\.dataset\.theme = theme/);
   assert.match(dashboard, /localStorage\.setItem\(themeStorageKey, theme\)/);
   assert.match(settings, /role="radiogroup"/);
+  assert.match(settings, /"appearance"/);
+  assert.match(settings, /label="Оформление"/);
+  assert.match(settings, /activeTab === "appearance"/);
   assert.match(settings, /onTheme\(item\.id\)/);
   assert.match(backdrop, /<MatrixRain \/>/);
+});
+
+test("light skins keep diagnostics and power controls readable", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(styles, /\.pool-audit[^}]+background: var\(--surface-soft\)/);
+  assert.match(styles, /data-theme="light"[^}]+\.power-button\.is-on/);
+  assert.match(styles, /data-theme="windows-95"[^}]+\.power-halo::before,[\s\S]+display: none/);
+  assert.match(styles, /data-theme="windows-95"[^}]+\.hero-copy[\s\S]+color: #fff/);
+  for (const asset of ["flowers.svg", "standing.svg", "sitting.svg", "logo.svg"]) {
+    assert.match(styles, new RegExp(`/themes/hello-kitty/${asset.replace(".", "\\.")}`));
+    await readFile(new URL(`../public/themes/hello-kitty/${asset}`, import.meta.url));
+  }
 });

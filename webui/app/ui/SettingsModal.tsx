@@ -37,7 +37,7 @@ import { OperationPanel, type OperationView } from "./OperationPanel";
 import { themes, type ThemeID } from "./theme";
 
 export type SettingsTab =
-  "general" | "access" | "network" | "routes" | "sources" | "qualification" | "components";
+  "general" | "appearance" | "access" | "network" | "routes" | "sources" | "qualification" | "components";
 
 type Props = {
   data: DashboardData | null;
@@ -215,8 +215,8 @@ export function SettingsModal({
   const navRef = useRef<HTMLElement | null>(null);
   const tabs = useMemo<SettingsTab[]>(
     () => platform.showAccessSettings
-      ? ["general", "access", "network", "routes", "sources", "qualification", "components"]
-      : ["general", "network", "routes", "sources", "qualification", "components"],
+      ? ["general", "appearance", "access", "network", "routes", "sources", "qualification", "components"]
+      : ["general", "appearance", "network", "routes", "sources", "qualification", "components"],
     [platform.showAccessSettings],
   );
 
@@ -627,6 +627,11 @@ export function SettingsModal({
               onClick={() => onTab("general")}
               label="Основное"
             />
+            <Tab
+              active={activeTab === "appearance"}
+              onClick={() => onTab("appearance")}
+              label="Оформление"
+            />
             {platform.showAccessSettings && (
               <Tab
                 active={activeTab === "access"}
@@ -664,7 +669,10 @@ export function SettingsModal({
           </div>
           <div className="settings-content" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
             {activeTab === "general" && (
-              <GeneralForm data={data} busy={busy} run={run} theme={theme} onTheme={onTheme} />
+              <GeneralForm data={data} busy={busy} run={run} />
+            )}
+            {activeTab === "appearance" && (
+              <AppearanceForm theme={theme} onTheme={onTheme} />
             )}
             {activeTab === "access" && <AccessPanel data={data} busy={busy} />}
             {activeTab === "network" &&
@@ -740,14 +748,10 @@ function GeneralForm({
   data,
   busy,
   run,
-  theme,
-  onTheme,
 }: {
   data: DashboardData | null;
   busy: boolean;
   run: Runner;
-  theme: ThemeID;
-  onTheme: (theme: ThemeID) => void;
 }) {
   const activePool = data?.status.proxy.active_pool;
   const currentNode = activePool === "whitelist" ? undefined : data?.nodes.find((node) =>
@@ -755,23 +759,6 @@ function GeneralForm({
 
   return (
     <div className="settings-section">
-      <Heading eyebrow="Интерфейс" title="Тема оформления" />
-      <div className="theme-choice-grid" role="radiogroup" aria-label="Тема оформления">
-        {themes.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="radio"
-            aria-checked={theme === item.id}
-            className={`theme-choice theme-preview-${item.id} ${theme === item.id ? "selected" : ""}`}
-            onClick={() => onTheme(item.id)}
-          >
-            <span className="theme-choice-glyph" aria-hidden="true">{item.glyph}</span>
-            <strong>{item.name}</strong>
-            <small>{item.description}</small>
-          </button>
-        ))}
-      </div>
       <Heading
         eyebrow="Переключение"
         title="Выбор VPN-сервера"
@@ -817,6 +804,34 @@ function GeneralForm({
         <PoolNodes key={pool} data={data} pool={pool} busy={busy} run={run} />
       ))}
       <PoolNodes data={data} pool="whitelist" busy={busy} run={run} />
+    </div>
+  );
+}
+
+function AppearanceForm({ theme, onTheme }: { theme: ThemeID; onTheme: (theme: ThemeID) => void }) {
+  return (
+    <div className="settings-section appearance-settings">
+      <Heading
+        eyebrow="Интерфейс"
+        title="Тема оформления"
+        text="Выбранная тема хранится только на этом устройстве."
+      />
+      <div className="theme-choice-grid" role="radiogroup" aria-label="Тема оформления">
+        {themes.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="radio"
+            aria-checked={theme === item.id}
+            className={`theme-choice theme-preview-${item.id} ${theme === item.id ? "selected" : ""}`}
+            onClick={() => onTheme(item.id)}
+          >
+            <span className="theme-choice-glyph" aria-hidden="true">{item.glyph}</span>
+            <strong>{item.name}</strong>
+            <small>{item.description}</small>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
