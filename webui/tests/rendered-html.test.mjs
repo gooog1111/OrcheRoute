@@ -151,6 +151,17 @@ test("android whitelist scan finishes before VPN connect and checks one source c
   assert.match(repository, /\.put\("selected", whitelistMode\)/);
 });
 
+test("android whitelist health trusts qualification and requires repeated multi-url failures", async () => {
+  const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
+  assert.match(service, /consecutiveWhitelistHealthFailures/);
+  assert.match(service, /proxyConnectedAtElapsedMs < 45_000/);
+  assert.match(service, /runtime\.proxyHealthURLs\(\)/);
+  assert.match(service, /int failures = \+\+consecutiveWhitelistHealthFailures/);
+  assert.match(service, /if \(failures < 3\)[\s\S]*Keeping whitelist node after inconclusive health round/);
+  assert.match(service, /Proxy health failed in/);
+  assert.match(service, /consecutiveWhitelistHealthFailures = 0;[\s\S]*runtime\.onRestrictedNetworkDetected\(\)/);
+});
+
 test("android status polling never claims VPN ownership", async () => {
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");

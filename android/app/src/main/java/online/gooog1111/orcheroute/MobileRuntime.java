@@ -908,6 +908,23 @@ final class MobileRuntime {
     /** Returns the monitor's last confirmed state without starting network I/O. */
     synchronized String connectivityState() { return connectivityMonitor.snapshot().state; }
 
+	synchronized String[] proxyHealthURLs() {
+		try {
+			JSONArray configured = repository.qualificationPolicy()
+					.getJSONObject("defaults")
+					.optJSONArray("url_test_urls");
+			if (configured == null || configured.length() == 0) {
+				return new String[] { "https://cp.cloudflare.com/generate_204" };
+			}
+			int count = Math.min(3, configured.length());
+			String[] urls = new String[count];
+			for (int i = 0; i < count; i++) urls[i] = configured.optString(i, "");
+			return urls;
+		} catch (JSONException error) {
+			return new String[] { "https://cp.cloudflare.com/generate_204" };
+		}
+	}
+
     private synchronized void onConnectivityChanged(ConnectivityMonitor.Snapshot previous, ConnectivityMonitor.Snapshot current) {
         detectedInternetMode = current.state;
         Log.i("OrcheRouteNet", "state " + previous.state + " -> " + current.state);

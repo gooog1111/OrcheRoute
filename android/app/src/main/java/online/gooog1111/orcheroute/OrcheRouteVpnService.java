@@ -11,6 +11,7 @@ import android.net.Network;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
 import android.util.Log;
 
 import org.json.JSONObject;
@@ -67,6 +68,8 @@ public final class OrcheRouteVpnService extends VpnService {
     private volatile boolean connected;
     private volatile boolean starting;
     private volatile boolean stopping;
+    private volatile int consecutiveWhitelistHealthFailures;
+    private volatile long proxyConnectedAtElapsedMs;
     private ScheduledFuture<?> healthMonitor;
     private ScheduledFuture<?> trafficMonitor;
     private ScheduledFuture<?> identityMonitor;
@@ -217,6 +220,8 @@ public final class OrcheRouteVpnService extends VpnService {
                 descriptor = null;
                 requireOk(Mobilecore.engineStartTun(engineFd, "gvisor", tunGateway, "172.19.0.2"));
                 connected = true;
+                consecutiveWhitelistHealthFailures = 0;
+                proxyConnectedAtElapsedMs = SystemClock.elapsedRealtime();
             }
             Log.i("OrcheRouteEngine", "TUN started node=" + profile.nodeName);
             if (profile.proxy()) MobileRuntime.get(this).onProxyConnected(profile.nodeName, profile.nodeID);
@@ -303,6 +308,8 @@ public final class OrcheRouteVpnService extends VpnService {
             Mobilecore.engineStopTun();
             setUnderlyingNetworks(null);
             connected = false;
+            consecutiveWhitelistHealthFailures = 0;
+            proxyConnectedAtElapsedMs = 0;
             notificationNode = "";
         }
     }
@@ -436,33 +443,64 @@ public final class OrcheRouteVpnService extends VpnService {
 				if (connected && !stopping) reload(this);
 				return;
 			}
-            connection = (HttpURLConnection) new URL("https://cp.cloudflare.com/generate_204").openConnection();
-            connection.setConnectTimeout(7000);
-            connection.setReadTimeout(7000);
-            connection.setInstanceFollowRedirects(false);
-            int status = connection.getResponseCode();
-            if (status == 204 || (status >= 200 && status < 400)) {
+			if (restrictedNetwork && SystemClock.elapsedRealtime() - proxyConnectedAtElapsedMs < 45_000) {
+				Log.d("OrcheRouteHealth", "Trusting recently qualified whitelist node during startup grace period");
+				return;
+			}
+			Throwable lastError = null;
+			boolean healthy = false;
+			for (String probeURL : runtime.proxyHealthURLs()) {
+				if (probeURL == null || probeURL.isBlank()) continue;
+				try {
+					connection = (HttpURLConnection) new URL(probeURL).openConnection();
+					connection.setConnectTimeout(3000);
+					connection.setReadTimeout(3000);
+					connection.setInstanceFollowRedirects(false);
+					int status = connection.getResponseCode();
+					if (status >= 200 && status < 400) {
+						healthy = true;
+						break;
+					}
+					lastError = new IllegalStateException(probeURL + " returned HTTP " + status);
+				} catch (Throwable probeError) {
+					lastError = probeError;
+				} finally {
+					if (connection != null) connection.disconnect();
+					connection = null;
+				}
+			}
+            if (healthy) {
+				consecutiveWhitelistHealthFailures = 0;
 				if ("select".equals(runtime.onProxyHealth(true)) && connected && !stopping) reload(this);
                 return;
             }
-            throw new IllegalStateException("HTTP " + status);
-        } catch (Throwable ignored) {
+			throw lastError == null ? new IllegalStateException("No health-check URL succeeded") : lastError;
+        } catch (Throwable error) {
 			String networkMode = runtime.connectivityState();
+			Log.w("OrcheRouteHealth", "Proxy health failed in " + networkMode + ": " + error.getMessage());
 			if ("offline".equals(networkMode)) {
+				consecutiveWhitelistHealthFailures = 0;
 				runtime.onUnderlyingOfflineDetected();
 				return;
 			}
 			if ("allowlist".equals(networkMode)) {
+				int failures = ++consecutiveWhitelistHealthFailures;
+				if (failures < 3) {
+					Log.w("OrcheRouteHealth", "Keeping whitelist node after inconclusive health round " + failures + "/3");
+					return;
+				}
+				consecutiveWhitelistHealthFailures = 0;
 				runtime.onProxyHealth(false);
 				runtime.onRestrictedNetworkDetected();
 				try {
 					String next = runtime.failoverWhitelistNode();
 					if (!next.isEmpty() && connected && !stopping) reload(this);
-				} catch (Throwable error) {
-					runtime.onEngineError(error.getMessage());
+				} catch (Throwable failoverError) {
+					runtime.onEngineError(failoverError.getMessage());
 				}
 				return;
 			}
+			consecutiveWhitelistHealthFailures = 0;
 			if ("select".equals(runtime.onProxyHealth(false)) && connected && !stopping) reload(this);
         } finally {
             if (connection != null) connection.disconnect();
