@@ -153,11 +153,16 @@ test("android whitelist scan finishes before VPN connect and checks one source c
 
 test("android whitelist health trusts qualification and requires repeated multi-url failures", async () => {
   const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
+  const verifier = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/ProxyHealthVerifier.java", import.meta.url), "utf8");
   assert.match(service, /consecutiveWhitelistHealthFailures/);
   assert.match(service, /proxyConnectedAtElapsedMs < 45_000/);
   assert.match(service, /runtime\.proxyHealthURLs\(\)/);
+  assert.match(service, /runtime\.verifyActiveProxyTransport\(\)/);
+  assert.match(service, /Active whitelist proxy passed transport URL-test/);
+  assert.match(service, /if \(restrictedNetwork\) \{[\s\S]*probeAllowlistProxy\(runtime\);[\s\S]*return;/);
+  assert.match(verifier, /Mobilecore\.engineTestProxiesMulti/);
   assert.match(service, /int failures = \+\+consecutiveWhitelistHealthFailures/);
-  assert.match(service, /if \(failures < 3\)[\s\S]*Keeping whitelist node after inconclusive health round/);
+  assert.match(service, /if \(failures < 3\)[\s\S]*Keeping whitelist node after inconclusive transport round/);
   assert.match(service, /Proxy health failed in/);
   assert.match(service, /consecutiveWhitelistHealthFailures = 0;[\s\S]*runtime\.onRestrictedNetworkDetected\(\)/);
 });

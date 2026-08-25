@@ -447,6 +447,10 @@ public final class OrcheRouteVpnService extends VpnService {
 				Log.d("OrcheRouteHealth", "Trusting recently qualified whitelist node during startup grace period");
 				return;
 			}
+			if (restrictedNetwork) {
+				probeAllowlistProxy(runtime);
+				return;
+			}
 			Throwable lastError = null;
 			boolean healthy = false;
 			for (String probeURL : runtime.proxyHealthURLs()) {
@@ -484,20 +488,7 @@ public final class OrcheRouteVpnService extends VpnService {
 				return;
 			}
 			if ("allowlist".equals(networkMode)) {
-				int failures = ++consecutiveWhitelistHealthFailures;
-				if (failures < 3) {
-					Log.w("OrcheRouteHealth", "Keeping whitelist node after inconclusive health round " + failures + "/3");
-					return;
-				}
-				consecutiveWhitelistHealthFailures = 0;
-				runtime.onProxyHealth(false);
-				runtime.onRestrictedNetworkDetected();
-				try {
-					String next = runtime.failoverWhitelistNode();
-					if (!next.isEmpty() && connected && !stopping) reload(this);
-				} catch (Throwable failoverError) {
-					runtime.onEngineError(failoverError.getMessage());
-				}
+				probeAllowlistProxy(runtime);
 				return;
 			}
 			consecutiveWhitelistHealthFailures = 0;
@@ -506,6 +497,33 @@ public final class OrcheRouteVpnService extends VpnService {
             if (connection != null) connection.disconnect();
         }
     }
+
+	private void probeAllowlistProxy(MobileRuntime runtime) {
+		try {
+			if (runtime.verifyActiveProxyTransport()) {
+				consecutiveWhitelistHealthFailures = 0;
+				runtime.onProxyHealth(true);
+				Log.i("OrcheRouteHealth", "Active whitelist proxy passed transport URL-test");
+				return;
+			}
+		} catch (Throwable verificationError) {
+			Log.w("OrcheRouteHealth", "Active whitelist proxy URL-test failed: " + verificationError.getMessage());
+		}
+		int failures = ++consecutiveWhitelistHealthFailures;
+		if (failures < 3) {
+			Log.w("OrcheRouteHealth", "Keeping whitelist node after inconclusive transport round " + failures + "/3");
+			return;
+		}
+		consecutiveWhitelistHealthFailures = 0;
+		runtime.onProxyHealth(false);
+		runtime.onRestrictedNetworkDetected();
+		try {
+			String next = runtime.failoverWhitelistNode();
+			if (!next.isEmpty() && connected && !stopping) reload(this);
+		} catch (Throwable failoverError) {
+			runtime.onEngineError(failoverError.getMessage());
+		}
+	}
 
     private void closeVpnInterface() {
         ParcelFileDescriptor descriptor = vpnInterface;

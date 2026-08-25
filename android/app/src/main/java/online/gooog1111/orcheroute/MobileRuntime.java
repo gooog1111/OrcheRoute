@@ -925,6 +925,12 @@ final class MobileRuntime {
 		}
 	}
 
+	synchronized boolean verifyActiveProxyTransport() throws Exception {
+		JSONObject node = repository.activeNode(allowlistRouteOverride);
+		JSONObject defaults = repository.qualificationPolicy().getJSONObject("defaults");
+		return ProxyHealthVerifier.verify(node, defaults);
+	}
+
     private synchronized void onConnectivityChanged(ConnectivityMonitor.Snapshot previous, ConnectivityMonitor.Snapshot current) {
         detectedInternetMode = current.state;
         Log.i("OrcheRouteNet", "state " + previous.state + " -> " + current.state);
