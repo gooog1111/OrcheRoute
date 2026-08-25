@@ -493,13 +493,23 @@ final class MobileRuntime {
                                        boolean resetWhitelistPool, boolean refreshSubscriptionsAfter) throws JSONException {
         if (refreshActive) return new JSONObject().put("accepted", false).put("already_running", true);
         JSONArray items = repository.enabledSubscriptions(onlyId, onlyGroup);
+		if (allowlistScan && !repository.qualificationPolicy().getJSONObject("defaults")
+				.optBoolean("allowlist_use_emergency_subscriptions", true)) {
+			JSONArray primaryOnly = new JSONArray();
+			for (int index = 0; index < items.length(); index++) {
+				JSONObject item = items.getJSONObject(index);
+				if (!"emergency".equals(item.optString("group", "primary"))) primaryOnly.put(item);
+			}
+			items = primaryOnly;
+		}
         if (onlyId != null && items.length() == 0) return new JSONObject().put("accepted", false).put("missing_or_disabled", true);
         refreshActive = true; refreshAllowlistScan = allowlistScan; refreshStatus = "queued"; refreshPhase = "queued";
         refreshCancelRequested = false;
         refreshMessage = checkOnly ? "Проверка серверов поставлена в очередь" : "Обновление подписок поставлено в очередь"; refreshError = "";
         refreshCurrent = 0; refreshTotal = items.length(); refreshUpdatedAt = now();
         if (allowlistScan && resetWhitelistPool) repository.beginWhitelistScan();
-        worker.execute(() -> refresh(items, checkOnly, allowlistScan, refreshSubscriptionsAfter));
+		final JSONArray refreshItems = items;
+		worker.execute(() -> refresh(refreshItems, checkOnly, allowlistScan, refreshSubscriptionsAfter));
         return new JSONObject().put("accepted", true);
     }
 
@@ -629,6 +639,10 @@ final class MobileRuntime {
                 }
             }
             ensureRefreshContinues(allowlistScan);
+			if (allowlistScan && !repository.qualificationPolicy().getJSONObject("defaults")
+					.optBoolean("allowlist_use_emergency_subscriptions", true)) {
+				repository.removeEmergencyWhitelistSources();
+			}
             String text = success + " из " + items.length() + (checkOnly ? " источников проверено" : " подписок обновлено")
                     + (unavailable > 0 ? " · без доступных серверов: " + unavailable : "")
                     + ("allowlist".equals(connectivityState) ? " · сеть: белые списки" : " · сеть: обычный интернет");

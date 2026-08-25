@@ -148,7 +148,10 @@ test("android whitelist scan finishes before VPN connect and checks one source c
 	assert.match(runtime, /if \("allowlist"\.equals\(current\.state\)\) enterAllowlistMode\(\)/);
   assert.doesNotMatch(runtime, /Найден доступный сервер, подключаемся/);
   assert.match(repository, /\.put\("selected", !whitelistMode && poolSelected\)/);
-  assert.match(repository, /\.put\("selected", whitelistMode\)/);
+	assert.match(repository, /\.put\("selected", whitelistMode\)/);
+	assert.match(runtime, /allowlist_use_emergency_subscriptions/);
+	assert.match(runtime, /!"emergency"\.equals\(item\.optString\("group", "primary"\)\)/);
+	assert.match(repository, /removeEmergencyWhitelistSources/);
 });
 
 test("android whitelist health trusts qualification and requires repeated multi-url failures", async () => {
@@ -161,6 +164,8 @@ test("android whitelist health trusts qualification and requires repeated multi-
   assert.match(service, /Active whitelist proxy passed transport URL-test/);
   assert.match(service, /if \(restrictedNetwork\) \{[\s\S]*probeAllowlistProxy\(runtime\);[\s\S]*return;/);
   assert.match(verifier, /Mobilecore\.engineTestProxiesMulti/);
+	assert.match(verifier, /ALLOWLIST_HEALTH_TIMEOUT_MS = 25_000/);
+	assert.match(verifier, /Math\.max\(defaults\.optInt\("url_timeout_ms", 3000\), ALLOWLIST_HEALTH_TIMEOUT_MS\)/);
   assert.match(service, /int failures = \+\+consecutiveWhitelistHealthFailures/);
   assert.match(service, /if \(failures < 3\)[\s\S]*Keeping whitelist node after inconclusive transport round/);
   assert.match(service, /Proxy health failed in/);
@@ -366,6 +371,7 @@ test("qualification UI exposes connectivity anchors and emergency per-source top
   assert.match(settings, /geo_timeout_ms/);
   assert.match(settings, /speed_timeout_ms/);
   assert.match(settings, /url_test_urls/);
+  assert.match(settings, /allowlist_use_emergency_subscriptions/);
   assert.match(settings, /Контрольные ссылки/);
   assert.match(settings, /Добавить ссылку/);
   assert.match(settings, /Удалить URL-test/);

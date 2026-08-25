@@ -201,9 +201,10 @@ final class MobileRepository {
                 .put("url_timeout_ms", 3000)
                 .put("geo_timeout_ms", 5000)
                 .put("speed_timeout_ms", 15000)
-				.put("url_test_urls", defaultURLTestURLs())
+                .put("url_test_urls", defaultURLTestURLs())
                 .put("allowlist_probe_url", "https://ya.ru/")
-                .put("open_internet_probe_url", "https://www.cloudflare.com/cdn-cgi/trace");
+                .put("open_internet_probe_url", "https://www.cloudflare.com/cdn-cgi/trace")
+                .put("allowlist_use_emergency_subscriptions", true);
         JSONObject unlimited = new JSONObject().put("url_limit", 0).put("speed_candidates", 0).put("speed_candidates_per_source", 0).put("keep", 0);
         return new JSONObject().put("version", 1).put("defaults", defaults)
                 .put("pools", new JSONObject()
@@ -221,6 +222,7 @@ final class MobileRepository {
             if (!defaults.has("speed_timeout_ms")) defaults.put("speed_timeout_ms", 15000);
 			if (!defaults.has("url_test_urls")) defaults.put("url_test_urls", defaultURLTestURLs());
             if (!defaults.has("allowlist_probe_url")) defaults.put("allowlist_probe_url", "https://ya.ru/");
+            if (!defaults.has("allowlist_use_emergency_subscriptions")) defaults.put("allowlist_use_emergency_subscriptions", true);
             String openProbe = defaults.optString("open_internet_probe_url", "");
             if (openProbe.isEmpty() || "https://www.gstatic.com/generate_204".equalsIgnoreCase(openProbe)) {
                 // generate_204 is used by Android itself and is commonly admitted by
@@ -635,6 +637,16 @@ final class MobileRepository {
         }
         whitelistTransitionLocked(new JSONObject().put("operation", "replace_source").put("source_id", sourceId).put("nodes", nodes));
     }
+
+	synchronized void removeEmergencyWhitelistSources() throws JSONException {
+		JSONArray subscriptions = root.getJSONArray("subscriptions");
+		for (int index = 0; index < subscriptions.length(); index++) {
+			JSONObject item = subscriptions.getJSONObject(index);
+			if ("emergency".equals(item.optString("group", "primary"))) {
+				whitelistTransitionLocked(new JSONObject().put("operation", "remove_source").put("source_id", item.optString("id")));
+			}
+		}
+	}
 
     synchronized JSONObject failoverWhitelistNode() throws JSONException {
         return whitelistTransitionLocked(new JSONObject().put("operation", "fail"));

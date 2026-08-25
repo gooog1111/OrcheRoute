@@ -30,8 +30,9 @@ func DefaultPolicy() map[string]any {
 				"https://cp.cloudflare.com/generate_204",
 				"https://www.msftconnecttest.com/connecttest.txt",
 			},
-			"allowlist_probe_url":     "https://ya.ru/",
-			"open_internet_probe_url": "https://www.cloudflare.com/cdn-cgi/trace",
+			"allowlist_probe_url":                   "https://ya.ru/",
+			"open_internet_probe_url":               "https://www.cloudflare.com/cdn-cgi/trace",
+			"allowlist_use_emergency_subscriptions": true,
 		},
 		"pools": map[string]any{
 			"primary":   map[string]any{"url_limit": float64(0), "speed_candidates": float64(0), "speed_candidates_per_source": float64(0), "keep": float64(0)},
@@ -127,6 +128,11 @@ func Validate(policy map[string]any) (map[string]any, error) {
 		}
 		defaults[key] = value
 	}
+	includeEmergency, ok := valueOr(defaults, "allowlist_use_emergency_subscriptions", true).(bool)
+	if !ok {
+		return nil, validation("invalid_allowlist_use_emergency_subscriptions")
+	}
+	defaults["allowlist_use_emergency_subscriptions"] = includeEmergency
 
 	for _, pool := range Pools {
 		settings, ok := pools[pool].(map[string]any)

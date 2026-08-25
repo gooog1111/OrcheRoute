@@ -98,9 +98,18 @@ func (runtime *Runtime) refreshWhitelistSubscriptions(operation, cancelPath stri
 		return
 	}
 	cache := subscriptions.FileCache{Directory: filepath.Join(runtime.Config.StateDirectory, "subscription-cache")}
+	includeEmergency := true
+	policy := map[string]any{}
+	if readJSON(filepath.Join(runtime.Config.StateDirectory, "qualification-policy.json"), &policy) == nil {
+		if defaults, ok := policy["defaults"].(map[string]any); ok {
+			if configured, valid := defaults["allowlist_use_emergency_subscriptions"].(bool); valid {
+				includeEmergency = configured
+			}
+		}
+	}
 	enabled := make([]subscriptions.Subscription, 0, len(items))
 	for _, item := range items {
-		if item.Enabled {
+		if item.Enabled && (includeEmergency || item.GroupName != subscriptions.Emergency) {
 			enabled = append(enabled, item)
 		}
 	}
@@ -158,6 +167,11 @@ func (runtime *Runtime) updateArguments(operation, cancelPath string, extra ...s
 }
 
 func (runtime *Runtime) applyWhitelistResult(result updater.WhitelistResult) error {
+	for _, sourceID := range result.ExcludedSources {
+		if _, err := runtime.whitelistTransition(whitelist.Command{Operation: "remove_source", SourceID: sourceID}); err != nil {
+			return err
+		}
+	}
 	for _, sourceID := range result.CompletedSources {
 		if _, err := runtime.whitelistTransition(whitelist.Command{Operation: "replace_source", SourceID: sourceID, Nodes: result.Sources[sourceID]}); err != nil {
 			return err

@@ -819,6 +819,7 @@ function QualificationForm({
   ]);
   const [allowlistProbeURL, setAllowlistProbeURL] = useState("https://ya.ru/");
   const [openInternetProbeURL, setOpenInternetProbeURL] = useState("https://www.cloudflare.com/cdn-cgi/trace");
+  const [allowlistUseEmergency, setAllowlistUseEmergency] = useState(true);
   const [emergencyTop, setEmergencyTop] = useState("100");
 
   useEffect(() => {
@@ -837,6 +838,7 @@ function QualificationForm({
     ]);
     setAllowlistProbeURL(policy.defaults.allowlist_probe_url);
     setOpenInternetProbeURL(policy.defaults.open_internet_probe_url);
+    setAllowlistUseEmergency(policy.defaults.allowlist_use_emergency_subscriptions ?? true);
     setEmergencyTop(String(policy.pools.emergency.speed_candidates_per_source ?? 100));
   }, [policy]);
 
@@ -854,6 +856,7 @@ function QualificationForm({
         url_test_urls: urlTestURLs.map((value) => value.trim()),
         allowlist_probe_url: allowlistProbeURL.trim(),
         open_internet_probe_url: openInternetProbeURL.trim(),
+        allowlist_use_emergency_subscriptions: allowlistUseEmergency,
       }
     : null;
   const policyDraft = nextDefaults
@@ -977,6 +980,11 @@ function QualificationForm({
         {!validTestURLs && <small className="field-error">Укажите от 1 до 16 уникальных HTTP(S)-ссылок.</small>}
       </div>
       <Heading eyebrow="Состояние сети" title="Контрольные адреса" compact />
+	  <Toggle
+		checked={allowlistUseEmergency}
+		onChange={setAllowlistUseEmergency}
+		label="Использовать аварийные подписки при формировании списка для белых списков"
+	  />
       <div className="form-grid two">
         <Field label="Доступно при белых списках" hint="URL, который точно открывается при ограниченном доступе">
           <input type="url" value={allowlistProbeURL} onChange={(event) => setAllowlistProbeURL(event.target.value)} placeholder="https://доступный-сайт.example/ping" />

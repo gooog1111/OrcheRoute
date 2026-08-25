@@ -62,3 +62,27 @@ func TestRunWhitelistDoesNotCompleteMissingCache(t *testing.T) {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 }
+
+func TestRunWhitelistCanExcludeEmergencySubscriptions(t *testing.T) {
+	ctx := context.Background()
+	cache := subscriptions.FileCache{Directory: filepath.Join(t.TempDir(), "cache")}
+	if err := cache.Write(ctx, "primary", subscriptions.NewCache([]string{"trojan://pw@primary.example:443#Primary"}, time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	if err := cache.Write(ctx, "emergency", subscriptions.NewCache([]string{"trojan://pw@emergency.example:443#Emergency"}, time.Now())); err != nil {
+		t.Fatal(err)
+	}
+	repository := &fakeRepository{items: []subscriptions.Subscription{
+		{ID: "primary", Name: "Primary", GroupName: subscriptions.Primary, Enabled: true},
+		{ID: "emergency", Name: "Emergency", GroupName: subscriptions.Emergency, Enabled: true},
+	}}
+	result, err := RunWhitelist(ctx, Dependencies{Repository: repository, Cache: cache, Qualifier: &whitelistQualifier{}}, WhitelistRequest{
+		Policy: map[string]any{"allowlist_use_emergency_subscriptions": false},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.CompletedSources) != 1 || len(result.ExcludedSources) != 1 || result.ExcludedSources[0] != "emergency" || len(result.Sources["primary"]) != 1 || result.Sources["emergency"] != nil {
+		t.Fatalf("emergency source was not excluded: %#v", result)
+	}
+}

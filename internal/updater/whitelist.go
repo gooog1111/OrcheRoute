@@ -16,6 +16,7 @@ import (
 type WhitelistResult struct {
 	Sources          map[string][]whitelist.Node `json:"sources"`
 	CompletedSources []string                    `json:"completed_sources"`
+	ExcludedSources  []string                    `json:"excluded_sources,omitempty"`
 	Failures         map[string]string           `json:"failures"`
 }
 
@@ -28,7 +29,7 @@ type WhitelistRequest struct {
 // It deliberately performs no fetch: restricted-network discovery must first
 // build a stable usable list before attempting subscription updates.
 func RunWhitelist(ctx context.Context, dependencies Dependencies, request WhitelistRequest) (WhitelistResult, error) {
-	result := WhitelistResult{Sources: map[string][]whitelist.Node{}, CompletedSources: []string{}, Failures: map[string]string{}}
+	result := WhitelistResult{Sources: map[string][]whitelist.Node{}, CompletedSources: []string{}, ExcludedSources: []string{}, Failures: map[string]string{}}
 	if dependencies.Repository == nil || dependencies.Cache == nil || dependencies.Qualifier == nil {
 		return result, fmt.Errorf("incomplete whitelist dependencies")
 	}
@@ -37,7 +38,15 @@ func RunWhitelist(ctx context.Context, dependencies Dependencies, request Whitel
 		return result, err
 	}
 	eligible := make([]subscriptions.Subscription, 0, len(items))
+	includeEmergency := true
+	if configured, ok := request.Policy["allowlist_use_emergency_subscriptions"].(bool); ok {
+		includeEmergency = configured
+	}
 	for _, item := range items {
+		if !includeEmergency && item.GroupName == subscriptions.Emergency {
+			result.ExcludedSources = append(result.ExcludedSources, item.ID)
+			continue
+		}
 		if item.Enabled && (len(request.SubscriptionIDs) == 0 || request.SubscriptionIDs[item.ID]) {
 			eligible = append(eligible, item)
 		}

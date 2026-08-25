@@ -7,6 +7,9 @@ func TestDefaultPolicyDoesNotExcludeAnyCountry(t *testing.T) {
 	if countries := defaults["excluded_countries"].([]any); len(countries) != 0 {
 		t.Fatalf("default excluded countries = %#v, want empty", countries)
 	}
+	if defaults["allowlist_use_emergency_subscriptions"] != true {
+		t.Fatal("emergency allowlist sources must remain enabled by default")
+	}
 }
 
 func TestPolicyValidationAndEffectiveOverrides(t *testing.T) {
