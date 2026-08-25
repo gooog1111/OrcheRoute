@@ -12,9 +12,9 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
 
 ## Скачать
 
-- **Текущая стабильная версия: 0.5.12** (Android `versionCode 58`)
-- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.5.12/OrcheRoute-Android-0.5.12-code58-arm64.apk)
-- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.5.12/OrcheRoute-Linux-Server-0.5.12-amd64.deb)
+- **Текущая стабильная версия: 0.6.0** (Android `versionCode 60`)
+- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.6.0/OrcheRoute-Android-0.6.0-code60-arm64.apk)
+- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.6.0/OrcheRoute-Linux-Server-0.6.0-amd64.deb)
 - [Страница последнего стабильного выпуска](https://github.com/gooog1111/OrcheRoute/releases/latest)
 - [Все выпуски и beta-версии](https://github.com/gooog1111/OrcheRoute/releases)
 
@@ -46,6 +46,8 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
   выбранную маршрутизацию;
 - обновлять GeoIP и GeoSite из выбранного источника;
 - сохранять настройки, подписки и маршруты между перезапусками и обновлениями.
+- менять общую для Android и Linux тему оформления: «Матрица», Hello Kitty,
+  Liquid Glass, Windows 95, тёмную или светлую.
 
 ## Как работает автоматика
 
