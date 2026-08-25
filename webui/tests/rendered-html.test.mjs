@@ -134,10 +134,13 @@ test("android qualification sockets use the physical network selected by the mon
 test("android whitelist scan finishes before VPN connect and checks one source contextually", async () => {
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
-  assert.match(runtime, /boolean restricted = "allowlist"\.equals\(connectivityState\(\)\)/);
+  assert.match(runtime, /private JSONObject scheduleManualCheck\(String onlyId\)[\s\S]*boolean restricted = "allowlist"\.equals\(connectivityState\(\)\)/);
   assert.match(runtime, /if \(restricted\) enterAllowlistMode\(\)/);
-  assert.match(runtime, /scheduleRefresh\(subscriptionId, true, null, true, false, false\)/);
+  assert.match(runtime, /\/v1\/subscriptions\/check[\s\S]*scheduleManualCheck\(null\)/);
+  assert.match(runtime, /subscriptionId = subscriptionId\(path, "\/check"\)[\s\S]*scheduleManualCheck\(subscriptionId\)/);
+  assert.match(runtime, /scheduleRefresh\(onlyId, true, null, true, false, false\)/);
   assert.match(runtime, /boolean restrictedScan = allowlistScan;/);
+  assert.match(runtime, /restrictedScan[\s\S]*effectivePolicy\.put\("skip_speed", true\)/);
   assert.match(runtime, /restrictedScan[\s\S]*repository\.replaceWhitelistSource/);
 	assert.match(runtime, /awaitStableWhitelistConnection\(45_000\)/);
 	assert.match(runtime, /whitelistHealthSuccesses >= 2/);

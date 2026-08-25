@@ -388,7 +388,7 @@ final class MobileRuntime {
                 return response(202, scheduleRefresh(null, false, null));
             }
             if ("POST".equals(verb) && "/v1/subscriptions/check".equals(path)) {
-                return response(202, scheduleRefresh(null, true, null));
+                return response(202, scheduleManualCheck(null));
             }
             if ("PUT".equals(verb) && "/v1/subscriptions/default-emergency".equals(path)) {
                 repository.updateDefaultEmergency(new JSONObject(emptyObject(body)).optJSONArray("enabled_ids"));
@@ -399,11 +399,7 @@ final class MobileRuntime {
             if ("POST".equals(verb) && subscriptionId != null) return response(202, scheduleRefresh(subscriptionId, false, null));
             subscriptionId = subscriptionId(path, "/check");
             if ("POST".equals(verb) && subscriptionId != null) {
-                boolean restricted = "allowlist".equals(connectivityState());
-                if (restricted) enterAllowlistMode();
-                return response(202, restricted
-                        ? scheduleRefresh(subscriptionId, true, null, true, false, false)
-                        : scheduleRefresh(subscriptionId, true, null));
+                return response(202, scheduleManualCheck(subscriptionId));
             }
             subscriptionId = subscriptionId(path, "/secret");
             if ("POST".equals(verb) && subscriptionId != null) {
@@ -479,6 +475,14 @@ final class MobileRuntime {
 
     private JSONObject scheduleRefresh(String onlyId, boolean checkOnly, String onlyGroup) throws JSONException {
         return scheduleRefresh(onlyId, checkOnly, onlyGroup, false);
+    }
+
+    private JSONObject scheduleManualCheck(String onlyId) throws JSONException {
+        boolean restricted = "allowlist".equals(connectivityState());
+        if (restricted) enterAllowlistMode();
+        return restricted
+                ? scheduleRefresh(onlyId, true, null, true, false, false)
+                : scheduleRefresh(onlyId, true, null);
     }
 
     private JSONObject scheduleRefresh(String onlyId, boolean checkOnly, String onlyGroup, boolean allowlistScan) throws JSONException {
