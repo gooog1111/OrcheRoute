@@ -12,8 +12,9 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
 
 ## Скачать
 
-- **Текущая стабильная версия: 0.5.10** (`versionCode 48`)
-- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.5.10/OrcheRoute-Android-0.5.10-code48-arm64.apk)
+- **Текущая стабильная версия: 0.5.11** (Android `versionCode 57`)
+- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.5.11/OrcheRoute-Android-0.5.11-code57-arm64.apk)
+- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.5.11/OrcheRoute-Linux-Server-0.5.11-amd64.deb)
 - [Страница последнего стабильного выпуска](https://github.com/gooog1111/OrcheRoute/releases/latest)
 - [Все выпуски и beta-версии](https://github.com/gooog1111/OrcheRoute/releases)
 
