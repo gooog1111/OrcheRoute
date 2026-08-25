@@ -135,9 +135,11 @@ export function Dashboard() {
     && appUpdate?.latest_version !== dismissedUpdate
     && ["available", "downloading", "permission", "installer", "error"].includes(appUpdate?.state ?? "");
   const healthy = enabled && data?.status.wan.available === true && !data?.status.stale;
-  const activePool = data?.pools.find((pool) => pool.selected);
-  const activeNode = data?.nodes.find((node) => node.selected);
-  const activeServerName = activeNode?.display_name || data?.status.proxy.active_node;
+  const activePool = data?.pools.find((pool) => pool.id === data?.status.proxy.active_pool)
+    ?? data?.pools.find((pool) => pool.selected);
+  const activeNode = data?.nodes.find((node) =>
+    node.selected && (!data?.status.proxy.active_pool || node.pool === data.status.proxy.active_pool));
+  const activeServerName = data?.status.proxy.active_node || activeNode?.display_name;
   const allAliveNodes = data?.pools.reduce((sum, pool) => sum + pool.alive, 0) ?? 0;
   const allTotalNodes = data?.pools.reduce((sum, pool) => sum + pool.total, 0) ?? 0;
   const aliveNodes = activePool?.alive ?? allAliveNodes;
@@ -261,7 +263,7 @@ export function Dashboard() {
           </div>
           <h1>{enabled ? "OrcheRoute включён" : "OrcheRoute выключен"}</h1>
           {enabled && activeServerName && <p className="connected-server" title={activeServerName}><span>Сервер</span><strong>{activeServerName}</strong></p>}
-          {enabled && <p className="connection-identity"><span>Direct</span>{identityText(data?.status.wan.identity)}</p>}
+          {enabled && <p className="connection-identity"><span>Direct</span>{data?.status.wan.mode === "allowlist" ? "Недоступен при белых списках" : identityText(data?.status.wan.identity)}</p>}
           {enabled && <p className="connection-identity"><span>Proxy</span>{identityText(data?.status.proxy.identity)}</p>}
         </div>
 

@@ -740,7 +740,9 @@ function GeneralForm({
   busy: boolean;
   run: Runner;
 }) {
-  const currentNode = data?.nodes.find((node) => node.selected && node.alive);
+  const activePool = data?.status.proxy.active_pool;
+  const currentNode = activePool === "whitelist" ? undefined : data?.nodes.find((node) =>
+    node.selected && node.alive && (!activePool || node.pool === activePool));
 
   return (
     <div className="settings-section">
