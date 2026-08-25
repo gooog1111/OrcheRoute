@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" data-release-channel={releaseBranding.channel}>
+    <html lang="ru" data-release-channel={releaseBranding.channel} data-theme="matrix">
       <body>{children}</body>
     </html>
   );

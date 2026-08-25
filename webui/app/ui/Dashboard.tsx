@@ -7,7 +7,8 @@ import { releaseBranding } from "../platform/release";
 import { ChevronIcon, CloseIcon, GlobeIcon, PowerIcon, RefreshIcon, RouteIcon, ServerIcon, SettingsIcon } from "./Icons";
 import { SettingsModal as EditableSettingsModal, type SettingsTab } from "./SettingsModal";
 import { OperationPanel, type OperationView } from "./OperationPanel";
-import { MatrixRain } from "./MatrixRain";
+import { ThemeBackdrop } from "./ThemeBackdrop";
+import { defaultTheme, isThemeID, themeStorageKey, type ThemeID } from "./theme";
 
 
 const statusText: Record<string, string> = {
@@ -67,10 +68,23 @@ export function Dashboard() {
   const [stoppingWhitelist, setStoppingWhitelist] = useState(false);
   const [appUpdate, setAppUpdate] = useState<AndroidAppUpdateStatus | null>(null);
   const [dismissedUpdate, setDismissedUpdate] = useState("");
+  const [theme, setTheme] = useState<ThemeID>(defaultTheme);
   const dataRef = useRef<DashboardData | null>(null);
   const refreshInFlight = useRef(false);
 
   useEffect(() => { dataRef.current = data; }, [data]);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(themeStorageKey);
+    if (!isThemeID(stored)) return;
+    const frame = window.requestAnimationFrame(() => setTheme(stored));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(themeStorageKey, theme);
+  }, [theme]);
 
   useEffect(() => {
     if (platform.appUpdater !== "android") return;
@@ -242,7 +256,7 @@ export function Dashboard() {
 
   return (
     <main className="app-shell">
-      {!settingsOpen && <MatrixRain />}
+      {!settingsOpen && <ThemeBackdrop theme={theme} />}
       <header className="topbar">
         <a className="brand" href="#" aria-label="OrcheRoute">
           <span className="brand-mark"><span /><span /><span /></span>
@@ -334,6 +348,8 @@ export function Dashboard() {
           onTab={setTab}
           onClose={() => setSettingsOpen(false)}
           onReload={() => refresh(true)}
+          theme={theme}
+          onTheme={setTheme}
         />
       )}
       {showAppUpdate && !settingsOpen && appUpdate && (

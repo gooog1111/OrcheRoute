@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("exports the OrcheRoute dashboard", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
-  assert.match(html, /<html lang="ru" data-release-channel="(?:stable|beta)">/i);
+  assert.match(html, /<html lang="ru" data-release-channel="(?:stable|beta)" data-theme="matrix">/i);
   assert.match(html, /<title>OrcheRoute<\/title>/i);
   assert.match(html, /class="matrix-rain"/i);
   assert.doesNotMatch(html, />\s*WebUI\s*</i);
@@ -512,4 +512,21 @@ test("subscription cards show actual and next refresh timestamps", async () => {
   assert.match(settings, /Следующее обновление:[\s\S]*subscription\.next_update/);
   assert.match(mobileRepository, /Mobilecore\.nextSubscriptionUpdate/);
   assert.match(serverAPI, /subscriptions\.NextUpdate/);
+});
+
+test("shared UI exposes and persists all six appearance themes", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const theme = await readFile(new URL("../app/ui/theme.ts", import.meta.url), "utf8");
+  const backdrop = await readFile(new URL("../app/ui/ThemeBackdrop.tsx", import.meta.url), "utf8");
+  for (const id of ["matrix", "hello-kitty", "liquid-glass", "windows-95", "dark", "light"]) {
+    assert.match(theme, new RegExp(`id: "${id}"`));
+  }
+  assert.match(theme, /name: "Матрица"/);
+  assert.match(dashboard, /localStorage\.getItem\(themeStorageKey\)/);
+  assert.match(dashboard, /document\.documentElement\.dataset\.theme = theme/);
+  assert.match(dashboard, /localStorage\.setItem\(themeStorageKey, theme\)/);
+  assert.match(settings, /role="radiogroup"/);
+  assert.match(settings, /onTheme\(item\.id\)/);
+  assert.match(backdrop, /<MatrixRain \/>/);
 });
