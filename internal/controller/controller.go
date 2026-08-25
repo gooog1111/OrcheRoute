@@ -58,6 +58,9 @@ type State struct {
 	NextSwitchAttempt   int64            `json:"next_switch_attempt"`
 	NextRecoveryCheck   int64            `json:"next_recovery_check"`
 	NextPoolRefresh     int64            `json:"next_pool_refresh"`
+	FailedNodes         int              `json:"failed_nodes"`
+	FailureWindowStart  int64            `json:"failure_window_start"`
+	QualificationSince  int64            `json:"qualification_since"`
 	Cooldowns           map[string]int64 `json:"cooldowns"`
 }
 
@@ -76,12 +79,26 @@ type Policy struct {
 	RecoveryStableChecks int
 	RecoveryGrace        time.Duration
 	PoolRefreshCooldown  time.Duration
+	PoolFailureLimit     int
+	FailureWindow        time.Duration
+	QualificationRetry   time.Duration
+	SuspendOnExhaustion  bool
 }
 
 func DefaultPolicy() Policy {
 	return Policy{FailureLimit: 2, RetryAfter: 30 * time.Second, Cooldown: 15 * time.Minute,
 		RecoveryInterval: 20 * time.Second, RecoveryStableChecks: 2,
-		RecoveryGrace: 10 * time.Second, PoolRefreshCooldown: 15 * time.Minute}
+		RecoveryGrace: 10 * time.Second, PoolRefreshCooldown: 15 * time.Minute,
+		FailureWindow: 5 * time.Minute, QualificationRetry: 5 * time.Minute}
+}
+
+// ManagedPolicy is used by adapters that can stop and restart their transport
+// independently while qualification continues in the background.
+func ManagedPolicy() Policy {
+	policy := DefaultPolicy()
+	policy.PoolFailureLimit = 3
+	policy.SuspendOnExhaustion = true
+	return policy
 }
 
 func Step(previous State, observation Observation, policy Policy) (State, Decision) {
@@ -129,10 +146,27 @@ func Step(previous State, observation Observation, policy Policy) (State, Decisi
 
 	if !observation.Control.Enabled {
 		state.Status, state.Active, state.ActivePool, state.FailureStreak = "disabled", observation.Active, "", 0
+		state.FailedNodes, state.FailureWindowStart, state.QualificationSince = 0, 0, 0
 		if observation.Active != "DIRECT-EGRESS" {
 			return state, Decision{Action: "select", Target: "DIRECT-EGRESS", Reason: "service_disabled"}
 		}
 		return state, Decision{Action: "keep", Reason: "service_disabled"}
+	}
+	if state.QualificationSince > 0 {
+		fresh := candidatesTestedSince(observation.Nodes, mode, state.QualificationSince)
+		if len(fresh) > 0 {
+			state.Status = "qualified_servers_ready"
+			state.FailedNodes, state.FailureWindowStart, state.QualificationSince = 0, 0, 0
+			state.Cooldowns = map[string]int64{}
+			return state, Decision{Action: "resume", Target: fresh[0].Name, Pool: fresh[0].Pool, Reason: "qualified_servers_available"}
+		}
+		state.Status = "servers_unavailable"
+		if now >= state.NextPoolRefresh {
+			state.QualificationSince = now
+			state.NextPoolRefresh = now + int64(policy.QualificationRetry.Seconds())
+			return state, Decision{Action: "requalify", Pool: qualificationPool(mode), Reason: "retry_server_qualification"}
+		}
+		return state, Decision{Action: "suspend", Reason: "awaiting_qualified_servers"}
 	}
 
 	if mode == "manual" {
@@ -167,6 +201,9 @@ func Step(previous State, observation Observation, policy Policy) (State, Decisi
 	state.Active, state.ActivePool = observation.Active, currentPool
 	if observation.Active != "" && observation.Active != "DIRECT-EGRESS" && observation.ActiveOK {
 		state.Status, state.FailureStreak = "proxy_ok", 0
+		if state.FailedNodes > 0 && state.FailureWindowStart > 0 && now-state.FailureWindowStart >= int64(policy.FailureWindow.Seconds()) {
+			state.FailedNodes, state.FailureWindowStart = 0, 0
+		}
 		if currentPool == Emergency && now >= state.NextRecoveryCheck {
 			state.NextRecoveryCheck = now + int64(policy.RecoveryInterval.Seconds())
 			better := candidates(observation.Nodes, Primary, state.Cooldowns, "")
@@ -212,6 +249,13 @@ func Step(previous State, observation Observation, policy Policy) (State, Decisi
 	}
 	if observation.Active != "" {
 		state.Cooldowns[observation.Active] = now + int64(policy.Cooldown.Seconds())
+		state.FailedNodes++
+		if state.FailureWindowStart == 0 {
+			state.FailureWindowStart = now
+		}
+		if policy.PoolFailureLimit > 0 && state.FailedNodes >= policy.PoolFailureLimit {
+			return beginRequalification(state, observation, policy, now, "failure_batch_requalification", "")
+		}
 	}
 	all := candidates(observation.Nodes, "", state.Cooldowns, observation.Active)
 	if len(all) > 0 {
@@ -220,6 +264,9 @@ func Step(previous State, observation Observation, policy Policy) (State, Decisi
 	}
 	state.NextSwitchAttempt = now + int64(policy.RetryAfter.Seconds())
 	if now >= state.NextPoolRefresh {
+		if policy.SuspendOnExhaustion {
+			return beginRequalification(state, observation, policy, now, "no_working_candidate", "")
+		}
 		state.NextPoolRefresh = now + int64(policy.PoolRefreshCooldown.Seconds())
 		return state, Decision{Action: "refresh", Reason: "no_working_candidate"}
 	}
@@ -236,6 +283,9 @@ func stepEmergency(state State, observation Observation, policy Policy, now int6
 	state.Active, state.ActivePool = observation.Active, currentPool
 	if currentPool == Emergency && observation.ActiveOK {
 		state.Status, state.FailureStreak = "emergency_proxy_ok", 0
+		if state.FailedNodes > 0 && state.FailureWindowStart > 0 && now-state.FailureWindowStart >= int64(policy.FailureWindow.Seconds()) {
+			state.FailedNodes, state.FailureWindowStart = 0, 0
+		}
 		return state, Decision{Action: "keep", Reason: "emergency_only_active_healthy"}
 	}
 	state.Status = "emergency_proxy_degraded"
@@ -248,6 +298,13 @@ func stepEmergency(state State, observation Observation, policy Policy, now int6
 	}
 	if currentPool == Emergency && observation.Active != "" {
 		state.Cooldowns[observation.Active] = now + int64(policy.Cooldown.Seconds())
+		state.FailedNodes++
+		if state.FailureWindowStart == 0 {
+			state.FailureWindowStart = now
+		}
+		if policy.PoolFailureLimit > 0 && state.FailedNodes >= policy.PoolFailureLimit {
+			return beginRequalification(state, observation, policy, now, "emergency_failure_batch_requalification", Emergency)
+		}
 	}
 	available := candidates(observation.Nodes, Emergency, state.Cooldowns, observation.Active)
 	if len(available) > 0 {
@@ -256,10 +313,44 @@ func stepEmergency(state State, observation Observation, policy Policy, now int6
 	}
 	state.NextSwitchAttempt = now + int64(policy.RetryAfter.Seconds())
 	if now >= state.NextPoolRefresh {
+		if policy.SuspendOnExhaustion {
+			return beginRequalification(state, observation, policy, now, "emergency_only_no_working_candidate", Emergency)
+		}
 		state.NextPoolRefresh = now + int64(policy.PoolRefreshCooldown.Seconds())
 		return state, Decision{Action: "refresh", Pool: Emergency, Reason: "emergency_only_no_working_candidate"}
 	}
 	return state, Decision{Action: "keep", Reason: "emergency_only_no_working_candidate"}
+}
+
+func beginRequalification(state State, observation Observation, policy Policy, now int64, reason, pool string) (State, Decision) {
+	for _, node := range observation.Nodes {
+		if pool == "" || node.Pool == pool {
+			state.Cooldowns[node.Name] = now + int64(policy.Cooldown.Seconds())
+		}
+	}
+	state.Status = "servers_unavailable"
+	state.QualificationSince = now
+	state.NextPoolRefresh = now + int64(policy.QualificationRetry.Seconds())
+	return state, Decision{Action: "requalify", Pool: pool, Reason: reason}
+}
+
+func qualificationPool(mode string) string {
+	if mode == "emergency" {
+		return Emergency
+	}
+	return ""
+}
+
+func candidatesTestedSince(nodes []Node, mode string, since int64) []Node {
+	pool := qualificationPool(mode)
+	ranked := candidates(nodes, pool, map[string]int64{}, "")
+	result := make([]Node, 0, len(ranked))
+	for _, node := range ranked {
+		if node.LastTestedAt >= since {
+			result = append(result, node)
+		}
+	}
+	return result
 }
 
 func nodeByName(nodes []Node, name string) (Node, bool) {

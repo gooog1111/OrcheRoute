@@ -69,10 +69,11 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.getPools(ctx)
 		case "/v1/nodes":
 			nodes, _, err := runtime.liveNodes(ctx)
+			payload := map[string]any{"nodes": nodes, "transport_available": err == nil}
 			if err != nil {
-				return 200, map[string]any{"nodes": []PublicNode{}, "transport_available": false, "transport_error": "mihomo_api_unavailable"}
+				payload["transport_error"] = "mihomo_api_unavailable"
 			}
-			return 200, map[string]any{"nodes": nodes, "transport_available": true}
+			return 200, payload
 		case "/v1/events":
 			limit, _ := strconv.Atoi(parsed.Query().Get("limit"))
 			if limit == 0 {
@@ -81,7 +82,7 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			events, err := runtime.Store.Events(ctx, limit)
 			return result(200, map[string]any{"events": events}, err)
 		case "/v1/policy":
-			return 200, map[string]any{"pool_order": []string{"primary", "emergency"}, "pool_priority": map[string]int{"primary": 0, "emergency": 1}, "sticky": true, "failure_limit": 2, "retry_after_seconds": 30, "switch_retry_seconds": 30, "cooldown_seconds": 900, "health_interval_seconds": 10, "max_candidates_per_incident": 3, "failback_probe_seconds": 20, "failback_stable_checks": 2, "runtime": "go"}
+			return 200, map[string]any{"pool_order": []string{"primary", "emergency"}, "pool_priority": map[string]int{"primary": 0, "emergency": 1}, "sticky": true, "failure_limit": 2, "retry_after_seconds": 30, "switch_retry_seconds": 30, "cooldown_seconds": 900, "health_interval_seconds": 10, "max_candidates_per_incident": 3, "failed_nodes_before_requalification": 3, "qualification_retry_seconds": 300, "failback_probe_seconds": 20, "failback_stable_checks": 2, "runtime": "go"}
 		case "/v1/qualification":
 			return runtime.getQualification()
 		case "/v1/subscriptions":
@@ -270,6 +271,10 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/nodes/"))
 		return runtime.deletePoolNode(ctx, id)
 	}
+	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/pools/") {
+		pool, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/pools/"))
+		return runtime.clearPool(ctx, pool)
+	}
 	return 404, map[string]any{"error": "not_found"}
 }
 
@@ -279,7 +284,7 @@ func (runtime *Runtime) deletePoolNode(ctx context.Context, id string) (int, any
 		return 400, map[string]any{"error": "node_id_required"}
 	}
 	nodes, _, err := runtime.liveNodes(ctx)
-	if err != nil {
+	if err != nil && len(nodes) == 0 {
 		return 503, map[string]any{"error": "mihomo_api_unavailable"}
 	}
 	var target *PublicNode
@@ -390,9 +395,6 @@ func (runtime *Runtime) getStatus(ctx context.Context) (int, any) {
 
 func (runtime *Runtime) getPools(ctx context.Context) (int, any) {
 	nodes, _, err := runtime.liveNodes(ctx)
-	if err != nil {
-		nodes = []PublicNode{}
-	}
 	resultPools := []map[string]any{}
 	for index, pool := range []string{"primary", "emergency", "whitelist"} {
 		total, alive, selected := 0, 0, false
@@ -410,6 +412,36 @@ func (runtime *Runtime) getPools(ctx context.Context) (int, any) {
 		resultPools = append(resultPools, map[string]any{"id": pool, "priority": index, "total": total, "alive": alive, "selected": selected})
 	}
 	return 200, map[string]any{"pools": resultPools, "transport_available": err == nil}
+}
+
+func (runtime *Runtime) clearPool(ctx context.Context, pool string) (int, any) {
+	pool = strings.TrimSpace(pool)
+	if pool == whitelist.Pool {
+		result, err := runtime.whitelistTransition(whitelist.Command{Operation: "clear"})
+		if err != nil {
+			return backendError(err)
+		}
+		return 200, map[string]any{"cleared": result.Changed, "pool": pool, "remaining": len(result.State.Nodes)}
+	}
+	if pool != "primary" && pool != "emergency" {
+		return 400, map[string]any{"error": "invalid_pool"}
+	}
+	providerPath := filepath.Join(runtime.Config.StateDirectory, "providers", pool+".json")
+	if err := atomicJSON(providerPath, map[string]any{"proxies": []any{}}); err != nil {
+		return backendError(err)
+	}
+	metadataPath := filepath.Join(runtime.Config.StateDirectory, "providers", pool+".sources.json")
+	if err := atomicJSON(metadataPath, map[string]any{"nodes": map[string]any{}}); err != nil {
+		return backendError(err)
+	}
+	response := map[string]any{"cleared": true, "pool": pool, "remaining": 0}
+	if _, err := runtime.mihomo(ctx, http.MethodPut, "/providers/proxies/"+pool, nil); err != nil {
+		response["applied"] = false
+		response["apply_pending"] = true
+	} else {
+		response["applied"] = true
+	}
+	return 200, response
 }
 
 func (runtime *Runtime) getSubscriptions(ctx context.Context) (int, any) {

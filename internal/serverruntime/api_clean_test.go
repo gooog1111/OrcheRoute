@@ -59,6 +59,44 @@ func TestCleanRuntimeReturnsEmptyPoolsWhenTransportIsNotStarted(t *testing.T) {
 	}
 }
 
+func TestStoppedTransportReturnsSavedQualifiedNodes(t *testing.T) {
+	directory := t.TempDir()
+	runtimeEnv := filepath.Join(directory, "runtime.env")
+	if err := os.WriteFile(runtimeEnv, []byte("api_token=test-token\ncontroller_secret=test-secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := DefaultConfig()
+	config.StateDirectory, config.ProductionState = directory, directory
+	config.ConfigDirectory, config.RuntimeEnv = directory, runtimeEnv
+	config.MihomoAPI = "http://127.0.0.1:1"
+	runtime, err := New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	if err := atomicJSON(filepath.Join(directory, "providers", "primary.json"), map[string]any{"proxies": []any{map[string]any{"name": "saved-node Saved"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicJSON(filepath.Join(directory, "providers", "primary.sources.json"), map[string]any{"nodes": map[string]any{"saved-node Saved": map[string]any{"name": "source", "delay_ms": 44}}}); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/v1/nodes", nil)
+	request.Header.Set("Authorization", "Bearer test-token")
+	response := httptest.NewRecorder()
+	runtime.APIHandler().ServeHTTP(response, request)
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	nodes, _ := payload["nodes"].([]any)
+	if len(nodes) != 1 || nodes[0].(map[string]any)["display_name"] != "Saved" {
+		t.Fatalf("saved nodes missing: %s", response.Body.String())
+	}
+	if payload["transport_available"] != false {
+		t.Fatalf("stopped transport reported available: %#v", payload)
+	}
+}
+
 func TestBootstrapDoesNotOverwriteExistingRouteProvider(t *testing.T) {
 	directory := t.TempDir()
 	runtimeEnv := filepath.Join(directory, "runtime.env")

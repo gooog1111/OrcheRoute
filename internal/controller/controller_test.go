@@ -97,3 +97,37 @@ func TestCandidatesUseSharedLatencySpeedAndStabilityRating(t *testing.T) {
 		t.Fatalf("decision=%+v", decision)
 	}
 }
+
+func TestThreeFailedNodesStopCyclingAndRequalify(t *testing.T) {
+	policy := ManagedPolicy()
+	state := State{}
+	nodes := []Node{
+		{Name: "one", Pool: Primary, Alive: true, LastTestedAt: 10},
+		{Name: "two", Pool: Primary, Alive: true, LastTestedAt: 10},
+		{Name: "three", Pool: Emergency, Alive: true, LastTestedAt: 10},
+		{Name: "four", Pool: Emergency, Alive: true, LastTestedAt: 10},
+	}
+	for index, active := range []string{"one", "two", "three"} {
+		state.FailureStreak = policy.FailureLimit - 1
+		next, decision := Step(state, Observation{Now: int64(100 + index), WAN: true, Active: active, ActiveOK: false, Nodes: nodes, Control: Control{Enabled: true, Mode: "auto"}}, policy)
+		state = next
+		if index < 2 && decision.Action != "select" {
+			t.Fatalf("failure %d should select next node: %#v", index+1, decision)
+		}
+		if index == 2 && decision.Action != "requalify" {
+			t.Fatalf("third failed node should requalify instead of selecting fourth: %#v", decision)
+		}
+	}
+	if state.QualificationSince == 0 || state.FailedNodes != 3 {
+		t.Fatalf("incident state not recorded: %#v", state)
+	}
+	waiting, decision := Step(state, Observation{Now: 104, WAN: true, Nodes: nodes, Control: Control{Enabled: true, Mode: "auto"}}, policy)
+	if decision.Action != "suspend" {
+		t.Fatalf("old nodes must not be cycled while qualification is pending: %#v", decision)
+	}
+	nodes[3].LastTestedAt = waiting.QualificationSince + 1
+	_, decision = Step(waiting, Observation{Now: 105, WAN: true, Nodes: nodes, Control: Control{Enabled: true, Mode: "auto"}}, policy)
+	if decision.Action != "resume" || decision.Target != "four" {
+		t.Fatalf("fresh qualified node should resume transport: %#v", decision)
+	}
+}

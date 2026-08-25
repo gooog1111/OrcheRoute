@@ -135,6 +135,10 @@ func Transition(input State, command Command) (Result, error) {
 		state.ScanActive = false
 	case "deactivate":
 		state.SelectedNode, state.PendingNode, state.ScanActive = "", "", false
+	case "clear":
+		state.Nodes = nil
+		state.SelectedNode, state.PendingNode, state.ScanActive = "", "", false
+		state.Generation++
 	default:
 		return Result{}, errors.New("unknown_whitelist_operation")
 	}

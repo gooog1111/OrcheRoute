@@ -56,7 +56,7 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 	nodes, _, err := runtime.liveNodes(cycleContext)
 	transportAvailable := err == nil
 	if err != nil {
-		if controlValue.Enabled && physical.State == mobileconnectivity.Normal {
+		if controlValue.Enabled && physical.State == mobileconnectivity.Normal && previous.QualificationSince == 0 {
 			if startErr := platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, true); startErr != nil {
 				runtime.recordControllerError(startErr)
 				return
@@ -69,7 +69,9 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 		// The direct connection and disabled state do not depend on Mihomo.
 		// Keep observing the host while the transport is stopped or has not yet
 		// produced a configuration; pools will simply remain empty meanwhile.
-		nodes = []PublicNode{}
+		if len(nodes) == 0 && previous.QualificationSince == 0 {
+			nodes = []PublicNode{}
+		}
 	}
 	if physical.State == mobileconnectivity.Normal {
 		derived := runtime.whitelistState()
@@ -101,9 +103,12 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 		manualNode = *controlValue.ManualNode
 	}
 	observation := controller.Observation{Now: time.Now().Unix(), WAN: wan, ActiveOK: activeOK, Active: active, ActivePool: activePool, Nodes: controllerNodes, Control: controller.Control{Enabled: controlValue.Enabled, Mode: controlValue.Mode, ManualNode: manualNode, ManualUntil: controlValue.ManualUntil}}
-	state, decision := controller.Step(previous, observation, controller.DefaultPolicy())
+	state, decision := controller.Step(previous, observation, controller.ManagedPolicy())
 	if !transportAvailable && !controlValue.Enabled && decision.Action == "select" {
 		decision = controller.Decision{Action: "keep", Reason: "service_disabled_transport_stopped"}
+	}
+	if !transportAvailable && decision.Action == "suspend" {
+		decision = controller.Decision{Action: "keep", Reason: decision.Reason}
 	}
 	if err := runtime.executeDecision(cycleContext, decision); err != nil {
 		runtime.recordControllerError(err)
@@ -248,13 +253,22 @@ func (runtime *Runtime) executeDecision(ctx context.Context, decision controller
 	switch decision.Action {
 	case "keep", "freeze":
 		return nil
+	case "suspend":
+		return platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, false)
+	case "resume":
+		return platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, true)
 	case "select":
 		if decision.Target == "" {
 			return fmt.Errorf("controller_selected_empty_target")
 		}
 		_, err := runtime.mihomo(ctx, http.MethodPut, "/proxies/ACTIVE", map[string]any{"name": decision.Target})
 		return err
-	case "refresh":
+	case "refresh", "requalify":
+		if decision.Action == "requalify" {
+			if err := platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, false); err != nil {
+				return err
+			}
+		}
 		operation := filepath.Join(runtime.Config.StateDirectory, "update-operation.json")
 		var current map[string]any
 		if readJSON(operation, &current) == nil && stringValue(current["status"]) == "running" {

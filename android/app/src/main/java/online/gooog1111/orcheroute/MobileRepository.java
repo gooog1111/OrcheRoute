@@ -689,6 +689,42 @@ final class MobileRepository {
         return new JSONObject().put("id", id).put("pool", pool).put("was_selected", wasSelected).put("remaining", remaining);
     }
 
+    synchronized int clearPool(String pool) throws JSONException {
+        if ("whitelist".equals(pool)) {
+            int removed = whitelistCount();
+            root.put("whitelist_nodes", new JSONArray());
+            root.remove("selected_whitelist_node");
+            root.remove("pending_whitelist_node");
+            root.put("whitelist_scan_active", false);
+            root.put("whitelist_generation", root.optLong("whitelist_generation", 0) + 1);
+            save();
+            return removed;
+        }
+        JSONArray source = root.getJSONArray("nodes"), next = new JSONArray();
+        int removed = 0;
+        for (int i = 0; i < source.length(); i++) {
+            JSONObject node = source.getJSONObject(i);
+            if (pool.equals(node.optString("pool", "primary"))) removed++;
+            else next.put(node);
+        }
+        root.put("nodes", next);
+        JSONObject selected = findNode(root.optString("selected_node", ""));
+        if (selected == null) {
+            root.remove("selected_node");
+            if ("manual".equals(mode())) root.put("mode", "auto");
+            selectBestLocked();
+        }
+        clearMissingSelectionLocked();
+        save();
+        return removed;
+    }
+
+    synchronized String selectedPool() throws JSONException {
+        if (!root.optString("selected_whitelist_node", "").isEmpty()) return "whitelist";
+        JSONObject selected = findNode(root.optString("selected_node", ""));
+        return selected == null ? "" : selected.optString("pool", "primary");
+    }
+
     private JSONObject whitelistTransitionLocked(JSONObject command) throws JSONException {
         JSONObject state = new JSONObject().put("nodes", root.optJSONArray("whitelist_nodes") == null ? new JSONArray() : root.getJSONArray("whitelist_nodes"))
                 .put("selected_node", root.optString("selected_whitelist_node", ""))

@@ -585,4 +585,10 @@ export const actions = {
       node: { id: string; pool: Node["pool"]; was_selected: boolean; remaining: number };
     }>(`/v1/nodes/${encodeURIComponent(id)}`, { method: "DELETE", body: "{}" });
   },
+  clearPool(pool: Node["pool"]) {
+    return request<{ cleared: boolean; pool: Node["pool"]; remaining: number }>(
+      `/v1/pools/${encodeURIComponent(pool)}`,
+      { method: "DELETE", body: "{}" },
+    );
+  },
 };

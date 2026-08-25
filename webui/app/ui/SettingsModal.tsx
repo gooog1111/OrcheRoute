@@ -1016,6 +1016,7 @@ function PoolNodes({
   const [showUnavailable, setShowUnavailable] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [deletingNode, setDeletingNode] = useState<Node | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const canEditPool = platformCapabilities().editServerLists;
   const allNodes = [...(data?.nodes.filter((node) => node.pool === pool) ?? [])]
     .sort((left, right) => {
@@ -1074,6 +1075,11 @@ function PoolNodes({
             {showUnavailable
               ? "Скрыть недоступные"
               : `Недоступные · ${unavailable}`}
+          </button>
+        )}
+        {canEditPool && allNodes.length > 0 && (
+          <button type="button" className="node-delete-button" disabled={busy} onClick={() => setConfirmClear(true)}>
+            Очистить список
           </button>
         )}
       </div>
@@ -1184,6 +1190,36 @@ function PoolNodes({
                 }
               >
                 Удалить
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {confirmClear && (
+        <div className="picker-dialog-backdrop" role="presentation" onMouseDown={() => !busy && setConfirmClear(false)}>
+          <section className="picker-dialog subscription-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="clear-pool-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header>
+              <div>
+                <strong id="clear-pool-title">Очистить список серверов?</strong>
+                <small>Подписки и их настройки сохранятся</small>
+              </div>
+              <button type="button" disabled={busy} onClick={() => setConfirmClear(false)} aria-label="Закрыть">×</button>
+            </header>
+            <div className="subscription-delete-body">
+              <p>Все серверы из текущего списка будут удалены.</p>
+              <small>Следующая проверка подписок сможет снова добавить рабочие серверы.</small>
+            </div>
+            <footer>
+              <button className="secondary-button" type="button" disabled={busy} onClick={() => setConfirmClear(false)}>Отмена</button>
+              <button className="danger-button" type="button" disabled={busy} onClick={() => void (async () => {
+                const ok = await run(
+                  () => actions.clearPool(pool),
+                  "Список серверов очищен. Подписки и настройки сохранены.",
+                  { title: "Очищаем список серверов" },
+                );
+                if (ok) setConfirmClear(false);
+              })()}>
+                Очистить
               </button>
             </footer>
           </section>

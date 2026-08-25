@@ -234,6 +234,8 @@ final class MobileRuntime {
             if ("GET".equals(verb) && "/v1/nodes".equals(path)) return response(200, new JSONObject().put("nodes", repository.nodes()));
             String poolNodeId = entityId(path, "/v1/nodes/");
             if ("DELETE".equals(verb) && poolNodeId != null) return deletePoolNode(poolNodeId);
+            String poolId = entityId(path, "/v1/pools/");
+            if ("DELETE".equals(verb) && poolId != null) return clearPool(poolId);
             if ("GET".equals(verb) && "/v1/subscriptions".equals(path)) return response(200, new JSONObject().put("subscriptions", repository.subscriptions()));
             if ("GET".equals(verb) && "/v1/operations".equals(path)) return response(200, operations());
             if ("POST".equals(verb) && "/v1/operations/subscription-update/cancel".equals(path)) {
@@ -1218,6 +1220,20 @@ final class MobileRuntime {
             }
         }
         return response(200, new JSONObject().put("deleted", true).put("node", deleted));
+    }
+
+    private synchronized String clearPool(String pool) throws JSONException {
+        if (!"primary".equals(pool) && !"emergency".equals(pool) && !"whitelist".equals(pool)) {
+            return error(400, "invalid_pool", "Неизвестный список серверов");
+        }
+        boolean wasActivePool = pool.equals(repository.selectedPool());
+        int removed = repository.clearPool(pool);
+        if ("whitelist".equals(pool)) {
+            allowlistWorkingFound = false;
+            whitelistConnectPending = false;
+        }
+        if (desiredEnabled && wasActivePool) restartIfEnabled();
+        return response(200, new JSONObject().put("cleared", removed > 0).put("pool", pool).put("remaining", 0));
     }
 
     private static String emptyObject(String body) { return body == null || body.trim().isEmpty() ? "{}" : body; }

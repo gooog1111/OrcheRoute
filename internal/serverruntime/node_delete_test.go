@@ -105,3 +105,24 @@ func TestDeleteWhitelistNodeUsesDerivedPool(t *testing.T) {
 		t.Fatalf("status=%d payload=%#v", status, payload)
 	}
 }
+
+func TestClearPrimaryPoolWorksWhileTransportStopped(t *testing.T) {
+	runtime := cleanTestRuntime(t)
+	runtime.Config.MihomoAPI = "http://127.0.0.1:1"
+	providerPath := filepath.Join(runtime.Config.StateDirectory, "providers", "primary.json")
+	metadataPath := filepath.Join(runtime.Config.StateDirectory, "providers", "primary.sources.json")
+	if err := atomicJSON(providerPath, map[string]any{"proxies": []any{map[string]any{"name": "node-a Alpha"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := atomicJSON(metadataPath, map[string]any{"nodes": map[string]any{"node-a Alpha": map[string]any{"id": "source-a"}}}); err != nil {
+		t.Fatal(err)
+	}
+	status, payload := runtime.clearPool(context.Background(), "primary")
+	if status != 200 || payload.(map[string]any)["remaining"] != 0 {
+		t.Fatalf("status=%d payload=%#v", status, payload)
+	}
+	provider := map[string]any{}
+	if err := readJSON(providerPath, &provider); err != nil || len(provider["proxies"].([]any)) != 0 {
+		t.Fatalf("provider not cleared: %#v %v", provider, err)
+	}
+}

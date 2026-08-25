@@ -83,3 +83,11 @@ func TestBeginPreservesWorkingPoolUntilSourcesAreReplaced(t *testing.T) {
 		t.Fatalf("begin destroyed stable pool: %#v %v", result, err)
 	}
 }
+
+func TestClearRemovesAllNodesAndSelection(t *testing.T) {
+	state := State{Nodes: []Node{testNode("one", "a", 1), testNode("two", "b", 2)}, SelectedNode: "one", PendingNode: "one", ScanActive: true}
+	result, err := Transition(state, Command{Operation: "clear"})
+	if err != nil || len(result.State.Nodes) != 0 || result.State.SelectedNode != "" || result.State.PendingNode != "" || result.State.ScanActive {
+		t.Fatalf("clear: %#v %v", result, err)
+	}
+}

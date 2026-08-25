@@ -390,17 +390,30 @@ func safeName(value string) string {
 
 func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string]string, error) {
 	providersPayload, err := runtime.mihomo(ctx, http.MethodGet, "/providers/proxies", nil)
-	if err != nil {
-		return nil, nil, err
+	transportErr := err
+	providers, _ := providersPayload["providers"].(map[string]any)
+	if providers == nil {
+		providers = map[string]any{}
+		for _, pool := range []string{"primary", "emergency"} {
+			var provider map[string]any
+			if readJSON(filepath.Join(runtime.Config.ProductionState, "providers", pool+".json"), &provider) == nil {
+				providers[pool] = provider
+			}
+		}
 	}
-	activePayload, _ := runtime.mihomo(ctx, http.MethodGet, "/proxies/ACTIVE", nil)
-	selected, _ := activePayload["now"].(string)
+	selected := ""
+	if transportErr == nil {
+		activePayload, _ := runtime.mihomo(ctx, http.MethodGet, "/proxies/ACTIVE", nil)
+		selected, _ = activePayload["now"].(string)
+	}
 	selectedHealthy := false
 	if snapshot, snapshotErr := runtime.Store.Snapshot(ctx); snapshotErr == nil {
 		status := stringValue(snapshot.State["status"])
 		selectedHealthy = status == "proxy_ok" || status == "manual_proxy_ok" || status == "emergency_proxy_ok"
+		if selected == "" {
+			selected = stringValue(snapshot.State["active"])
+		}
 	}
-	providers, _ := providersPayload["providers"].(map[string]any)
 	result := []PublicNode{}
 	mapping := map[string]string{}
 	for _, pool := range []string{"primary", "emergency"} {
@@ -432,7 +445,10 @@ func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string
 			if index := strings.IndexByte(full, ' '); index >= 0 && strings.TrimSpace(full[index+1:]) != "" {
 				display = strings.TrimSpace(full[index+1:])
 			}
-			alive, _ := proxy["alive"].(bool)
+			alive := transportErr != nil
+			if value, exists := proxy["alive"]; exists {
+				alive, _ = value.(bool)
+			}
 			if full == selected && selectedHealthy {
 				alive = true
 			}
@@ -493,7 +509,7 @@ func (runtime *Runtime) liveNodes(ctx context.Context) ([]PublicNode, map[string
 			SourceID: node.SourceID, SourceName: node.SourceName, FullName: fullName})
 		mapping[node.ID] = fullName
 	}
-	return result, mapping, nil
+	return result, mapping, transportErr
 }
 
 func stringValue(value any) string {
