@@ -444,6 +444,20 @@ test("android keeps focused settings fields above the software keyboard", async 
   assert.match(settings, /scrollIntoView\(\{ block: "center"/);
 });
 
+test("android dismisses the IME before opening compact dropdowns", async () => {
+  const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
+  const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(activity, /public void hideKeyboard\(\)/);
+  assert.match(activity, /WindowInsetsCompat\.Type\.ime\(\)/);
+  assert.match(api, /export function dismissAndroidKeyboard/);
+  assert.match(settings, /select, \.picker-trigger, \.protocol-menu > summary/);
+  assert.match(settings, /active\.blur\(\);[\s\S]*dismissAndroidKeyboard\(\)/);
+  assert.doesNotMatch(settings, /autoFocus\s*\n\s*value=\{query\}/);
+  assert.match(styles, /\.route-option-list \{ min-height: 0; max-height: none; grid-auto-rows: minmax\(37px, auto\); \}/);
+});
+
 test("subscription parser is automatic and zero available nodes is a completed test", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
@@ -516,6 +530,7 @@ test("subscription cards show actual and next refresh timestamps", async () => {
 
 test("shared UI exposes and persists all six appearance themes", async () => {
   const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const layout = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const theme = await readFile(new URL("../app/ui/theme.ts", import.meta.url), "utf8");
   const backdrop = await readFile(new URL("../app/ui/ThemeBackdrop.tsx", import.meta.url), "utf8");
@@ -526,6 +541,9 @@ test("shared UI exposes and persists all six appearance themes", async () => {
   assert.match(dashboard, /localStorage\.getItem\(themeStorageKey\)/);
   assert.match(dashboard, /document\.documentElement\.dataset\.theme = theme/);
   assert.match(dashboard, /localStorage\.setItem\(themeStorageKey, theme\)/);
+  assert.match(layout, /localStorage\.getItem/);
+  assert.match(layout, /document\.documentElement\.dataset\.theme=value/);
+  assert.match(layout, /suppressHydrationWarning/);
   assert.match(settings, /role="radiogroup"/);
   assert.match(settings, /"appearance"/);
   assert.match(settings, /label="Оформление"/);

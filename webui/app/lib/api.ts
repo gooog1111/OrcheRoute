@@ -298,6 +298,7 @@ type AndroidRuntimeBridge = {
   scanQr?: () => void;
   openTextFile?: () => void;
   saveTextFile?: (filename: string, content: string) => void;
+  hideKeyboard?: () => void;
   appUpdateStatus?: () => string;
   checkAppUpdate?: () => boolean;
   installAppUpdate?: () => boolean;
@@ -353,6 +354,13 @@ export function saveTextFile(filename: string, content: string) {
   const bridge = androidBridge();
   if (typeof bridge?.saveTextFile !== "function") return false;
   bridge.saveTextFile(filename, content);
+  return true;
+}
+
+export function dismissAndroidKeyboard() {
+  const bridge = androidBridge();
+  if (typeof bridge?.hideKeyboard !== "function") return false;
+  bridge.hideKeyboard();
   return true;
 }
 

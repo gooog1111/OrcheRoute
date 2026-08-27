@@ -16,6 +16,7 @@ import {
   canOpenTextFile,
   canScanQr,
   checkAndroidAppUpdate,
+  dismissAndroidKeyboard,
   getAndroidAppUpdateStatus,
   getServerAppUpdateStatus,
   installAndroidAppUpdate,
@@ -297,6 +298,20 @@ export function SettingsModal({
       document.removeEventListener("focusin", revealFocusedField);
       if (revealTimer !== null) window.clearTimeout(revealTimer);
     };
+  }, [platform.revealFieldsAfterKeyboard]);
+
+  useEffect(() => {
+    if (!platform.revealFieldsAfterKeyboard) return;
+    const dismissBeforeDropdown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest("select, .picker-trigger, .protocol-menu > summary")) return;
+      const active = document.activeElement;
+      if (!(active instanceof HTMLElement) || !active.matches("input, textarea, [contenteditable='true']")) return;
+      active.blur();
+      dismissAndroidKeyboard();
+    };
+    document.addEventListener("pointerdown", dismissBeforeDropdown, true);
+    return () => document.removeEventListener("pointerdown", dismissBeforeDropdown, true);
   }, [platform.revealFieldsAfterKeyboard]);
 
   const run: Runner = async (operation, success, options = {}) => {
@@ -2356,7 +2371,6 @@ const RulePicker = memo(function RulePicker({
             <div className="route-picker-menu">
               <div className="input-wrap">
                 <input
-                  autoFocus
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Поиск"

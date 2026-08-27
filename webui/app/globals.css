@@ -716,8 +716,9 @@ html[data-release-channel="beta"][data-theme] {
   .route-option-list { grid-template-columns: 1fr; }
   .route-option-list label:nth-child(odd) { border-right: 0; }
   .picker-dialog-backdrop { padding: 0; align-items: end; }
-  .picker-dialog { width: 100%; max-height: min(82dvh, 760px); padding: 16px max(16px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); border-width: 1px 0 0; border-radius: 17px 17px 0 0; }
-  .route-option-list { max-height: none; }
+  .picker-dialog { width: 100%; min-height: 0; max-height: min(82dvh, 760px); padding: 16px max(16px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); overflow: hidden; border-width: 1px 0 0; border-radius: 17px 17px 0 0; }
+  .route-option-list { min-height: 0; max-height: none; grid-auto-rows: minmax(37px, auto); }
+  .route-option-list label { min-height: 37px; line-height: 1.25; }
   .mode-card { min-height: 92px; }
   .country-list { grid-template-columns: 1fr; }
   .country-list label:nth-child(odd) { border-right: 0; }

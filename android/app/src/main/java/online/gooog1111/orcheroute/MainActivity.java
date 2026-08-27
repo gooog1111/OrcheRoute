@@ -265,6 +265,14 @@ public final class MainActivity extends ComponentActivity {
         });
     }
 
+    private void hideKeyboard() {
+        runOnUiThread(() -> {
+            if (webView == null) return;
+            WindowCompat.getInsetsController(getWindow(), webView)
+                    .hide(WindowInsetsCompat.Type.ime());
+        });
+    }
+
     private void readSelectedTextFile(Uri uri) {
         try (InputStream input = getContentResolver().openInputStream(uri);
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
@@ -399,6 +407,11 @@ public final class MainActivity extends ComponentActivity {
         @JavascriptInterface
         public void saveTextFile(String filename, String content) {
             MainActivity.this.saveTextFile(filename, content);
+        }
+
+        @JavascriptInterface
+        public void hideKeyboard() {
+            MainActivity.this.hideKeyboard();
         }
 
         @JavascriptInterface
