@@ -1,5 +1,9 @@
 * text=auto
 *.sh text eol=lf
+packaging/debian/preinst text eol=lf
+packaging/debian/postinst text eol=lf
+packaging/debian/prerm text eol=lf
+packaging/debian/postrm text eol=lf
 *.service text eol=lf
 *.timer text eol=lf
 *.desktop text eol=lf

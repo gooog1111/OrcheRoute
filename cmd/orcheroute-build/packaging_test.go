@@ -49,3 +49,19 @@ func TestDebianRemovePreservesStateAndPurgeDeletesIt(t *testing.T) {
 		t.Fatal("persistent state removal is not guarded by the purge branch")
 	}
 }
+
+func TestDebianMaintainerScriptsUseUnixLineEndings(t *testing.T) {
+	root, err := repositoryRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"preinst", "postinst", "prerm", "postrm"} {
+		payload, err := os.ReadFile(filepath.Join(root, "packaging", "debian", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(payload), "\r") {
+			t.Fatalf("Debian maintainer script %s contains CRLF line endings", name)
+		}
+	}
+}

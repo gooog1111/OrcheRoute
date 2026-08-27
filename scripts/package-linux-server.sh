@@ -24,6 +24,10 @@ find "$STAGING/opt/orcheroute/webui" -type f -exec chmod 0644 {} +
 
 install -m 0644 "$PACKAGING_DIR/control" "$STAGING/DEBIAN/control"
 for script in preinst postinst prerm postrm; do
+    if LC_ALL=C grep -q "$(printf '\r')" "$PACKAGING_DIR/$script"; then
+        echo "Debian maintainer script uses CRLF: $PACKAGING_DIR/$script" >&2
+        exit 1
+    fi
     install -m 0755 "$PACKAGING_DIR/$script" "$STAGING/DEBIAN/$script"
 done
 install -m 0644 "$PACKAGING_DIR/README.Debian" "$STAGING/DEBIAN/README.Debian"
