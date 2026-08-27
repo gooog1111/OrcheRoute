@@ -75,5 +75,8 @@ if systemctl is-active --quiet orcheroute-core.service; then
 else
     echo "VPN transport: ready, waiting for the first Enable command in WebUI"
 fi
+if ! command -v nft >/dev/null 2>&1; then
+    echo "WARNING: nftables is not installed. WebUI is available, but VPN routing requires: apt install nftables"
+fi
 
 exit 0

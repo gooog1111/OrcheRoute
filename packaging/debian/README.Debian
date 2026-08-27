@@ -1,6 +1,16 @@
 OrcheRoute for Debian and Astra Linux
 =====================================
 
+Install the downloaded package through APT so recommended routing components
+are resolved automatically:
+
+  sudo apt install ./OrcheRoute-Linux-Server-VERSION-amd64.deb
+
+Direct `dpkg -i` installation still starts the WebUI. If nftables is absent,
+install it before enabling the VPN transport:
+
+  sudo apt install nftables
+
 The package installs the unified Go implementation and does not overwrite or
 remove host-specific configuration and state:
 
@@ -20,3 +30,7 @@ The installer prints all local/LAN HTTP addresses and the Basic-auth login.
 Initial credentials are also stored root-only in:
 
   /etc/orcheroute/initial-credentials
+
+`apt remove orcheroute` keeps configuration, credentials, subscriptions,
+routes, state and backups for a future reinstall. `apt purge orcheroute`
+removes all OrcheRoute configuration, state and backups.

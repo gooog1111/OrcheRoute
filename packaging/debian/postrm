@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+if [ "$1" = purge ]; then
+    rm -rf -- /etc/orcheroute /var/lib/orcheroute /var/backups/orcheroute
+    rm -rf -- /etc/systemd/system/orcheroute-go.service.d
+fi
+
 systemctl daemon-reload >/dev/null 2>&1 || true
 exit 0
-
