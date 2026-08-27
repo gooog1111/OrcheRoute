@@ -134,11 +134,13 @@ func Diagnose(ctx context.Context, config Config, probe Probe) (Result, error) {
 
 func Classify(observation Observation) Result {
 	anchors := observation.OpenAnchorGitHubAvailable || observation.OpenAnchorMozillaAvailable
-	// The user-configured open-Internet target is deliberately chosen to be
-	// unreachable through an operator allowlist. Requiring a second public
-	// anchor made recovery depend on GitHub/Mozilla as well and delayed normal
-	// mode even after this authoritative target had recovered.
-	open := observation.ConfiguredOpenAvailable
+	// The configured target remains authoritative, but it is allowed to be
+	// temporarily unavailable on an otherwise unrestricted Wi-Fi network. Two
+	// independent public anchors agreeing at the same time are sufficient
+	// fallback evidence; one anchor alone may still be part of an operator
+	// allowlist and therefore cannot prove unrestricted Internet access.
+	open := observation.ConfiguredOpenAvailable ||
+		(observation.OpenAnchorGitHubAvailable && observation.OpenAnchorMozillaAvailable)
 	anyReachable := observation.PhysicalNetworkAvailable || observation.AllowlistAvailable || observation.ConfiguredOpenAvailable ||
 		observation.OpenAnchorGitHubAvailable || observation.OpenAnchorMozillaAvailable
 	state := Offline

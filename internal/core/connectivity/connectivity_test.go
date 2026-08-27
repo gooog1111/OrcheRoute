@@ -17,6 +17,7 @@ func TestClassifyThreeStates(t *testing.T) {
 		{"allowlist", Observation{AllowlistAvailable: true, ConfiguredOpenAvailable: false, OpenAnchorGitHubAvailable: false, OpenAnchorMozillaAvailable: false}, Allowlist},
 		{"offline", Observation{}, Offline},
 		{"configured open target proves normal Internet", Observation{ConfiguredOpenAvailable: true}, Normal},
+		{"two independent open anchors recover normal Wi-Fi", Observation{PhysicalNetworkAvailable: true, OpenAnchorGitHubAvailable: true, OpenAnchorMozillaAvailable: true}, Normal},
 		{"physical network without reachable HTTP anchors is restricted", Observation{PhysicalNetworkAvailable: true}, Allowlist},
 		{"single reachable anchor proves a restricted network", Observation{OpenAnchorMozillaAvailable: true}, Allowlist},
 	}
