@@ -56,9 +56,11 @@ public final class MainActivity extends ComponentActivity {
     private static final String PERMISSION_PREFS = "orcheroute_permission_prompts";
     private static final String BATTERY_PROMPTED = "battery_optimization_prompted";
     private WebView webView;
+    private FrameLayout root;
     private WebViewAssetLoader assetLoader;
     private String pendingTextFile = "";
     private AppUpdater appUpdater;
+    private VkCaptchaDialog vkCaptchaDialog;
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -70,7 +72,7 @@ public final class MainActivity extends ComponentActivity {
         getWindow().setStatusBarColor(Color.rgb(2, 7, 6));
         getWindow().setNavigationBarColor(Color.rgb(2, 7, 6));
 
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setBackgroundColor(Color.rgb(2, 7, 6));
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(2, 7, 6));
@@ -99,11 +101,28 @@ public final class MainActivity extends ComponentActivity {
         });
         setContentView(root);
         appUpdater = new AppUpdater(this);
+        vkCaptchaDialog = new VkCaptchaDialog(this, root, new VkCaptchaDialog.Callback() {
+            @Override
+            public void onSuccess(String successToken) {
+                dispatchVkCaptcha("success", successToken);
+            }
+
+            @Override
+            public void onCancel() {
+                dispatchVkCaptcha("cancel", "");
+            }
+
+            @Override
+            public void onError(String message) {
+                dispatchVkCaptcha("error", message);
+            }
+        });
         ViewCompat.requestApplyInsets(root);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
-                if (webView != null && webView.canGoBack()) webView.goBack();
+                if (vkCaptchaDialog != null && vkCaptchaDialog.isOpen()) vkCaptchaDialog.close(true);
+                else if (webView != null && webView.canGoBack()) webView.goBack();
                 else MainActivity.this.finish();
             }
         });
@@ -115,6 +134,12 @@ public final class MainActivity extends ComponentActivity {
     protected void onResume() {
         super.onResume();
         if (appUpdater != null) appUpdater.resumeInstallIfPermitted();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (vkCaptchaDialog != null) vkCaptchaDialog.close(false);
+        super.onDestroy();
     }
 
     private void requestOperationalPermissions() {
@@ -337,6 +362,17 @@ public final class MainActivity extends ComponentActivity {
         ));
     }
 
+    private void dispatchVkCaptcha(String status, String value) {
+        runOnUiThread(() -> webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('orcheroute:vk-captcha',{detail:{status:"
+                        + JSONObject.quote(status)
+                        + ",value:"
+                        + JSONObject.quote(value == null ? "" : value)
+                        + "}}));",
+                null
+        ));
+    }
+
     private final class EmbeddedClient extends WebViewClientCompat {
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -412,6 +448,15 @@ public final class MainActivity extends ComponentActivity {
         @JavascriptInterface
         public void hideKeyboard() {
             MainActivity.this.hideKeyboard();
+        }
+
+        @JavascriptInterface
+        public void openVkCaptcha(String url) {
+            runOnUiThread(() -> {
+                if (vkCaptchaDialog == null || !vkCaptchaDialog.open(url)) {
+                    dispatchVkCaptcha("error", "Получен недопустимый адрес VK CAPTCHA.");
+                }
+            });
         }
 
         @JavascriptInterface

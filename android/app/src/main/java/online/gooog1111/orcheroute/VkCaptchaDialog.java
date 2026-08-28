@@ -1,0 +1,179 @@
+package online.gooog1111.orcheroute;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.graphics.Color;
+import android.net.Uri;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.FrameLayout;
+
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+final class VkCaptchaDialog {
+    interface Callback {
+        void onSuccess(String successToken);
+        void onCancel();
+        void onError(String message);
+    }
+
+    private static final String BRIDGE_NAME = "OrcheRouteCaptcha";
+    private static final Set<String> SCRIPT_ORIGINS = Set.of("https://id.vk.ru", "https://api.vk.ru");
+    private static final String CAPTURE_SCRIPT = """
+            (() => {
+              if (window.__orcheRouteCaptchaCapture) return;
+              window.__orcheRouteCaptchaCapture = true;
+              const report = value => {
+                try {
+                  const token = value && value.response && value.response.success_token;
+                  if (typeof token === 'string' && token.length >= 16) OrcheRouteCaptcha.complete(token);
+                } catch (_) {}
+              };
+              const originalFetch = window.fetch;
+              if (originalFetch) window.fetch = async (...args) => {
+                const response = await originalFetch(...args);
+                try { response.clone().json().then(report).catch(() => {}); } catch (_) {}
+                return response;
+              };
+              const originalOpen = XMLHttpRequest.prototype.open;
+              XMLHttpRequest.prototype.open = function(...args) {
+                this.addEventListener('load', () => {
+                  try { report(JSON.parse(this.responseText)); } catch (_) {}
+                });
+                return originalOpen.apply(this, args);
+              };
+            })();
+            """;
+
+    private final Activity activity;
+    private final FrameLayout parent;
+    private final Callback callback;
+    private final AtomicBoolean finished = new AtomicBoolean();
+    private FrameLayout overlay;
+    private WebView webView;
+
+    VkCaptchaDialog(Activity activity, FrameLayout parent, Callback callback) {
+        this.activity = activity;
+        this.parent = parent;
+        this.callback = callback;
+    }
+
+    boolean isOpen() {
+        return overlay != null;
+    }
+
+    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
+    boolean open(String rawURL) {
+        Uri uri = Uri.parse(rawURL == null ? "" : rawURL.trim());
+        if (!allowedCaptchaURL(uri)) return false;
+        close(false);
+        finished.set(false);
+
+        overlay = new FrameLayout(activity);
+        overlay.setBackgroundColor(Color.rgb(15, 18, 20));
+        webView = new WebView(activity);
+        webView.setBackgroundColor(Color.rgb(15, 18, 20));
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        webView.addJavascriptInterface(new CaptchaBridge(), BRIDGE_NAME);
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(webView, CAPTURE_SCRIPT, SCRIPT_ORIGINS);
+        }
+        webView.setWebViewClient(new CaptchaClient());
+        overlay.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        Button close = new Button(activity);
+        close.setText("Закрыть");
+        close.setOnClickListener(view -> close(true));
+        FrameLayout.LayoutParams closeLayout = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.END
+        );
+        int margin = Math.round(12 * activity.getResources().getDisplayMetrics().density);
+        closeLayout.setMargins(margin, margin, margin, margin);
+        overlay.addView(close, closeLayout);
+        parent.addView(overlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        webView.loadUrl(uri.toString());
+        return true;
+    }
+
+    void close(boolean notify) {
+        if (overlay == null) return;
+        FrameLayout oldOverlay = overlay;
+        WebView oldWebView = webView;
+        overlay = null;
+        webView = null;
+        parent.removeView(oldOverlay);
+        if (oldWebView != null) {
+            oldWebView.stopLoading();
+            oldWebView.removeJavascriptInterface(BRIDGE_NAME);
+            oldWebView.destroy();
+        }
+        if (notify && finished.compareAndSet(false, true)) callback.onCancel();
+    }
+
+    private static boolean allowedCaptchaURL(Uri uri) {
+        return "https".equalsIgnoreCase(uri.getScheme()) && "id.vk.ru".equalsIgnoreCase(uri.getHost())
+                && uri.getPath() != null && uri.getPath().startsWith("/not_robot_captcha");
+    }
+
+    private static boolean allowedNavigation(Uri uri) {
+        if (!"https".equalsIgnoreCase(uri.getScheme())) return false;
+        String host = uri.getHost();
+        return "id.vk.ru".equalsIgnoreCase(host) || "api.vk.ru".equalsIgnoreCase(host)
+                || "vk.com".equalsIgnoreCase(host) || "vk.ru".equalsIgnoreCase(host);
+    }
+
+    private final class CaptchaBridge {
+        @JavascriptInterface
+        public void complete(String token) {
+            activity.runOnUiThread(() -> {
+                if (!isOpen() || token == null || token.length() < 16 || token.length() > 8192) return;
+                Uri current = Uri.parse(webView == null ? "" : webView.getUrl());
+                if (!"id.vk.ru".equalsIgnoreCase(current.getHost())) return;
+                if (!finished.compareAndSet(false, true)) return;
+                close(false);
+                callback.onSuccess(token);
+            });
+        }
+    }
+
+    private final class CaptchaClient extends WebViewClient {
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            if (allowedNavigation(request.getUrl())) return false;
+            callback.onError("VK CAPTCHA попыталась открыть неподдерживаемый адрес.");
+            return true;
+        }
+
+        @Override
+        public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+            if (!request.isForMainFrame()) return;
+            String message = error == null ? "Не удалось открыть VK CAPTCHA." : String.valueOf(error.getDescription());
+            callback.onError(message);
+        }
+    }
+}
