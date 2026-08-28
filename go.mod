@@ -2,6 +2,8 @@ module github.com/gooog1111/orcheroute
 
 go 1.25.0
 
+replace github.com/wlynxg/anet => ./third_party/anet
+
 require (
 	github.com/google/uuid v1.6.0
 	github.com/metacubex/kcp-go v0.0.0-20260105040817-550693377604
