@@ -93,6 +93,21 @@ func TestProfileRejectsUnsafeOrExpiredValues(t *testing.T) {
 	}
 }
 
+func TestExpiredProfileRemainsStructurallyValid(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	profile := validProfile(now)
+	profile.ExpiresAt = now.Add(-time.Second).Unix()
+	if err := profile.Normalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := profile.Validate(); err != nil {
+		t.Fatalf("expired profile must remain loadable: %v", err)
+	}
+	if err := profile.ValidateAt(now); err == nil {
+		t.Fatal("expired profile was active")
+	}
+}
+
 func TestProfileDecoderRejectsUnknownFields(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	value := validProfile(now)

@@ -124,7 +124,7 @@ func (profile *Profile) Normalize() error {
 	return nil
 }
 
-func (profile Profile) ValidateAt(now time.Time) error {
+func (profile Profile) Validate() error {
 	if profile.Version != Version {
 		return fmt.Errorf("call_transport_profile_version_unsupported")
 	}
@@ -137,17 +137,26 @@ func (profile Profile) ValidateAt(now time.Time) error {
 	if err := validatePeer(profile.PeerAddress); err != nil {
 		return err
 	}
-	if _, err := decodePSK(profile.PSK); err != nil {
+	if _, err := profile.PSKBytes(); err != nil {
 		return err
 	}
 	if _, err := uuid.Parse(profile.VLESSUUID); err != nil {
 		return fmt.Errorf("call_transport_profile_invalid_vless_uuid")
+	}
+	return nil
+}
+
+func (profile Profile) ValidateAt(now time.Time) error {
+	if err := profile.Validate(); err != nil {
+		return err
 	}
 	if profile.ExpiresAt != 0 && !now.Before(time.Unix(profile.ExpiresAt, 0)) {
 		return fmt.Errorf("call_transport_profile_expired")
 	}
 	return nil
 }
+
+func (profile Profile) PSKBytes() ([]byte, error) { return decodePSK(profile.PSK) }
 
 func Encode(profile Profile, now time.Time) (string, error) {
 	if err := profile.Normalize(); err != nil {
