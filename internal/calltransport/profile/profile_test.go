@@ -1,12 +1,35 @@
 package profile
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestNewGeneratesDeterministicIndependentCredentials(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	random := bytes.NewReader(bytes.Repeat([]byte{0x42}, 64))
+	generated, err := New(NewInput{
+		Name: " Phone ", InvitationURL: "https://vk.ru/call/join/token", PeerAddress: "203.0.113.2:9000",
+		ExpiresAt: now.Add(time.Hour).Unix(), TrafficLimitBytes: 2048, Random: random, Now: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decodedPSK, err := base64.RawURLEncoding.DecodeString(generated.PSK)
+	if err != nil || len(decodedPSK) != 32 {
+		t.Fatalf("unexpected PSK: %q (%v)", generated.PSK, err)
+	}
+	if generated.VLESSUUID == "" || generated.PSK == generated.VLESSUUID || generated.Name != "Phone" {
+		t.Fatalf("unexpected generated profile: %#v", generated.Public())
+	}
+	if generated.InvitationURL != "https://vk.com/call/join/token" {
+		t.Fatalf("invitation was not canonicalized: %s", generated.InvitationURL)
+	}
+}
 
 func validProfile(now time.Time) Profile {
 	return Profile{

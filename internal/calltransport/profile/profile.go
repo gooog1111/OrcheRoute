@@ -4,6 +4,7 @@
 package profile
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -47,6 +48,50 @@ type PublicProfile struct {
 	PeerAddress       string `json:"peer_address"`
 	ExpiresAt         int64  `json:"expires_at,omitempty"`
 	TrafficLimitBytes uint64 `json:"traffic_limit_bytes,omitempty"`
+}
+
+type NewInput struct {
+	Name              string
+	InvitationURL     string
+	PeerAddress       string
+	ExpiresAt         int64
+	TrafficLimitBytes uint64
+	Random            io.Reader
+	Now               time.Time
+}
+
+// New generates independent DTLS and VLESS credentials on the trusted server
+// side. Random is injectable only for deterministic tests.
+func New(input NewInput) (Profile, error) {
+	random := input.Random
+	if random == nil {
+		random = rand.Reader
+	}
+	psk := make([]byte, 32)
+	if _, err := io.ReadFull(random, psk); err != nil {
+		return Profile{}, fmt.Errorf("call_transport_profile_random: %w", err)
+	}
+	clientID, err := uuid.NewRandomFromReader(random)
+	if err != nil {
+		return Profile{}, fmt.Errorf("call_transport_profile_random: %w", err)
+	}
+	profile := Profile{
+		Version: Version, Transport: Transport, Provider: Provider, Name: input.Name,
+		InvitationURL: input.InvitationURL, PeerAddress: input.PeerAddress,
+		PSK: base64.RawURLEncoding.EncodeToString(psk), VLESSUUID: clientID.String(),
+		ExpiresAt: input.ExpiresAt, TrafficLimitBytes: input.TrafficLimitBytes,
+	}
+	if err := profile.Normalize(); err != nil {
+		return Profile{}, err
+	}
+	now := input.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	if err := profile.ValidateAt(now); err != nil {
+		return Profile{}, err
+	}
+	return profile, nil
 }
 
 func (profile Profile) Public() PublicProfile {
