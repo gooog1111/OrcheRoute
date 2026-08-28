@@ -475,6 +475,7 @@ public final class MainActivity extends ComponentActivity {
                 return;
             }
             String endpoint = envelope.getJSONObject("result").optString("local_endpoint");
+			MobileRuntime.get(this).onCallCarrierReady();
             dispatchVkCall("carrier_ready", "VK транспорт подключён.", endpoint);
         } catch (JSONException error) {
             dispatchVkCall("error", "Некорректный ответ транспорта.", "");

@@ -17,6 +17,7 @@ import (
 	"github.com/gooog1111/orcheroute/internal/calltransport"
 	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
 	callvk "github.com/gooog1111/orcheroute/internal/calltransport/vk"
+	callxray "github.com/gooog1111/orcheroute/internal/calltransport/xray"
 )
 
 const callChallengeLifetime = 5 * time.Minute
@@ -304,6 +305,39 @@ func VKCallCarrierStatus() string {
 	return encode(map[string]any{"ok": true, "result": map[string]any{
 		"status": vkCarrier.status, "local_endpoint": vkCarrier.endpoint, "error": vkCarrier.lastErr,
 	}})
+}
+
+// BuildVKCallCarrierConfig creates the complete mobile Mihomo configuration
+// inside the native layer. The WebView never receives the active VLESS UUID.
+func BuildVKCallCarrierConfig(routesJSON, dnsJSON string) string {
+	vkCarrier.Lock()
+	endpoint := vkCarrier.endpoint
+	var activeProfile *callprofile.Profile
+	if vkCarrier.status == "ready" && vkCarrier.profile != nil {
+		copy := *vkCarrier.profile
+		activeProfile = &copy
+	}
+	vkCarrier.Unlock()
+	if activeProfile == nil || endpoint == "" {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_profile_not_active"}})
+	}
+	host, portValue, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_invalid_local_listener"}})
+	}
+	port, err := strconv.Atoi(portValue)
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_invalid_local_listener"}})
+	}
+	proxy, err := callxray.MihomoProxy(callxray.MihomoInput{Name: activeProfile.Name, LocalAddress: host, LocalPort: port, ClientID: activeProfile.VLESSUUID})
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	proxyJSON, err := json.Marshal(proxy)
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_proxy_encode"}})
+	}
+	return buildMobileProxyConfig(string(proxyJSON), routesJSON, dnsJSON)
 }
 
 func setVKCarrierStopped(generation uint64, message string) {

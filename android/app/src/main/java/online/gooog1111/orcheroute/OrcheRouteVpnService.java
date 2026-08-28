@@ -107,13 +107,14 @@ public final class OrcheRouteVpnService extends VpnService {
         if (ACTION_STOP.equals(action)) {
             stopping = true;
             stopTunnel();
+			Mobilecore.stopVKCallCarrier();
             MobileRuntime.get(this).onDisabled();
             stopForeground(true);
             stopSelfResult(startId);
             return START_NOT_STICKY;
         }
         if (ACTION_STOP_ERROR.equals(action)) {
-            stopping = true; stopTunnel(); stopForeground(true); stopSelfResult(startId);
+			stopping = true; stopTunnel(); Mobilecore.stopVKCallCarrier(); stopForeground(true); stopSelfResult(startId);
             return START_NOT_STICKY;
         }
 		if (ACTION_PAUSE_NETWORK.equals(action)) {
@@ -281,6 +282,7 @@ public final class OrcheRouteVpnService extends VpnService {
     public void onRevoke() {
         stopping = true;
         stopTunnel();
+		Mobilecore.stopVKCallCarrier();
         MobileRuntime.get(this).onDisabled();
         stopSelf();
         super.onRevoke();
@@ -290,6 +292,7 @@ public final class OrcheRouteVpnService extends VpnService {
     public void onDestroy() {
         stopping = true;
         stopTunnel();
+		Mobilecore.stopVKCallCarrier();
         worker.shutdownNow();
         healthWorker.shutdownNow();
         trafficWorker.shutdownNow();

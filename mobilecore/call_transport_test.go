@@ -105,3 +105,23 @@ func TestVKCarrierRejectsInvalidEndpointsBeforeConsumingCredentials(t *testing.T
 		t.Fatalf("unexpected stop result: %s", result)
 	}
 }
+
+func TestVKCarrierBuildsMihomoConfigFromNativeProfile(t *testing.T) {
+	profile := callprofile.Profile{Name: "Call Phone", VLESSUUID: "b831381d-6324-4d53-ad4f-8cda48b30811"}
+	vkCarrier.Lock()
+	vkCarrier.status, vkCarrier.endpoint, vkCarrier.profile = "ready", "127.0.0.1:45678", &profile
+	vkCarrier.Unlock()
+	t.Cleanup(func() {
+		vkCarrier.Lock()
+		vkCarrier.status, vkCarrier.endpoint, vkCarrier.profile = "idle", "", nil
+		vkCarrier.Unlock()
+	})
+	routes := `{"default":"proxy","lists":{"direct":[],"proxy":[],"block":[]}}`
+	dns := `{"direct":["1.1.1.1"],"proxy":["https://1.1.1.1/dns-query"],"vpn_underlay":["1.1.1.1"],"bootstrap":["1.1.1.1"],"cache_algorithm":"arc","prefer_h3":false,"use_hosts":true,"ipv6":false}`
+	result := BuildVKCallCarrierConfig(routes, dns)
+	for _, expected := range []string{`"ok":true`, `127.0.0.1`, `45678`, profile.VLESSUUID, `Call Phone`} {
+		if !strings.Contains(result, expected) {
+			t.Fatalf("carrier config missing %q: %s", expected, result)
+		}
+	}
+}

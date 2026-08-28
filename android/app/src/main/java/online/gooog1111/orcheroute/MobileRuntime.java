@@ -454,6 +454,12 @@ final class MobileRuntime {
     }
 
     synchronized EngineProfile engineProfile() throws Exception {
+		JSONObject callBuilt = new JSONObject(Mobilecore.buildVKCallCarrierConfig(
+				repository.routesForEngine(allowlistRouteOverride), repository.activeDNSForEngine()));
+		if (callBuilt.optBoolean("ok")) {
+			String config = callBuilt.getJSONObject("result").getString("config");
+			return new EngineProfile(config, "OrcheRoute Call", "call-transport", "call");
+		}
         JSONObject node = repository.activeNode(allowlistRouteOverride);
         if (node == null) {
             if (allowlistRouteOverride) throw new IllegalStateException("Формируется список серверов для белых списков");
@@ -1152,6 +1158,8 @@ final class MobileRuntime {
     }
 
     private void restartIfEnabled() { if (desiredEnabled) OrcheRouteVpnService.reload(context); }
+
+	synchronized void onCallCarrierReady() { restartIfEnabled(); }
 
 	synchronized String onProxyHealth(boolean successful) {
 		try {
