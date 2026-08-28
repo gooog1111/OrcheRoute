@@ -1645,6 +1645,7 @@ whitelist-пула, принадлежащая соответствующему 
 | Отчёты квалификации | `/var/lib/orcheroute/qualification/` |
 | Геобазы | `/var/lib/orcheroute/GeoIP.dat`, `/var/lib/orcheroute/GeoSite.dat` |
 | Состояние обновления компонентов | `/var/lib/orcheroute/component-operation.json` |
+| Настройки, ключи, лимиты и счётчики входящего VPN | `/var/lib/orcheroute/reverse-vpn.json` |
 | API и контроллер | `orcheroute-go.service` |
 | Mihomo core | `orcheroute-core.service` |
 | Policy routing ролей | `orcheroute-routing.service` |
@@ -1652,6 +1653,30 @@ whitelist-пула, принадлежащая соответствующему 
 | Обновление | `orcheroute-update.service` |
 | Обновление ядра и GEO | `orcheroute-components.service` |
 | Расписание обновлений | `orcheroute-update.timer` |
+
+## Входящий VPN-сервер (beta)
+
+Модуль отделён от исходящего Mihomo/TUN-профиля. Он выключен при чистой
+установке, использует собственный интерфейс `or-reverse` и не меняет состояние
+обычного VPN-клиента OrcheRoute.
+
+- `GET /v1/reverse-vpn` — безопасная конфигурация без закрытых ключей и токенов,
+  фактическое состояние интерфейса и возможности сборки;
+- `PUT /v1/reverse-vpn` — сохранить сетевые параметры выключенного сервера;
+- `POST /v1/reverse-vpn/apply` — транзакционно создать или обновить WireGuard;
+- `POST /v1/reverse-vpn/disable` — остановить только входящий VPN;
+- `POST /v1/reverse-vpn/clients` — создать клиента, ключи и секретную ссылку;
+- `PATCH /v1/reverse-vpn/clients/{id}` — изменить имя, состояние, срок, лимит,
+  сбросить учёт или заменить токен;
+- `DELETE /v1/reverse-vpn/clients/{id}` — удалить клиента и peer;
+- `GET /v1/reverse-vpn/clients/{id}/subscription` — получить персональный URL;
+- `GET /v1/reverse-vpn/clients/{id}/profile` — получить WireGuard-конфигурацию.
+
+Публичный `GET /subscription/reverse/{token}` не требует Basic-авторизации:
+сам случайный токен является секретом. Ответ содержит WireGuard-конфигурацию и
+`Subscription-Userinfo` со счётчиками, лимитом и сроком. Публиковать такую ссылку
+следует только через HTTPS. По достижении срока или лимита peer исключается из
+активной конфигурации; накопленные значения сохраняются между перезапусками.
 
 ## Важные эксплуатационные правила
 

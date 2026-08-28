@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -28,6 +29,10 @@ func (runtime *Runtime) WebHandler() http.Handler {
 	files := http.FileServer(http.Dir(runtime.Config.WebRoot))
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		setWebHeaders(writer)
+		if strings.HasPrefix(request.URL.Path, "/subscription/reverse/") {
+			runtime.reverseVPNSubscription(writer, request)
+			return
+		}
 		if !runtime.managementAllowed(request.RemoteAddr) {
 			writeJSON(writer, 403, map[string]any{"error": "management_network_required"})
 			return
@@ -59,6 +64,33 @@ func (runtime *Runtime) WebHandler() http.Handler {
 		}
 		files.ServeHTTP(writer, request)
 	})
+}
+
+func (runtime *Runtime) reverseVPNSubscription(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		writeJSON(writer, 405, map[string]any{"error": "method_not_allowed"})
+		return
+	}
+	if runtime.ReverseVPN == nil {
+		writeJSON(writer, 503, map[string]any{"error": "reverse_vpn_unavailable"})
+		return
+	}
+	token := strings.TrimSpace(strings.TrimPrefix(request.URL.Path, "/subscription/reverse/"))
+	profile, client, err := runtime.ReverseVPN.SubscriptionProfile(token)
+	if err != nil {
+		status := http.StatusNotFound
+		if err.Error() == "subscription_inactive" {
+			status = http.StatusGone
+		}
+		writeJSON(writer, status, map[string]any{"error": err.Error()})
+		return
+	}
+	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	writer.Header().Set("Content-Disposition", `inline; filename="orcheroute-wireguard.conf"`)
+	writer.Header().Set("Profile-Title", client.Name)
+	writer.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", client.TrafficRXBytes, client.TrafficTXBytes, client.TrafficLimitBytes, client.ExpiresAt))
+	writer.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(writer, profile)
 }
 
 func (runtime *Runtime) validBasic(header string) bool {

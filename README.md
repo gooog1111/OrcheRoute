@@ -46,6 +46,12 @@ sudo apt install ./OrcheRoute-Linux-Server-0.6.3-amd64.deb
 сгенерированные данные входа выводятся в терминал и сохраняются в
 `/etc/orcheroute/initial-credentials`.
 
+В beta-канале Linux Server также доступен входящий VPN-сервер: он создаёт
+персональные WireGuard-подписки для Android и других клиентов, ограничивает их
+по сроку и объёму трафика и показывает реальные счётчики соединений. Для этого
+модуля рекомендуются `wireguard-tools` и `iptables`; он выключен по умолчанию и
+не изменяет действующую исходящую маршрутизацию до явного запуска.
+
 `sudo apt remove orcheroute` сохраняет настройки, авторизацию, подписки,
 маршруты и состояние. `sudo apt purge orcheroute` полностью удаляет эти данные
 и резервные копии OrcheRoute.
@@ -105,6 +111,18 @@ VPN-серверу: ошибочное правило `block` или `direct` м
 - [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — обработка TUN,
   прокси-протоколов, DNS и правил маршрутизации. В Android ядро встроено в APK;
   его версия обновляется вместе с приложением.
+
+### Транспортные исследования
+
+- [cacggghp/vk-turn-proxy](https://github.com/cacggghp/vk-turn-proxy) —
+  транспорт WireGuard через VK TURN, GPLv3;
+- [openlibrecommunity/olcrtc](https://github.com/openlibrecommunity/olcrtc) —
+  транспорт TCP через WebRTC, WTFPL.
+
+Авторы и участники этих проектов указаны также в `THIRD_PARTY_NOTICES.md`.
+Текущая первая beta входящего VPN использует прямой WireGuard; обходные
+транспортные адаптеры будут подключаться к тому же серверному и клиентскому API,
+не создавая отдельную систему подписок.
 
 ### Встроенные аварийные списки серверов
 

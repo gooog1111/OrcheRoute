@@ -1,0 +1,19 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: OrcheRoute
+Source: https://github.com/gooog1111/OrcheRoute
+
+Files: *
+Copyright: 2026 Ivan Kiselev and OrcheRoute contributors
+License: GPL-3.0
+ On Debian systems the complete text of the GNU General Public License version 3
+ is available in /usr/share/common-licenses/GPL-3.
+
+Files: opt/orcheroute/bin/mihomo
+Copyright: MetaCubeX contributors
+License: GPL-3.0
+ Source: https://github.com/MetaCubeX/mihomo
+
+Comment:
+ vk-turn-proxy and olcRTC are credited as design references in
+ /usr/share/doc/orcheroute/THIRD_PARTY_NOTICES.md. Their code is not included in
+ the first inbound VPN beta binary.

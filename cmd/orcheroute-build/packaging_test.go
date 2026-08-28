@@ -25,6 +25,11 @@ func TestDebianPackageStartsControlPlaneWithoutOptionalNftables(t *testing.T) {
 	if !strings.Contains(control, "Recommends: nftables") {
 		t.Fatal("nftables must remain a recommended VPN routing dependency")
 	}
+	for _, dependency := range []string{"wireguard-tools", "iptables"} {
+		if !strings.Contains(control, dependency) {
+			t.Fatalf("inbound VPN dependency %s must be recommended", dependency)
+		}
+	}
 }
 
 func TestDebianRemovePreservesStateAndPurgeDeletesIt(t *testing.T) {
@@ -62,6 +67,29 @@ func TestDebianMaintainerScriptsUseUnixLineEndings(t *testing.T) {
 		}
 		if strings.Contains(string(payload), "\r") {
 			t.Fatalf("Debian maintainer script %s contains CRLF line endings", name)
+		}
+	}
+}
+
+func TestDebianPackageContainsLicenseMetadata(t *testing.T) {
+	root, err := repositoryRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyright, err := os.ReadFile(filepath.Join(root, "packaging", "debian", "copyright"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(copyright), "License: GPL-3.0") {
+		t.Fatal("Debian copyright does not declare GPLv3")
+	}
+	script, err := os.ReadFile(filepath.Join(root, "scripts", "package-linux-server.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"copyright", "THIRD_PARTY_NOTICES.md"} {
+		if !strings.Contains(string(script), name) {
+			t.Fatalf("package script does not include %s", name)
 		}
 	}
 }

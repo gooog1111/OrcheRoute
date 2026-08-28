@@ -5,7 +5,7 @@ Priority: optional
 Architecture: amd64
 Maintainer: Ivan Kiselev <kiselev.ivan1111@gmail.com>
 Depends: ca-certificates, iproute2, systemd
-Recommends: nftables
+Recommends: nftables, wireguard-tools, iptables
 Description: cross-platform traffic orchestration and VPN control plane
  OrcheRoute combines a Go control plane, Mihomo transport, policy routing,
  subscription management and a responsive local/server user interface.

@@ -78,5 +78,8 @@ fi
 if ! command -v nft >/dev/null 2>&1; then
     echo "WARNING: nftables is not installed. WebUI is available, but VPN routing requires: apt install nftables"
 fi
+if ! command -v wg-quick >/dev/null 2>&1 || ! command -v iptables >/dev/null 2>&1; then
+    echo "NOTICE: inbound VPN server is available after: apt install wireguard-tools iptables"
+fi
 
 exit 0

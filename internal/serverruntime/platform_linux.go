@@ -9,12 +9,14 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/network"
+	"github.com/gooog1111/orcheroute/internal/reversevpn"
 	"golang.org/x/sys/unix"
 )
 
@@ -27,6 +29,10 @@ func platformDefaultConfig() Config {
 		ComponentBinary: "/opt/orcheroute/bin/orcheroute-components-go", SelfUpdateBinary: "/opt/orcheroute/bin/orcheroute-self-update", CoreService: "orcheroute-core.service", ControllerEvery: 10 * time.Second,
 		ConnectivityEvery: 10 * time.Second, ConnectivityTimeout: 6 * time.Second,
 		RequireAPIAuth: true}
+}
+
+func platformReverseVPNAdapter(stateDirectory string) reversevpn.Adapter {
+	return reversevpn.NewLinuxAdapter(filepath.Join(stateDirectory, "reverse-vpn"))
 }
 
 func discoverTopology(ctx context.Context) (network.Topology, error) {

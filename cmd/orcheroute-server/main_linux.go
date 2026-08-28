@@ -48,6 +48,7 @@ func main() {
 	go runtime.RunConnectivityMonitor(ctx)
 	go runtime.RunIdentityMonitor(ctx)
 	go runtime.RunAppUpdateMonitor(ctx)
+	go runtime.ReconcileReverseVPN(ctx)
 	api := &http.Server{Addr: config.Listen, Handler: runtime.APIHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	var web *http.Server
 	errors := make(chan error, 3)

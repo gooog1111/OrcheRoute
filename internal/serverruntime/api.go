@@ -24,6 +24,7 @@ import (
 	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
 	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/network"
+	"github.com/gooog1111/orcheroute/internal/reversevpn"
 	"github.com/gooog1111/orcheroute/internal/routes"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 )
@@ -62,6 +63,18 @@ func (runtime *Runtime) api(writer http.ResponseWriter, request *http.Request) {
 func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url.URL, body map[string]any) (int, any) {
 	path := parsed.Path
 	if method == http.MethodGet {
+		if strings.HasPrefix(path, "/v1/reverse-vpn/clients/") && strings.HasSuffix(path, "/subscription") {
+			id, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/v1/reverse-vpn/clients/"), "/subscription"))
+			if runtime.ReverseVPN == nil {
+				return 503, map[string]any{"error": "reverse_vpn_unavailable", "message": runtime.reverseVPNError}
+			}
+			token, err := runtime.ReverseVPN.SubscriptionSecret(id)
+			return result(200, map[string]any{"id": id, "subscription_path": "/subscription/reverse/" + token, "subscription_url": runtime.ReverseVPN.SubscriptionURL(token)}, err)
+		}
+		if strings.HasPrefix(path, "/v1/reverse-vpn/clients/") && strings.HasSuffix(path, "/profile") {
+			id, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/v1/reverse-vpn/clients/"), "/profile"))
+			return runtime.reverseVPNClientProfile(id)
+		}
 		switch path {
 		case "/v1/status":
 			return runtime.getStatus(ctx)
@@ -102,6 +115,8 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.getComponents(ctx)
 		case "/v1/app-update":
 			return runtime.getAppUpdate()
+		case "/v1/reverse-vpn":
+			return runtime.getReverseVPN(ctx)
 		}
 	}
 	if method == http.MethodPost {
@@ -232,6 +247,36 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			}
 			transition, err := runtime.whitelistTransition(command)
 			return result(200, transition, err)
+		case path == "/v1/reverse-vpn/apply":
+			if runtime.ReverseVPN == nil {
+				return 503, map[string]any{"error": "reverse_vpn_unavailable", "message": runtime.reverseVPNError}
+			}
+			err := runtime.ReverseVPN.Apply(ctx)
+			return result(200, map[string]any{"applied": err == nil, "status": runtime.ReverseVPN.Status(ctx)}, err)
+		case path == "/v1/reverse-vpn/disable":
+			if runtime.ReverseVPN == nil {
+				return 503, map[string]any{"error": "reverse_vpn_unavailable", "message": runtime.reverseVPNError}
+			}
+			err := runtime.ReverseVPN.Disable(ctx)
+			return result(200, map[string]any{"disabled": err == nil, "status": runtime.ReverseVPN.Status(ctx)}, err)
+		case path == "/v1/reverse-vpn/clients":
+			if runtime.ReverseVPN == nil {
+				return 503, map[string]any{"error": "reverse_vpn_unavailable", "message": runtime.reverseVPNError}
+			}
+			limit := int64Value(body["traffic_limit_bytes"])
+			if limit < 0 {
+				return 400, map[string]any{"error": "invalid_traffic_limit"}
+			}
+			client, err := runtime.ReverseVPN.CreateClientWithOptions(reversevpn.CreateClientOptions{Name: stringValue(body["name"]), ExpiresAt: int64Value(body["expires_at"]), TrafficLimitBytes: uint64(limit)})
+			if err != nil {
+				return backendError(err)
+			}
+			if runtime.ReverseVPN.PublicConfig().Enabled {
+				if err := runtime.ReverseVPN.Apply(ctx); err != nil {
+					return backendError(err)
+				}
+			}
+			return 201, map[string]any{"client": client, "subscription_path": "/subscription/reverse/" + client.SubscriptionToken, "subscription_url": runtime.ReverseVPN.SubscriptionURL(client.SubscriptionToken), "warning": "private_key_and_subscription_token_are_secrets"}
 		}
 	}
 	if method == http.MethodPut {
@@ -250,11 +295,28 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.saveNetwork(ctx, body)
 		case "/v1/dns":
 			return runtime.saveDNS(body)
+		case "/v1/reverse-vpn":
+			return runtime.saveReverseVPN(body)
 		}
 	}
 	if method == http.MethodPatch && strings.HasPrefix(path, "/v1/subscriptions/") {
 		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/subscriptions/"))
 		return runtime.updateSubscription(ctx, id, body)
+	}
+	if method == http.MethodPatch && strings.HasPrefix(path, "/v1/reverse-vpn/clients/") {
+		if runtime.ReverseVPN == nil {
+			return 503, map[string]any{"error": "reverse_vpn_unavailable", "message": runtime.reverseVPNError}
+		}
+		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/reverse-vpn/clients/"))
+		limit := int64Value(body["traffic_limit_bytes"])
+		if limit < 0 {
+			return 400, map[string]any{"error": "invalid_traffic_limit"}
+		}
+		client, err := runtime.ReverseVPN.UpdateClient(id, reversevpn.UpdateClientOptions{Name: stringValue(body["name"]), Enabled: boolValue(body["enabled"]), ExpiresAt: int64Value(body["expires_at"]), TrafficLimitBytes: uint64(limit), ResetTraffic: boolValue(body["reset_traffic"]), RotateToken: boolValue(body["rotate_token"])})
+		if err == nil && runtime.ReverseVPN.PublicConfig().Enabled {
+			err = runtime.ReverseVPN.Apply(ctx)
+		}
+		return result(200, map[string]any{"client": client, "updated": err == nil}, err)
 	}
 	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/subscriptions/") {
 		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/subscriptions/"))
@@ -271,11 +333,54 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/nodes/"))
 		return runtime.deletePoolNode(ctx, id)
 	}
+	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/reverse-vpn/clients/") {
+		if runtime.ReverseVPN == nil {
+			return 503, map[string]any{"error": "reverse_vpn_unavailable", "message": runtime.reverseVPNError}
+		}
+		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/reverse-vpn/clients/"))
+		err := runtime.ReverseVPN.DeleteClient(id)
+		if err == nil && runtime.ReverseVPN.PublicConfig().Enabled {
+			err = runtime.ReverseVPN.Apply(ctx)
+		}
+		return result(200, map[string]any{"deleted": err == nil, "id": id}, err)
+	}
 	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/pools/") {
 		pool, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/pools/"))
 		return runtime.clearPool(ctx, pool)
 	}
 	return 404, map[string]any{"error": "not_found"}
+}
+
+func (runtime *Runtime) getReverseVPN(ctx context.Context) (int, any) {
+	if runtime.ReverseVPN == nil {
+		return 503, map[string]any{"error": "reverse_vpn_unavailable", "message": runtime.reverseVPNError}
+	}
+	return 200, map[string]any{"config": runtime.ReverseVPN.PublicConfig(), "status": runtime.ReverseVPN.Status(ctx),
+		"capabilities": map[string]any{"transports": []string{reversevpn.TransportDirect}, "client_profile": "wireguard", "beta": true}}
+}
+
+func (runtime *Runtime) saveReverseVPN(body map[string]any) (int, any) {
+	if runtime.ReverseVPN == nil {
+		return 503, map[string]any{"error": "reverse_vpn_unavailable", "message": runtime.reverseVPNError}
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return backendError(err)
+	}
+	var config reversevpn.PublicConfig
+	if err := json.Unmarshal(payload, &config); err != nil {
+		return 400, map[string]any{"error": "invalid_reverse_vpn_config"}
+	}
+	updated, err := runtime.ReverseVPN.Update(config)
+	return result(200, map[string]any{"config": updated, "saved": err == nil, "requires_apply": true}, err)
+}
+
+func (runtime *Runtime) reverseVPNClientProfile(id string) (int, any) {
+	if runtime.ReverseVPN == nil {
+		return 503, map[string]any{"error": "reverse_vpn_unavailable", "message": runtime.reverseVPNError}
+	}
+	profile, err := runtime.ReverseVPN.ClientProfile(strings.TrimSpace(id))
+	return result(200, map[string]any{"id": id, "profile": profile, "format": "wireguard-conf"}, err)
 }
 
 func (runtime *Runtime) deletePoolNode(ctx context.Context, id string) (int, any) {

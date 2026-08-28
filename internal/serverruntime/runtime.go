@@ -22,6 +22,7 @@ import (
 	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
 	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/network"
+	"github.com/gooog1111/orcheroute/internal/reversevpn"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"golang.org/x/net/proxy"
@@ -58,6 +59,8 @@ func DefaultConfig() Config {
 type Runtime struct {
 	Config                   Config
 	Store                    *serverstate.Store
+	ReverseVPN               *reversevpn.Manager
+	reverseVPNError          string
 	apiToken                 string
 	controllerSecret         string
 	client                   *http.Client
@@ -101,6 +104,12 @@ func New(config Config) (*Runtime, error) {
 		return nil, err
 	}
 	runtime := &Runtime{Config: config, Store: store, apiToken: values["api_token"], controllerSecret: values["controller_secret"], client: &http.Client{Timeout: 10 * time.Second}, startedAt: time.Now().Unix()}
+	reverseManager, reverseErr := reversevpn.Open(filepath.Join(config.StateDirectory, "reverse-vpn.json"), platformReverseVPNAdapter(config.StateDirectory))
+	if reverseErr != nil {
+		runtime.reverseVPNError = reverseErr.Error()
+	} else {
+		runtime.ReverseVPN = reverseManager
+	}
 	if err := runtime.bootstrap(context.Background(), freshState); err != nil {
 		_ = store.Close()
 		return nil, err
@@ -281,6 +290,23 @@ func bootstrapInterface(topology network.Topology) string {
 }
 
 func (runtime *Runtime) Close() error { return runtime.Store.Close() }
+
+func (runtime *Runtime) ReconcileReverseVPN(ctx context.Context) {
+	if runtime.ReverseVPN == nil {
+		return
+	}
+	_ = runtime.ReverseVPN.Reconcile(ctx)
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = runtime.ReverseVPN.RefreshAccounting(ctx)
+		}
+	}
+}
 
 func readEnv(path string) (map[string]string, error) {
 	payload, err := os.ReadFile(path)
@@ -553,6 +579,11 @@ func int64Value(value any) int64 {
 		return result
 	}
 	return 0
+}
+
+func boolValue(value any) bool {
+	result, _ := value.(bool)
+	return result
 }
 
 func floatValue(value any) float64 {

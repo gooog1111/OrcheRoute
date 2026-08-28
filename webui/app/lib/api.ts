@@ -242,6 +242,45 @@ export type DashboardData = {
   operations: OperationSnapshot | null;
   access: WebAccess | null;
   appUpdate: AndroidAppUpdateStatus | null;
+	reverseVPN: ReverseVPNState | null;
+};
+
+export type ReverseVPNClient = {
+	id: string;
+	name: string;
+	address: string;
+	public_key: string;
+	enabled: boolean;
+	created_at: number;
+	expires_at?: number;
+	traffic_limit_bytes?: number;
+	traffic_used_bytes: number;
+	traffic_rx_bytes: number;
+	traffic_tx_bytes: number;
+	last_seen_at?: number;
+	available: boolean;
+};
+
+export type ReverseVPNConfig = {
+	version: 1;
+	enabled: boolean;
+	interface_name: string;
+	listen_port: number;
+	server_cidr: string;
+	mtu: number;
+	dns: string[];
+	outbound_interface?: string;
+	public_endpoint?: string;
+	subscription_base_url?: string;
+	transport: "direct";
+	public_key?: string;
+	clients: ReverseVPNClient[];
+};
+
+export type ReverseVPNState = {
+	config: ReverseVPNConfig;
+	status: { desired_enabled: boolean; active: boolean; interface_name: string; transport: string; clients: number; last_applied_at?: number; last_error?: string };
+	capabilities: { transports: string[]; client_profile: string; beta: boolean };
 };
 
 export type OperationSnapshot = {
@@ -429,7 +468,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export async function loadDashboard(): Promise<DashboardData> {
-  const [status, pools, nodes, subscriptions, network, interfaces, qualification, dns, routes, components, operations, access, appUpdate] = await Promise.all([
+  const [status, pools, nodes, subscriptions, network, interfaces, qualification, dns, routes, components, operations, access, appUpdate, reverseVPN] = await Promise.all([
     request<OrcheRouteStatus>("/v1/status"),
     request<{ pools: Pool[] }>("/v1/pools").catch(() => ({ pools: [] })),
     request<{ nodes: Node[] }>("/v1/nodes").catch(() => ({ nodes: [] })),
@@ -443,6 +482,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     request<OperationSnapshot>("/v1/operations").catch(() => null),
     platformCapabilities().showAccessSettings ? request<WebAccess>("/v1/web/access").catch(() => null) : Promise.resolve(null),
     platformCapabilities().appUpdater === "android" ? Promise.resolve(getAndroidAppUpdateStatus()) : request<AndroidAppUpdateStatus>("/v1/app-update").catch(() => null),
+	platformCapabilities().kind === "server" ? request<ReverseVPNState>("/v1/reverse-vpn").catch(() => null) : Promise.resolve(null),
   ]);
   return {
     status,
@@ -458,6 +498,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     operations,
     access,
     appUpdate,
+	reverseVPN,
   };
 }
 
@@ -476,6 +517,27 @@ export function loadOperations(): Promise<OperationSnapshot> {
 }
 
 export const actions = {
+	saveReverseVPN(config: ReverseVPNConfig) {
+		return request<{ saved: boolean; config: ReverseVPNConfig }>("/v1/reverse-vpn", { method: "PUT", body: JSON.stringify(config) });
+	},
+	setReverseVPNEnabled(enabled: boolean) {
+		return request<{ status: ReverseVPNState["status"] }>(`/v1/reverse-vpn/${enabled ? "apply" : "disable"}`, { method: "POST", body: "{}" });
+	},
+	createReverseVPNClient(payload: { name: string; expires_at?: number; traffic_limit_bytes?: number }) {
+		return request<{ client: ReverseVPNClient & { private_key: string; subscription_token: string }; subscription_path: string; subscription_url: string }>("/v1/reverse-vpn/clients", { method: "POST", body: JSON.stringify(payload) });
+	},
+	updateReverseVPNClient(id: string, payload: { name: string; enabled: boolean; expires_at?: number; traffic_limit_bytes?: number; reset_traffic?: boolean; rotate_token?: boolean }) {
+		return request<{ updated: boolean; client: ReverseVPNClient }>(`/v1/reverse-vpn/clients/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) });
+	},
+	deleteReverseVPNClient(id: string) {
+		return request<{ deleted: boolean }>(`/v1/reverse-vpn/clients/${encodeURIComponent(id)}`, { method: "DELETE", body: "{}" });
+	},
+	reverseVPNSubscription(id: string) {
+		return request<{ subscription_path: string; subscription_url: string }>(`/v1/reverse-vpn/clients/${encodeURIComponent(id)}/subscription`);
+	},
+	reverseVPNProfile(id: string) {
+		return request<{ profile: string }>(`/v1/reverse-vpn/clients/${encodeURIComponent(id)}/profile`);
+	},
   setEnabled(enabled: boolean) {
     return request<{ accepted: boolean; enabled: boolean }>(
       `/v1/service/${enabled ? "enable" : "disable"}`,

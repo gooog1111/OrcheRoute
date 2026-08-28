@@ -31,6 +31,9 @@ for script in preinst postinst prerm postrm; do
     install -m 0755 "$PACKAGING_DIR/$script" "$STAGING/DEBIAN/$script"
 done
 install -m 0644 "$PACKAGING_DIR/README.Debian" "$STAGING/DEBIAN/README.Debian"
+install -d -m 0755 "$STAGING/usr/share/doc/orcheroute"
+install -m 0644 "$PACKAGING_DIR/copyright" "$STAGING/usr/share/doc/orcheroute/copyright"
+install -m 0644 "$PACKAGING_DIR/../../THIRD_PARTY_NOTICES.md" "$STAGING/usr/share/doc/orcheroute/THIRD_PARTY_NOTICES.md"
 
 (
     cd "$STAGING"
