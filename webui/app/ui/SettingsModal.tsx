@@ -32,6 +32,7 @@ import {
   type RouteState,
   type Subscription,
 } from "../lib/api";
+import { copyText } from "../lib/clipboard";
 import { platformCapabilities } from "../platform/runtime";
 import { ChevronIcon, CloseIcon } from "./Icons";
 import { OperationPanel, type OperationView } from "./OperationPanel";
@@ -3194,26 +3195,6 @@ function SubscriptionsForm({
       </div>
     </div>
   );
-}
-
-async function copyText(value: string) {
-  if (navigator.clipboard && window.isSecureContext) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const field = document.createElement("textarea");
-  field.value = value;
-  field.setAttribute("readonly", "");
-  field.style.position = "fixed";
-  field.style.opacity = "0";
-  document.body.appendChild(field);
-  field.select();
-  const copied = document.execCommand("copy");
-  field.remove();
-  if (!copied)
-    throw new Error(
-      "Не удалось скопировать ссылку. Откройте панель через HTTPS или SSH-туннель.",
-    );
 }
 
 function ComponentsForm({

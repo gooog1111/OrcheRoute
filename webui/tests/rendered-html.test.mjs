@@ -571,3 +571,14 @@ test("inbound VPN reports missing Linux tools and future updates resolve depende
   assert.match(panel, /sudo apt install wireguard-tools iptables/);
   assert.match(updater, /return "apt-get", \[\]string\{"install", "--yes", "--no-remove", path\}/);
 });
+
+test("inbound VPN subscription copy works outside the secure Clipboard API", async () => {
+  const panel = await readFile(new URL("../app/ui/ReverseVPNPanel.tsx", import.meta.url), "utf8");
+  const clipboard = await readFile(new URL("../app/lib/clipboard.ts", import.meta.url), "utf8");
+  assert.match(panel, /copyText\(value\.subscription_url/);
+  assert.match(panel, /Скопировано/);
+  assert.match(panel, /Ошибка копирования/);
+  assert.match(clipboard, /window\.isSecureContext/);
+  assert.match(clipboard, /document\.execCommand\("copy"\)/);
+  assert.match(clipboard, /setSelectionRange\(0, field\.value\.length\)/);
+});

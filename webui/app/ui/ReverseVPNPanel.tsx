@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { actions, type ReverseVPNClient, type ReverseVPNConfig, type ReverseVPNState } from "../lib/api";
+import { copyText } from "../lib/clipboard";
 
 type Runner = (operation: () => Promise<unknown>, success: string, options?: { title?: string }) => Promise<boolean>;
 
@@ -69,16 +70,26 @@ function ReverseVPNClientCard({ client, busy, run, onReload }: { client: Reverse
 	const [enabled, setEnabled] = useState(client.enabled);
 	const [expires, setExpires] = useState(client.expires_at ? localDateTime(client.expires_at) : "");
 	const [limitGB, setLimitGB] = useState(client.traffic_limit_bytes ? String(Math.round(client.traffic_limit_bytes / 1024 ** 3 * 10) / 10) : "");
+	const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
 	const payload = (extra: { reset_traffic?: boolean; rotate_token?: boolean } = {}) => ({ name, enabled, expires_at: expires ? Math.floor(new Date(expires).getTime() / 1000) : 0, traffic_limit_bytes: limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : 0, ...extra });
 	const reloadAfter = async (operation: () => Promise<unknown>, message: string, title: string) => { if (await run(operation, message, { title })) await onReload(); };
-	const copy = async () => { const value = await actions.reverseVPNSubscription(client.id); await navigator.clipboard.writeText(value.subscription_url.startsWith("https://") ? value.subscription_url : new URL(value.subscription_path, window.location.origin).toString()); };
+	const copy = async () => {
+		try {
+			const value = await actions.reverseVPNSubscription(client.id);
+			await copyText(value.subscription_url.startsWith("https://") ? value.subscription_url : new URL(value.subscription_path, window.location.origin).toString());
+			setCopyStatus("copied");
+		} catch {
+			setCopyStatus("error");
+		}
+		window.setTimeout(() => setCopyStatus("idle"), 1800);
+	};
 	const download = async () => { const value = await actions.reverseVPNProfile(client.id); const url = URL.createObjectURL(new Blob([value.profile], { type: "text/plain" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${safeFilename(client.name)}.conf`; anchor.click(); URL.revokeObjectURL(url); };
 	return <details className="reverse-client-card">
 		<summary><span className={`node-status ${client.available ? "alive" : ""}`}/><span><strong>{client.name}</strong><small>{client.address} · {formatBytes(client.traffic_used_bytes)}{client.traffic_limit_bytes ? ` из ${formatBytes(client.traffic_limit_bytes)}` : ""}</small></span><em>{client.available ? "Доступен" : "Отключён"}</em></summary>
 		<div className="reverse-client-body">
 			<div className="form-grid two"><label className="form-field"><span>Имя</span><input value={name} onChange={e => setName(e.target.value)} disabled={busy}/></label><label className="choice-row"><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} disabled={busy}/><span><strong>Клиент включён</strong></span></label><label className="form-field"><span>Действует до</span><input type="datetime-local" value={expires} onChange={e => setExpires(e.target.value)} disabled={busy}/></label><label className="form-field"><span>Лимит, ГБ</span><input type="number" min={0} step="0.1" value={limitGB} onChange={e => setLimitGB(e.target.value)} disabled={busy}/></label></div>
 			<div className="pool-audit"><div><span>Получено <strong>{formatBytes(client.traffic_rx_bytes)}</strong></span><span>Отправлено <strong>{formatBytes(client.traffic_tx_bytes)}</strong></span><span>Последняя связь <strong>{client.last_seen_at ? new Date(client.last_seen_at * 1000).toLocaleString("ru-RU") : "—"}</strong></span></div></div>
-			<div className="reverse-client-actions"><button type="button" onClick={() => void copy()} disabled={busy}>Копировать подписку</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>Скачать профиль</button><button type="button" onClick={() => void reloadAfter(() => actions.updateReverseVPNClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy || !name.trim()}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateReverseVPNClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateReverseVPNClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteReverseVPNClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
+			<div className="reverse-client-actions"><button type="button" onClick={() => void copy()} disabled={busy}>{copyStatus === "copied" ? "Скопировано" : copyStatus === "error" ? "Ошибка копирования" : "Копировать подписку"}</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>Скачать профиль</button><button type="button" onClick={() => void reloadAfter(() => actions.updateReverseVPNClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy || !name.trim()}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateReverseVPNClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateReverseVPNClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteReverseVPNClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
 		</div>
 	</details>;
 }
