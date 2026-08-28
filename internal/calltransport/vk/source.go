@@ -34,6 +34,12 @@ type Source struct {
 	Now       func() time.Time
 }
 
+type CaptchaRequiredError struct {
+	RedirectURL string
+}
+
+func (*CaptchaRequiredError) Error() string { return "call_transport_vk_captcha_required" }
+
 func (source Source) Resolve(ctx context.Context, rawInvitation string) (calltransport.ProviderCredentials, error) {
 	invitation, err := ParseInvitation(rawInvitation)
 	if err != nil {
@@ -110,6 +116,7 @@ func (source Source) callToken(ctx context.Context, client *http.Client, api, in
 			Code       int    `json:"error_code"`
 			Message    string `json:"error_msg"`
 			CaptchaSID string `json:"captcha_sid"`
+			Redirect   string `json:"redirect_uri"`
 		} `json:"error"`
 	}
 	endpoint := strings.TrimRight(api, "/") + "/calls.getAnonymousToken?v=5.275&client_id=" + url.QueryEscape(source.Identity.ID)
@@ -117,8 +124,8 @@ func (source Source) callToken(ctx context.Context, client *http.Client, api, in
 		return "", fmt.Errorf("call_transport_vk_call_token: %w", err)
 	}
 	if response.Error != nil {
-		if response.Error.CaptchaSID != "" {
-			return "", fmt.Errorf("call_transport_vk_captcha_required")
+		if response.Error.Code == 14 || response.Error.CaptchaSID != "" {
+			return "", &CaptchaRequiredError{RedirectURL: response.Error.Redirect}
 		}
 		return "", fmt.Errorf("call_transport_vk_api_error_%d", response.Error.Code)
 	}

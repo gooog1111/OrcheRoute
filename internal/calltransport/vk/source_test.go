@@ -3,6 +3,7 @@ package vk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -80,6 +81,27 @@ func TestSourceReportsCaptchaWithoutCachingSuccess(t *testing.T) {
 	source := Source{Client: server.Client(), Identity: ClientIdentity{ID: "client", Secret: "secret"}, Endpoints: Endpoints{Login: server.URL + "/login", API: server.URL + "/api", Calls: server.URL + "/calls"}}
 	if _, err := source.Resolve(context.Background(), "https://vk.com/call/join/invite"); err == nil || err.Error() != "call_transport_vk_captcha_required" {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSourceRecognizesCaptchaByVKErrorCode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/login" {
+			_, _ = writer.Write([]byte(`{"data":{"access_token":"access"}}`))
+			return
+		}
+		_, _ = writer.Write([]byte(`{"error":{"error_code":14,"error_msg":"Captcha needed","redirect_uri":"https://id.vk.ru/not_robot_captcha?session_token=private"}}`))
+	}))
+	defer server.Close()
+	source := Source{Client: server.Client(), Identity: ClientIdentity{ID: "client", Secret: "secret"}, Endpoints: Endpoints{Login: server.URL + "/login", API: server.URL + "/api", Calls: server.URL + "/calls"}}
+	_, err := source.Resolve(context.Background(), "https://vk.com/call/join/invite")
+	var challenge *CaptchaRequiredError
+	if !errors.As(err, &challenge) || challenge.RedirectURL == "" || err.Error() != "call_transport_vk_captcha_required" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err.Error() == challenge.RedirectURL {
+		t.Fatal("captcha URL leaked through error text")
 	}
 }
 
