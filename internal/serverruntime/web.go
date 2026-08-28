@@ -33,6 +33,10 @@ func (runtime *Runtime) WebHandler() http.Handler {
 			runtime.reverseVPNSubscription(writer, request)
 			return
 		}
+		if strings.HasPrefix(request.URL.Path, "/subscription/call/") {
+			runtime.callServerSubscription(writer, request)
+			return
+		}
 		if !runtime.managementAllowed(request.RemoteAddr) {
 			writeJSON(writer, 403, map[string]any{"error": "management_network_required"})
 			return
@@ -64,6 +68,33 @@ func (runtime *Runtime) WebHandler() http.Handler {
 		}
 		files.ServeHTTP(writer, request)
 	})
+}
+
+func (runtime *Runtime) callServerSubscription(writer http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		writeJSON(writer, 405, map[string]any{"error": "method_not_allowed"})
+		return
+	}
+	if runtime.CallServer == nil {
+		writeJSON(writer, 503, map[string]any{"error": "call_server_unavailable"})
+		return
+	}
+	token := strings.TrimSpace(strings.TrimPrefix(request.URL.Path, "/subscription/call/"))
+	profile, client, err := runtime.CallServer.SubscriptionProfile(token)
+	if err != nil {
+		status := http.StatusNotFound
+		if err.Error() == "call_server_subscription_inactive" {
+			status = http.StatusGone
+		}
+		writeJSON(writer, status, map[string]any{"error": err.Error()})
+		return
+	}
+	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	writer.Header().Set("Content-Disposition", `inline; filename="orcheroute-call.txt"`)
+	writer.Header().Set("Profile-Title", client.Name)
+	writer.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", client.TrafficRXBytes, client.TrafficTXBytes, client.TrafficLimitBytes, client.ExpiresAt))
+	writer.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(writer, profile)
 }
 
 func (runtime *Runtime) reverseVPNSubscription(writer http.ResponseWriter, request *http.Request) {

@@ -202,6 +202,17 @@ func (manager *Manager) ClientProfile(id string) (string, error) {
 	return "", fmt.Errorf("call_server_client_not_found")
 }
 
+func (manager *Manager) SubscriptionSecret(id string) (string, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	for _, client := range manager.data.Clients {
+		if client.ID == id {
+			return client.SubscriptionToken, nil
+		}
+	}
+	return "", fmt.Errorf("call_server_client_not_found")
+}
+
 func (manager *Manager) SubscriptionProfile(token string) (string, PublicClient, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()

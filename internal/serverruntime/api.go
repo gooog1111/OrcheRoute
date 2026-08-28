@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gooog1111/orcheroute/internal/callserver"
 	"github.com/gooog1111/orcheroute/internal/components"
 	coreparser "github.com/gooog1111/orcheroute/internal/core/parser"
 	"github.com/gooog1111/orcheroute/internal/core/qualification"
@@ -63,6 +64,22 @@ func (runtime *Runtime) api(writer http.ResponseWriter, request *http.Request) {
 func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url.URL, body map[string]any) (int, any) {
 	path := parsed.Path
 	if method == http.MethodGet {
+		if strings.HasPrefix(path, "/v1/call-server/clients/") && strings.HasSuffix(path, "/subscription") {
+			id, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/v1/call-server/clients/"), "/subscription"))
+			if runtime.CallServer == nil {
+				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
+			}
+			token, err := runtime.CallServer.SubscriptionSecret(id)
+			return result(200, map[string]any{"id": id, "subscription_path": "/subscription/call/" + token, "subscription_url": runtime.CallServer.SubscriptionURL(token)}, err)
+		}
+		if strings.HasPrefix(path, "/v1/call-server/clients/") && strings.HasSuffix(path, "/profile") {
+			id, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/v1/call-server/clients/"), "/profile"))
+			if runtime.CallServer == nil {
+				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
+			}
+			profile, err := runtime.CallServer.ClientProfile(id)
+			return result(200, map[string]any{"id": id, "profile": profile, "format": "orcheroute-call-v1"}, err)
+		}
 		if strings.HasPrefix(path, "/v1/reverse-vpn/clients/") && strings.HasSuffix(path, "/subscription") {
 			id, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/v1/reverse-vpn/clients/"), "/subscription"))
 			if runtime.ReverseVPN == nil {
@@ -117,6 +134,11 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.getAppUpdate()
 		case "/v1/reverse-vpn":
 			return runtime.getReverseVPN(ctx)
+		case "/v1/call-server":
+			if runtime.CallServer == nil {
+				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
+			}
+			return 200, map[string]any{"config": runtime.CallServer.PublicConfig(), "capabilities": map[string]any{"transport": "vk-call-xray", "profile": "orcheroute-call-v1", "beta": true}}
 		}
 	}
 	if method == http.MethodPost {
@@ -277,6 +299,20 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 				}
 			}
 			return 201, map[string]any{"client": client, "subscription_path": "/subscription/reverse/" + client.SubscriptionToken, "subscription_url": runtime.ReverseVPN.SubscriptionURL(client.SubscriptionToken), "warning": "private_key_and_subscription_token_are_secrets"}
+		case path == "/v1/call-server/clients":
+			if runtime.CallServer == nil {
+				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
+			}
+			limit := int64Value(body["traffic_limit_bytes"])
+			if limit < 0 {
+				return 400, map[string]any{"error": "invalid_traffic_limit"}
+			}
+			client, err := runtime.CallServer.CreateClient(callserver.CreateClientInput{Name: stringValue(body["name"]), ExpiresAt: int64Value(body["expires_at"]), TrafficLimitBytes: uint64(limit)})
+			if err != nil {
+				return backendError(err)
+			}
+			return 201, map[string]any{"client": client.PublicAt(time.Now()), "subscription_path": "/subscription/call/" + client.SubscriptionToken,
+				"subscription_url": runtime.CallServer.SubscriptionURL(client.SubscriptionToken), "warning": "subscription_token_is_secret"}
 		}
 	}
 	if method == http.MethodPut {
@@ -297,6 +333,20 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.saveDNS(body)
 		case "/v1/reverse-vpn":
 			return runtime.saveReverseVPN(body)
+		case "/v1/call-server":
+			if runtime.CallServer == nil {
+				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
+			}
+			payload, err := json.Marshal(body)
+			if err != nil {
+				return backendError(err)
+			}
+			var config callserver.Config
+			if err := json.Unmarshal(payload, &config); err != nil {
+				return 400, map[string]any{"error": "invalid_call_server_config"}
+			}
+			updated, err := runtime.CallServer.UpdateConfig(config)
+			return result(200, map[string]any{"config": updated, "saved": err == nil}, err)
 		}
 	}
 	if method == http.MethodPatch && strings.HasPrefix(path, "/v1/subscriptions/") {
@@ -317,6 +367,18 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			err = runtime.ReverseVPN.Apply(ctx)
 		}
 		return result(200, map[string]any{"client": client, "updated": err == nil}, err)
+	}
+	if method == http.MethodPatch && strings.HasPrefix(path, "/v1/call-server/clients/") {
+		if runtime.CallServer == nil {
+			return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
+		}
+		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/call-server/clients/"))
+		limit := int64Value(body["traffic_limit_bytes"])
+		if limit < 0 {
+			return 400, map[string]any{"error": "invalid_traffic_limit"}
+		}
+		client, err := runtime.CallServer.UpdateClient(id, callserver.UpdateClientInput{Name: stringValue(body["name"]), Enabled: boolValue(body["enabled"]), ExpiresAt: int64Value(body["expires_at"]), TrafficLimitBytes: uint64(limit), ResetTraffic: boolValue(body["reset_traffic"]), RotateToken: boolValue(body["rotate_token"])})
+		return result(200, map[string]any{"client": client.PublicAt(time.Now()), "updated": err == nil}, err)
 	}
 	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/subscriptions/") {
 		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/subscriptions/"))
@@ -342,6 +404,14 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 		if err == nil && runtime.ReverseVPN.PublicConfig().Enabled {
 			err = runtime.ReverseVPN.Apply(ctx)
 		}
+		return result(200, map[string]any{"deleted": err == nil, "id": id}, err)
+	}
+	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/call-server/clients/") {
+		if runtime.CallServer == nil {
+			return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
+		}
+		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/call-server/clients/"))
+		err := runtime.CallServer.DeleteClient(id)
 		return result(200, map[string]any{"deleted": err == nil, "id": id}, err)
 	}
 	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/pools/") {
