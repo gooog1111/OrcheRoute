@@ -1,0 +1,330 @@
+package callserver
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
+	callxray "github.com/gooog1111/orcheroute/internal/calltransport/xray"
+)
+
+type CreateClientInput struct {
+	Name              string `json:"name"`
+	ExpiresAt         int64  `json:"expires_at,omitempty"`
+	TrafficLimitBytes uint64 `json:"traffic_limit_bytes,omitempty"`
+}
+
+type UpdateClientInput struct {
+	Name              string `json:"name"`
+	Enabled           bool   `json:"enabled"`
+	ExpiresAt         int64  `json:"expires_at,omitempty"`
+	TrafficLimitBytes uint64 `json:"traffic_limit_bytes,omitempty"`
+	ResetTraffic      bool   `json:"reset_traffic,omitempty"`
+	RotateToken       bool   `json:"rotate_token,omitempty"`
+}
+
+type Manager struct {
+	mu   sync.Mutex
+	path string
+	now  func() time.Time
+	rand interface{ Read([]byte) (int, error) }
+	data Config
+}
+
+func Open(path string) (*Manager, error) {
+	manager := &Manager{path: path, now: time.Now, rand: rand.Reader, data: DefaultConfig()}
+	payload, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return manager, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(payload, &manager.data); err != nil {
+		return nil, fmt.Errorf("call_server_config_invalid: %w", err)
+	}
+	if err := manager.data.Normalize(); err != nil {
+		return nil, fmt.Errorf("call_server_config_invalid: %w", err)
+	}
+	if err := manager.data.Validate(); err != nil {
+		return nil, fmt.Errorf("call_server_config_invalid: %w", err)
+	}
+	return manager, nil
+}
+
+func (manager *Manager) PublicConfig() PublicConfig {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return manager.data.PublicAt(manager.now())
+}
+
+func (manager *Manager) UpdateConfig(input Config) (PublicConfig, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	input.Clients = append([]Client(nil), manager.data.Clients...)
+	if err := input.Normalize(); err != nil {
+		return PublicConfig{}, err
+	}
+	if err := input.Validate(); err != nil {
+		return PublicConfig{}, err
+	}
+	if err := manager.saveLocked(input); err != nil {
+		return PublicConfig{}, err
+	}
+	manager.data = input
+	return input.PublicAt(manager.now()), nil
+}
+
+func (manager *Manager) CreateClient(input CreateClientInput) (Client, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return Client{}, fmt.Errorf("call_server_client_name_required")
+	}
+	now := manager.now()
+	if input.ExpiresAt != 0 && input.ExpiresAt <= now.Unix() {
+		return Client{}, fmt.Errorf("call_server_client_expiry_must_be_future")
+	}
+	if manager.data.InvitationURL == "" || manager.data.PublicEndpoint == "" {
+		return Client{}, fmt.Errorf("call_server_not_configured")
+	}
+	profile, err := callprofile.New(callprofile.NewInput{Name: name, InvitationURL: manager.data.InvitationURL,
+		PeerAddress: manager.data.PublicEndpoint, ExpiresAt: input.ExpiresAt, TrafficLimitBytes: input.TrafficLimitBytes,
+		Random: manager.rand, Now: now})
+	if err != nil {
+		return Client{}, err
+	}
+	id, err := manager.randomString(12)
+	if err != nil {
+		return Client{}, err
+	}
+	token, err := manager.randomString(32)
+	if err != nil {
+		return Client{}, err
+	}
+	client := Client{ID: id, Name: name, Enabled: true, CreatedAt: now.Unix(), SubscriptionToken: token, Profile: profile}
+	candidate := manager.data
+	candidate.Clients = append(append([]Client(nil), manager.data.Clients...), client)
+	if err := candidate.Validate(); err != nil {
+		return Client{}, err
+	}
+	if err := manager.saveLocked(candidate); err != nil {
+		return Client{}, err
+	}
+	manager.data = candidate
+	return client, nil
+}
+
+func (manager *Manager) UpdateClient(id string, input UpdateClientInput) (Client, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return Client{}, fmt.Errorf("call_server_client_name_required")
+	}
+	if input.Enabled && input.ExpiresAt != 0 && input.ExpiresAt <= manager.now().Unix() {
+		return Client{}, fmt.Errorf("call_server_client_expiry_must_be_future")
+	}
+	candidate := manager.data
+	candidate.Clients = append([]Client(nil), manager.data.Clients...)
+	for index := range candidate.Clients {
+		client := &candidate.Clients[index]
+		if client.ID != id {
+			continue
+		}
+		client.Name, client.Enabled = name, input.Enabled
+		client.Profile.Name, client.Profile.ExpiresAt, client.Profile.TrafficLimitBytes = name, input.ExpiresAt, input.TrafficLimitBytes
+		if input.ResetTraffic {
+			client.TrafficRXBytes, client.TrafficTXBytes = 0, 0
+		}
+		if input.RotateToken {
+			token, err := manager.randomString(32)
+			if err != nil {
+				return Client{}, err
+			}
+			client.SubscriptionToken = token
+		}
+		if err := candidate.Validate(); err != nil {
+			return Client{}, err
+		}
+		if err := manager.saveLocked(candidate); err != nil {
+			return Client{}, err
+		}
+		manager.data = candidate
+		return *client, nil
+	}
+	return Client{}, fmt.Errorf("call_server_client_not_found")
+}
+
+func (manager *Manager) DeleteClient(id string) error {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	candidate := manager.data
+	candidate.Clients = make([]Client, 0, len(manager.data.Clients))
+	found := false
+	for _, client := range manager.data.Clients {
+		if client.ID == id {
+			found = true
+			continue
+		}
+		candidate.Clients = append(candidate.Clients, client)
+	}
+	if !found {
+		return fmt.Errorf("call_server_client_not_found")
+	}
+	if err := manager.saveLocked(candidate); err != nil {
+		return err
+	}
+	manager.data = candidate
+	return nil
+}
+
+func (manager *Manager) ClientProfile(id string) (string, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	for _, client := range manager.data.Clients {
+		if client.ID == id {
+			return manager.encodeClientLocked(client)
+		}
+	}
+	return "", fmt.Errorf("call_server_client_not_found")
+}
+
+func (manager *Manager) SubscriptionProfile(token string) (string, PublicClient, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	for _, client := range manager.data.Clients {
+		if len(token) != len(client.SubscriptionToken) || subtle.ConstantTimeCompare([]byte(token), []byte(client.SubscriptionToken)) != 1 {
+			continue
+		}
+		encoded, err := manager.encodeClientLocked(client)
+		return encoded, client.PublicAt(manager.now()), err
+	}
+	return "", PublicClient{}, fmt.Errorf("call_server_subscription_not_found")
+}
+
+func (manager *Manager) SubscriptionURL(token string) string {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	path := "/subscription/call/" + token
+	if manager.data.SubscriptionBaseURL == "" {
+		return path
+	}
+	return manager.data.SubscriptionBaseURL + path
+}
+
+func (manager *Manager) TransportKeys() (map[string][]byte, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	keys := map[string][]byte{}
+	for _, client := range manager.data.Clients {
+		if !client.AvailableAt(manager.now()) {
+			continue
+		}
+		psk, err := client.Profile.PSKBytes()
+		if err != nil {
+			return nil, err
+		}
+		keys[client.Profile.VLESSUUID] = psk
+	}
+	return keys, nil
+}
+
+func (manager *Manager) XrayClients() []callxray.Client {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	result := []callxray.Client{}
+	for _, client := range manager.data.Clients {
+		if client.AvailableAt(manager.now()) {
+			result = append(result, callxray.Client{ID: client.Profile.VLESSUUID, Email: client.ID})
+		}
+	}
+	return result
+}
+
+func (manager *Manager) RecordTraffic(_ context.Context, id string, rx, tx uint64, seenAt int64) error {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	candidate := manager.data
+	candidate.Clients = append([]Client(nil), manager.data.Clients...)
+	for index := range candidate.Clients {
+		client := &candidate.Clients[index]
+		if client.ID != id {
+			continue
+		}
+		client.TrafficRXBytes += rx
+		client.TrafficTXBytes += tx
+		if seenAt > client.LastSeenAt {
+			client.LastSeenAt = seenAt
+		}
+		if err := manager.saveLocked(candidate); err != nil {
+			return err
+		}
+		manager.data = candidate
+		return nil
+	}
+	return fmt.Errorf("call_server_client_not_found")
+}
+
+func (manager *Manager) encodeClientLocked(client Client) (string, error) {
+	if !client.AvailableAt(manager.now()) {
+		return "", fmt.Errorf("call_server_subscription_inactive")
+	}
+	return callprofile.Encode(client.Profile, manager.now())
+}
+
+func (manager *Manager) randomString(size int) (string, error) {
+	value := make([]byte, size)
+	if _, err := io.ReadFull(manager.rand, value); err != nil {
+		return "", err
+	}
+	if size == 12 {
+		return hex.EncodeToString(value), nil
+	}
+	return base64.RawURLEncoding.EncodeToString(value), nil
+}
+
+func (manager *Manager) saveLocked(config Config) error {
+	directory := filepath.Dir(manager.path)
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return err
+	}
+	payload, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(directory, ".call-server-*.json")
+	if err != nil {
+		return err
+	}
+	name := temporary.Name()
+	defer os.Remove(name)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(payload); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, manager.path)
+}
