@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -137,8 +139,8 @@ func restoreVKCallCredentials(id string, credentials calltransport.ProviderCrede
 }
 
 func StartVKCallCarrier(credentialID, peerAddress, pskBase64, listenAddress string) string {
-	peer, err := net.ResolveUDPAddr("udp", strings.TrimSpace(peerAddress))
-	if err != nil || peer.IP == nil {
+	peer, err := parseCallPeer(peerAddress)
+	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_invalid_peer"}})
 	}
 	psk, err := decodeCallPSK(pskBase64)
@@ -206,6 +208,25 @@ func StartVKCallCarrier(credentialID, peerAddress, pskBase64, listenAddress stri
 		}
 	}()
 	return encode(map[string]any{"ok": true, "result": map[string]any{"status": "ready", "local_endpoint": endpoint}})
+}
+
+// parseCallPeer deliberately accepts only literal IP addresses. Resolving a
+// hostname here would send DNS traffic before the protected Android underlay
+// is established and could leak or follow the currently active VPN route.
+func parseCallPeer(value string) (*net.UDPAddr, error) {
+	host, portValue, err := net.SplitHostPort(strings.TrimSpace(value))
+	if err != nil {
+		return nil, fmt.Errorf("call_transport_invalid_peer")
+	}
+	address, err := netip.ParseAddr(host)
+	if err != nil || address.IsUnspecified() || address.IsMulticast() {
+		return nil, fmt.Errorf("call_transport_invalid_peer")
+	}
+	port, err := strconv.Atoi(portValue)
+	if err != nil || port < 1 || port > 65535 {
+		return nil, fmt.Errorf("call_transport_invalid_peer")
+	}
+	return net.UDPAddrFromAddrPort(netip.AddrPortFrom(address, uint16(port))), nil
 }
 
 func StopVKCallCarrier() string {
