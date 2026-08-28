@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -36,6 +37,8 @@ type Source struct {
 
 type CaptchaRequiredError struct {
 	RedirectURL string
+	invitation  Invitation
+	accessToken string
 }
 
 func (*CaptchaRequiredError) Error() string { return "call_transport_vk_captcha_required" }
@@ -67,10 +70,44 @@ func (source Source) Resolve(ctx context.Context, rawInvitation string) (calltra
 	if err != nil {
 		return calltransport.ProviderCredentials{}, err
 	}
-	callToken, err := source.callToken(ctx, client, endpoints.API, invitation.CanonicalURL, accessToken)
+	callToken, err := source.callToken(ctx, client, endpoints.API, invitation.CanonicalURL, accessToken, "")
+	if err != nil {
+		var challenge *CaptchaRequiredError
+		if errors.As(err, &challenge) {
+			challenge.invitation = invitation
+			challenge.accessToken = accessToken
+		}
+		return calltransport.ProviderCredentials{}, err
+	}
+	return source.finish(ctx, client, endpoints, invitation, callToken)
+}
+
+// Continue resumes the exact anonymous VK session that produced challenge.
+// The success token must be obtained by the user in the provider's own CAPTCHA
+// page; starting a new access-token chain would invalidate that relationship.
+func (source Source) Continue(ctx context.Context, challenge *CaptchaRequiredError, successToken string) (calltransport.ProviderCredentials, error) {
+	if challenge == nil || challenge.invitation.Token == "" || challenge.accessToken == "" || strings.TrimSpace(successToken) == "" {
+		return calltransport.ProviderCredentials{}, fmt.Errorf("call_transport_vk_invalid_captcha_continuation")
+	}
+	client := source.Client
+	if client == nil {
+		client = &http.Client{Timeout: 20 * time.Second}
+	}
+	endpoints := source.Endpoints
+	if endpoints.API == "" {
+		endpoints.API = "https://api.vk.ru/method/"
+	}
+	if endpoints.Calls == "" {
+		endpoints.Calls = "https://calls.okcdn.ru/fb.do"
+	}
+	callToken, err := source.callToken(ctx, client, endpoints.API, challenge.invitation.CanonicalURL, challenge.accessToken, strings.TrimSpace(successToken))
 	if err != nil {
 		return calltransport.ProviderCredentials{}, err
 	}
+	return source.finish(ctx, client, endpoints, challenge.invitation, callToken)
+}
+
+func (source Source) finish(ctx context.Context, client *http.Client, endpoints Endpoints, invitation Invitation, callToken string) (calltransport.ProviderCredentials, error) {
 	sessionKey, err := source.callSession(ctx, client, endpoints.Calls)
 	if err != nil {
 		return calltransport.ProviderCredentials{}, err
@@ -102,12 +139,15 @@ func (source Source) anonymousAccessToken(ctx context.Context, client *http.Clie
 	return response.Data.AccessToken, nil
 }
 
-func (source Source) callToken(ctx context.Context, client *http.Client, api, invitation, accessToken string) (string, error) {
+func (source Source) callToken(ctx context.Context, client *http.Client, api, invitation, accessToken, successToken string) (string, error) {
 	name := strings.TrimSpace(source.Name)
 	if name == "" {
 		name = "OrcheRoute"
 	}
 	form := url.Values{"vk_join_link": {invitation}, "name": {name}, "access_token": {accessToken}}
+	if successToken != "" {
+		form.Set("success_token", successToken)
+	}
 	var response struct {
 		Response struct {
 			Token string `json:"token"`

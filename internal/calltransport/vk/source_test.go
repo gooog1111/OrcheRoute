@@ -105,6 +105,48 @@ func TestSourceRecognizesCaptchaByVKErrorCode(t *testing.T) {
 	}
 }
 
+func TestSourceContinuesSameSessionAfterManualCaptcha(t *testing.T) {
+	var firstAccessToken string
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if err := request.ParseForm(); err != nil {
+			t.Error(err)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.URL.Path == "/login":
+			firstAccessToken = "access-for-captcha"
+			_, _ = writer.Write([]byte(`{"data":{"access_token":"access-for-captcha"}}`))
+		case request.URL.Path == "/api/calls.getAnonymousToken" && request.Form.Get("success_token") == "":
+			_, _ = writer.Write([]byte(`{"error":{"error_code":14,"redirect_uri":"https://id.vk.ru/not_robot_captcha?session_token=private"}}`))
+		case request.URL.Path == "/api/calls.getAnonymousToken":
+			if request.Form.Get("success_token") != "captcha-success" || request.Form.Get("access_token") != firstAccessToken {
+				t.Errorf("continuation lost the original session: %#v", request.Form)
+			}
+			_, _ = writer.Write([]byte(`{"response":{"token":"call-token"}}`))
+		case request.Form.Get("method") == "auth.anonymLogin":
+			_, _ = writer.Write([]byte(`{"session_key":"session"}`))
+		case request.Form.Get("method") == "vchat.joinConversationByLink":
+			_, _ = writer.Write([]byte(`{"turn_server":{"username":"user","credential":"pass","urls":["turn:turn.example:3478?transport=udp"]}}`))
+		default:
+			writer.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	source := Source{Client: server.Client(), Identity: ClientIdentity{ID: "client", Secret: "secret"}, Endpoints: Endpoints{Login: server.URL + "/login", API: server.URL + "/api", Calls: server.URL + "/calls"}}
+	_, err := source.Resolve(context.Background(), "https://vk.com/call/join/invite")
+	var challenge *CaptchaRequiredError
+	if !errors.As(err, &challenge) {
+		t.Fatalf("expected CAPTCHA challenge, got %v", err)
+	}
+	credentials, err := source.Continue(context.Background(), challenge, "captcha-success")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if credentials.TURN.ServerAddress != "turn.example:3478" || credentials.TURN.Username != "user" {
+		t.Fatalf("unexpected credentials: %+v", credentials)
+	}
+}
+
 func TestSelectTURNURLRejectsTURNSTLSOnly(t *testing.T) {
 	if _, _, err := selectTURNURL([]string{"turns:turn.example:5349?transport=tcp"}); err == nil {
 		t.Fatal("accepted unsupported TURN over TLS URL")
