@@ -69,7 +69,7 @@ func ServeClient(ctx context.Context, carrier io.ReadWriteCloser, listener net.L
 		connections.Add(1)
 		go func() {
 			defer connections.Done()
-			pipe(local, stream)
+			pipeContext(ctx, local, stream)
 		}()
 	}
 }
@@ -118,12 +118,27 @@ func ServeServer(ctx context.Context, carrier io.ReadWriteCloser, backendAddress
 				_ = stream.Close()
 				return
 			}
-			pipe(stream, backend)
+			pipeContext(ctx, stream, backend)
 		}()
 	}
 }
 
 func pipe(left, right io.ReadWriteCloser) {
+	pipeContext(context.Background(), left, right)
+}
+
+func pipeContext(ctx context.Context, left, right io.ReadWriteCloser) {
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = left.Close()
+			_ = right.Close()
+		case <-done:
+		}
+	}()
+	defer close(done)
+
 	var copies sync.WaitGroup
 	copies.Add(2)
 	copyOne := func(destination io.Writer, source io.Reader) {

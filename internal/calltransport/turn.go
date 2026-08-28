@@ -138,7 +138,7 @@ func DialTURNDTLS(ctx context.Context, config TURNConfig, peer *net.UDPAddr, psk
 	if err != nil {
 		return nil, err
 	}
-	identity := []byte("orcheroute-call")
+	identity := []byte(dtlsIdentity)
 	carrier, err := dtls.ClientWithOptions(&directedPacketConn{PacketConn: allocation, peer: peer}, peer,
 		dtls.WithPSK(func([]byte) ([]byte, error) { return psk, nil }),
 		dtls.WithPSKIdentityHint(identity),
