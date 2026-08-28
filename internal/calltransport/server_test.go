@@ -28,7 +28,8 @@ func TestTURNCarrierReachesXrayBackend(t *testing.T) {
 	}()
 
 	psk := []byte("0123456789abcdef0123456789abcdef")
-	server, err := ListenDTLS("127.0.0.1:0", psk)
+	const identity = "client-phone"
+	server, err := ListenDTLSProfiles("127.0.0.1:0", map[string][]byte{identity: psk})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +39,7 @@ func TestTURNCarrierReachesXrayBackend(t *testing.T) {
 	go func() { serverDone <- ServeDTLS(ctx, server, backend.Addr().String(), nil) }()
 
 	peer := server.Addr().(*net.UDPAddr)
-	carrier, err := DialTURNDTLS(ctx, testTURNConfig(turnListener.LocalAddr().String()), peer, psk, nil)
+	carrier, err := DialTURNDTLSWithIdentity(ctx, testTURNConfig(turnListener.LocalAddr().String()), peer, identity, psk, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,5 +91,29 @@ func TestTURNCarrierReachesXrayBackend(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("client did not stop after cancellation")
+	}
+}
+
+func TestDTLSProfileLookupSeparatesClientKeys(t *testing.T) {
+	phone := []byte("phone-0123456789abcdef0123456789")
+	laptop := []byte("laptop-0123456789abcdef01234567")
+	lookup, err := profilePSKLookup(map[string][]byte{"phone": phone, "laptop": laptop})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := lookup([]byte("phone"))
+	if err != nil || string(resolved) != string(phone) {
+		t.Fatalf("wrong client key: %q, %v", resolved, err)
+	}
+	resolved[0] ^= 0xff
+	again, err := lookup([]byte("phone"))
+	if err != nil || string(again) != string(phone) {
+		t.Fatal("returned key mutated the stored profile")
+	}
+	if _, err := lookup([]byte("unknown")); err == nil {
+		t.Fatal("unknown client identity was accepted")
+	}
+	if _, err := profilePSKLookup(map[string][]byte{"bad": []byte("short")}); err == nil {
+		t.Fatal("short client PSK was accepted")
 	}
 }

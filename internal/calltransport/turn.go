@@ -131,17 +131,22 @@ func (connection *directedPacketConn) WriteTo(buffer []byte, _ net.Addr) (int, e
 // adapter. TURN credentials come from the call provider; the PSK belongs to
 // the OrcheRoute subscription and authenticates the two OrcheRoute endpoints.
 func DialTURNDTLS(ctx context.Context, config TURNConfig, peer *net.UDPAddr, psk []byte, underlay Underlay) (net.Conn, error) {
-	if peer == nil || len(psk) < 16 {
+	return DialTURNDTLSWithIdentity(ctx, config, peer, dtlsIdentity, psk, underlay)
+}
+
+// DialTURNDTLSWithIdentity selects the client's independent server-side PSK.
+func DialTURNDTLSWithIdentity(ctx context.Context, config TURNConfig, peer *net.UDPAddr, identity string, psk []byte, underlay Underlay) (net.Conn, error) {
+	identity = strings.TrimSpace(identity)
+	if peer == nil || identity == "" || len(identity) > 128 || len(psk) < 16 {
 		return nil, fmt.Errorf("call_transport_invalid_dtls_parameters")
 	}
 	allocation, err := AllocateTURN(ctx, config, underlay)
 	if err != nil {
 		return nil, err
 	}
-	identity := []byte(dtlsIdentity)
 	carrier, err := dtls.ClientWithOptions(&directedPacketConn{PacketConn: allocation, peer: peer}, peer,
 		dtls.WithPSK(func([]byte) ([]byte, error) { return psk, nil }),
-		dtls.WithPSKIdentityHint(identity),
+		dtls.WithPSKIdentityHint([]byte(identity)),
 		dtls.WithCipherSuites(dtls.TLS_PSK_WITH_AES_128_GCM_SHA256),
 		dtls.WithExtendedMasterSecret(dtls.RequireExtendedMasterSecret),
 	)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,8 +18,16 @@ const dtlsIdentity = "orcheroute-call"
 // call carrier. The subscription PSK authenticates OrcheRoute endpoints; it
 // is independent from short-lived credentials issued by a TURN provider.
 func ListenDTLS(address string, psk []byte) (net.Listener, error) {
-	if len(psk) < 16 {
-		return nil, fmt.Errorf("call_transport_invalid_dtls_psk")
+	return ListenDTLSProfiles(address, map[string][]byte{dtlsIdentity: psk})
+}
+
+// ListenDTLSProfiles serves multiple independent client profiles on one UDP
+// endpoint. The client profile ID is sent as the DTLS PSK identity and selects
+// only that client's PSK; no profile shares a transport key with another.
+func ListenDTLSProfiles(address string, profiles map[string][]byte) (net.Listener, error) {
+	lookup, err := profilePSKLookup(profiles)
+	if err != nil {
+		return nil, err
 	}
 	udpAddress, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
@@ -27,12 +36,7 @@ func ListenDTLS(address string, psk []byte) (net.Listener, error) {
 	listener, err := dtls.ListenWithOptions(
 		"udp",
 		udpAddress,
-		dtls.WithPSK(func(identity []byte) ([]byte, error) {
-			if string(identity) != dtlsIdentity {
-				return nil, fmt.Errorf("call_transport_unknown_dtls_identity")
-			}
-			return psk, nil
-		}),
+		dtls.WithPSK(lookup),
 		dtls.WithPSKIdentityHint([]byte(dtlsIdentity)),
 		dtls.WithCipherSuites(dtls.TLS_PSK_WITH_AES_128_GCM_SHA256),
 		dtls.WithExtendedMasterSecret(dtls.RequireExtendedMasterSecret),
@@ -42,6 +46,27 @@ func ListenDTLS(address string, psk []byte) (net.Listener, error) {
 		return nil, fmt.Errorf("call_transport_dtls_listen: %w", err)
 	}
 	return listener, nil
+}
+
+func profilePSKLookup(profiles map[string][]byte) (func([]byte) ([]byte, error), error) {
+	if len(profiles) == 0 {
+		return nil, fmt.Errorf("call_transport_dtls_profiles_required")
+	}
+	keys := make(map[string][]byte, len(profiles))
+	for rawIdentity, rawPSK := range profiles {
+		identity := strings.TrimSpace(rawIdentity)
+		if identity == "" || len(identity) > 128 || len(rawPSK) < 16 {
+			return nil, fmt.Errorf("call_transport_invalid_dtls_profile")
+		}
+		keys[identity] = append([]byte(nil), rawPSK...)
+	}
+	return func(identity []byte) ([]byte, error) {
+		psk, ok := keys[string(identity)]
+		if !ok {
+			return nil, fmt.Errorf("call_transport_unknown_dtls_identity")
+		}
+		return append([]byte(nil), psk...), nil
+	}, nil
 }
 
 // ServeDTLS accepts authenticated carrier sessions and forwards their smux
