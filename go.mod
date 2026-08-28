@@ -3,6 +3,7 @@ module github.com/gooog1111/orcheroute
 go 1.25.0
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/metacubex/kcp-go v0.0.0-20260105040817-550693377604
 	github.com/metacubex/mihomo v1.19.30
 	github.com/metacubex/smux v0.0.0-20260105030934-d0c8756d3141
@@ -12,6 +13,7 @@ require (
 	golang.org/x/crypto v0.54.0
 	golang.org/x/mod v0.38.0
 	golang.org/x/net v0.57.0
+	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.40.0
 	modernc.org/sqlite v1.54.0
@@ -49,7 +51,6 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/insomniacslk/dhcp v0.0.0-20250109001534-8abf58130905 // indirect
 	github.com/josharian/native v1.1.0 // indirect
@@ -146,7 +147,6 @@ require (
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e // indirect
 	golang.org/x/mobile v0.0.0-20260803200217-62cee1672c8e // indirect
-	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect
