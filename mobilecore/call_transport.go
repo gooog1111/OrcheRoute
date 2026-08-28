@@ -3,6 +3,7 @@ package mobilecore
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gooog1111/orcheroute/internal/calltransport"
+	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
 	callvk "github.com/gooog1111/orcheroute/internal/calltransport/vk"
 )
 
@@ -23,13 +25,15 @@ type vkPendingFlow struct {
 	source    callvk.Source
 	challenge *callvk.CaptchaRequiredError
 	expiresAt time.Time
+	profile   *callprofile.Profile
 }
 
 var vkCallFlows = struct {
 	sync.Mutex
-	pending map[string]vkPendingFlow
-	ready   map[string]calltransport.ProviderCredentials
-}{pending: map[string]vkPendingFlow{}, ready: map[string]calltransport.ProviderCredentials{}}
+	pending  map[string]vkPendingFlow
+	ready    map[string]calltransport.ProviderCredentials
+	profiles map[string]callprofile.Profile
+}{pending: map[string]vkPendingFlow{}, ready: map[string]calltransport.ProviderCredentials{}, profiles: map[string]callprofile.Profile{}}
 
 var vkCarrier = struct {
 	sync.Mutex
@@ -37,6 +41,7 @@ var vkCarrier = struct {
 	status     string
 	endpoint   string
 	lastErr    string
+	profile    *callprofile.Profile
 	generation uint64
 }{status: "idle"}
 
@@ -44,6 +49,20 @@ var vkCarrier = struct {
 // never cross the gomobile/UI boundary: a ready result contains only an opaque
 // credential ID consumed later by the native carrier.
 func BeginVKCallCredentials(invitation string) string {
+	return beginVKCall(invitation, nil)
+}
+
+// BeginVKCallProfile imports a complete OrcheRoute call subscription without
+// exposing its invitation, PSK or VLESS identity to the Android WebView.
+func BeginVKCallProfile(encodedProfile string) string {
+	profile, err := callprofile.Decode(encodedProfile, time.Now())
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	return beginVKCall(profile.InvitationURL, &profile)
+}
+
+func beginVKCall(invitation string, profile *callprofile.Profile) string {
 	invitation = strings.TrimSpace(invitation)
 	if invitation == "" {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_vk_invitation_required"}})
@@ -53,7 +72,7 @@ func BeginVKCallCredentials(invitation string) string {
 	defer cancel()
 	credentials, err := source.Resolve(ctx, invitation)
 	if err == nil {
-		return storeReadyVK(credentials)
+		return storeReadyVK(credentials, profile)
 	}
 	var challenge *callvk.CaptchaRequiredError
 	if !errors.As(err, &challenge) || challenge.RedirectURL == "" {
@@ -63,7 +82,7 @@ func BeginVKCallCredentials(invitation string) string {
 	now := time.Now()
 	vkCallFlows.Lock()
 	cleanupVKFlowsLocked(now)
-	vkCallFlows.pending[id] = vkPendingFlow{source: source, challenge: challenge, expiresAt: now.Add(callChallengeLifetime)}
+	vkCallFlows.pending[id] = vkPendingFlow{source: source, challenge: challenge, expiresAt: now.Add(callChallengeLifetime), profile: profile}
 	vkCallFlows.Unlock()
 	return encode(map[string]any{"ok": true, "result": map[string]any{
 		"status": "captcha_required", "challenge_id": id, "redirect_url": challenge.RedirectURL,
@@ -91,7 +110,7 @@ func ContinueVKCallCredentials(challengeID, successToken string) string {
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
-	return storeReadyVK(credentials)
+	return storeReadyVK(credentials, flow.profile)
 }
 
 func CancelVKCallCredentials(challengeID string) {
@@ -100,7 +119,7 @@ func CancelVKCallCredentials(challengeID string) {
 	vkCallFlows.Unlock()
 }
 
-func storeReadyVK(credentials calltransport.ProviderCredentials) string {
+func storeReadyVK(credentials calltransport.ProviderCredentials, profile *callprofile.Profile) string {
 	if credentials.ExpiresAt.IsZero() {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_provider_expiration_required"}})
 	}
@@ -108,11 +127,41 @@ func storeReadyVK(credentials calltransport.ProviderCredentials) string {
 	vkCallFlows.Lock()
 	cleanupVKFlowsLocked(time.Now())
 	vkCallFlows.ready[id] = credentials
+	if profile != nil {
+		vkCallFlows.profiles[id] = *profile
+	}
 	vkCallFlows.Unlock()
 	return encode(map[string]any{"ok": true, "result": map[string]any{
 		"status": "ready", "credential_id": id, "turn_endpoint": credentials.TURN.ServerAddress,
 		"network": credentials.TURN.Network, "expires_at": credentials.ExpiresAt.Unix(),
 	}})
+}
+
+// StartVKCallProfileCarrier consumes the opaque credential ID and starts the
+// carrier using secrets retained in native Go memory.
+func StartVKCallProfileCarrier(credentialID, listenAddress string) string {
+	credentialID = strings.TrimSpace(credentialID)
+	vkCallFlows.Lock()
+	cleanupVKFlowsLocked(time.Now())
+	profile, ok := vkCallFlows.profiles[credentialID]
+	vkCallFlows.Unlock()
+	if !ok {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_profile_not_ready"}})
+	}
+	result := StartVKCallCarrierForProfile(credentialID, profile.PeerAddress, profile.VLESSUUID, profile.PSK, listenAddress)
+	var envelope struct {
+		OK bool `json:"ok"`
+	}
+	if json.Unmarshal([]byte(result), &envelope) == nil && envelope.OK {
+		vkCarrier.Lock()
+		activeProfile := profile
+		vkCarrier.profile = &activeProfile
+		vkCarrier.Unlock()
+		vkCallFlows.Lock()
+		delete(vkCallFlows.profiles, credentialID)
+		vkCallFlows.Unlock()
+	}
+	return result
 }
 
 func takeVKCallCredentials(id string) (calltransport.ProviderCredentials, error) {
@@ -240,7 +289,7 @@ func parseCallPeer(value string) (*net.UDPAddr, error) {
 func StopVKCallCarrier() string {
 	vkCarrier.Lock()
 	cancel := vkCarrier.cancel
-	vkCarrier.cancel, vkCarrier.status, vkCarrier.endpoint = nil, "idle", ""
+	vkCarrier.cancel, vkCarrier.status, vkCarrier.endpoint, vkCarrier.profile = nil, "idle", "", nil
 	vkCarrier.generation++
 	vkCarrier.Unlock()
 	if cancel != nil {
@@ -263,7 +312,7 @@ func setVKCarrierStopped(generation uint64, message string) {
 		vkCarrier.Unlock()
 		return
 	}
-	vkCarrier.cancel, vkCarrier.endpoint, vkCarrier.lastErr = nil, "", message
+	vkCarrier.cancel, vkCarrier.endpoint, vkCarrier.lastErr, vkCarrier.profile = nil, "", message, nil
 	if message == "" {
 		vkCarrier.status = "idle"
 	} else {
@@ -291,6 +340,12 @@ func cleanupVKFlowsLocked(now time.Time) {
 	for id, credentials := range vkCallFlows.ready {
 		if !now.Before(credentials.ExpiresAt) {
 			delete(vkCallFlows.ready, id)
+			delete(vkCallFlows.profiles, id)
+		}
+	}
+	for id := range vkCallFlows.profiles {
+		if _, ok := vkCallFlows.ready[id]; !ok {
+			delete(vkCallFlows.profiles, id)
 		}
 	}
 }

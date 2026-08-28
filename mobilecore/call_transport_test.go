@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/calltransport"
+	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
 )
 
 func TestVKReadyCredentialsStayOutsideUIResponse(t *testing.T) {
@@ -15,7 +16,7 @@ func TestVKReadyCredentialsStayOutsideUIResponse(t *testing.T) {
 		TURN:      calltransport.TURNConfig{ServerAddress: "turn.example:3478", Username: "private-user", Password: "private-password", Network: "udp"},
 		ExpiresAt: time.Now().Add(time.Minute),
 	}
-	encoded := storeReadyVK(credentials)
+	encoded := storeReadyVK(credentials, nil)
 	if strings.Contains(encoded, credentials.TURN.Username) || strings.Contains(encoded, credentials.TURN.Password) {
 		t.Fatalf("TURN credentials leaked to UI response: %s", encoded)
 	}
@@ -37,12 +38,49 @@ func TestVKReadyCredentialsStayOutsideUIResponse(t *testing.T) {
 	}
 }
 
+func TestVKProfileSecretsStayBehindOpaqueCredentialID(t *testing.T) {
+	now := time.Now()
+	profile := callprofile.Profile{Version: callprofile.Version, Transport: callprofile.Transport, Provider: callprofile.Provider,
+		InvitationURL: "https://vk.com/call/join/test", PeerAddress: "203.0.113.5:4443",
+		PSK:       base64.RawURLEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef")),
+		VLESSUUID: "b831381d-6324-4d53-ad4f-8cda48b30811", ExpiresAt: now.Add(time.Hour).Unix()}
+	credentials := calltransport.ProviderCredentials{TURN: calltransport.TURNConfig{ServerAddress: "turn.example:3478", Username: "secret-turn-user-9f2a", Password: "secret-turn-password-8c3b"}, ExpiresAt: now.Add(time.Minute)}
+	encoded := storeReadyVK(credentials, &profile)
+	for _, secret := range []string{profile.InvitationURL, profile.PSK, profile.VLESSUUID, credentials.TURN.Username, credentials.TURN.Password} {
+		if strings.Contains(encoded, secret) {
+			t.Fatalf("native profile secret leaked to UI response: %s", encoded)
+		}
+	}
+	var response struct {
+		Result struct {
+			CredentialID string `json:"credential_id"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(encoded), &response); err != nil || response.Result.CredentialID == "" {
+		t.Fatalf("invalid ready response: %s, %v", encoded, err)
+	}
+	vkCallFlows.Lock()
+	stored := vkCallFlows.profiles[response.Result.CredentialID]
+	delete(vkCallFlows.ready, response.Result.CredentialID)
+	delete(vkCallFlows.profiles, response.Result.CredentialID)
+	vkCallFlows.Unlock()
+	if stored.PSK != profile.PSK || stored.VLESSUUID != profile.VLESSUUID {
+		t.Fatal("profile was not retained in native memory")
+	}
+}
+
 func TestVKCredentialBoundaryRejectsIncompleteRequests(t *testing.T) {
 	if result := BeginVKCallCredentials(" "); !strings.Contains(result, "call_transport_vk_invitation_required") {
 		t.Fatalf("unexpected begin result: %s", result)
 	}
 	if result := ContinueVKCallCredentials("", ""); !strings.Contains(result, "call_transport_vk_invalid_captcha_continuation") {
 		t.Fatalf("unexpected continuation result: %s", result)
+	}
+	if result := BeginVKCallProfile("not-a-profile"); !strings.Contains(result, "call_transport_profile_invalid_uri") {
+		t.Fatalf("invalid call profile was accepted: %s", result)
+	}
+	if result := StartVKCallProfileCarrier("missing", "127.0.0.1:0"); !strings.Contains(result, "call_transport_profile_not_ready") {
+		t.Fatalf("missing native profile was accepted: %s", result)
 	}
 }
 
