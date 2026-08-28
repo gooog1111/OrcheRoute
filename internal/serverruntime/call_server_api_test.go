@@ -5,6 +5,7 @@ package serverruntime
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -33,8 +34,8 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	defer runtime.Close()
 
 	settings := map[string]any{
-		"version": 1, "enabled": false, "listen_address": "0.0.0.0:4443",
-		"public_endpoint": "203.0.113.25:4443", "backend_address": "127.0.0.1:18443",
+		"version": 1, "enabled": false, "listen_address": freeServerAddress(t, "udp"),
+		"public_endpoint": "203.0.113.25:4443", "backend_address": freeServerAddress(t, "tcp"),
 		"invitation_url": "https://vk.com/call/join/test-invite", "subscription_base_url": "https://vpn.example",
 	}
 	callReverseVPNAPI(t, runtime, http.MethodPut, "/v1/call-server", settings, http.StatusOK)
@@ -67,4 +68,30 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	if subscriptionResponse.Header().Get("Subscription-Userinfo") == "" {
 		t.Fatal("subscription traffic metadata missing")
 	}
+	callReverseVPNAPI(t, runtime, http.MethodPost, "/v1/call-server/apply", map[string]any{}, http.StatusOK)
+	active := callReverseVPNAPI(t, runtime, http.MethodGet, "/v1/call-server", nil, http.StatusOK)
+	if !active["status"].(map[string]any)["active"].(bool) {
+		t.Fatal("embedded call server did not become active")
+	}
+	callReverseVPNAPI(t, runtime, http.MethodPost, "/v1/call-server/disable", map[string]any{}, http.StatusOK)
+}
+
+func freeServerAddress(t *testing.T, network string) string {
+	t.Helper()
+	if network == "udp" {
+		listener, err := net.ListenPacket("udp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		address := listener.LocalAddr().String()
+		_ = listener.Close()
+		return address
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := listener.Addr().String()
+	_ = listener.Close()
+	return address
 }

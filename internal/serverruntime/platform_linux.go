@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gooog1111/orcheroute/internal/callserver"
 	"github.com/gooog1111/orcheroute/internal/network"
 	"github.com/gooog1111/orcheroute/internal/reversevpn"
 	"golang.org/x/sys/unix"
@@ -33,6 +34,10 @@ func platformDefaultConfig() Config {
 
 func platformReverseVPNAdapter(stateDirectory string) reversevpn.Adapter {
 	return reversevpn.NewLinuxAdapter(filepath.Join(stateDirectory, "reverse-vpn"))
+}
+
+func platformCallServerRuntime() *callserver.Runtime {
+	return callserver.NewRuntime(callserver.EmbeddedXrayBackend{})
 }
 
 func discoverTopology(ctx context.Context) (network.Topology, error) {

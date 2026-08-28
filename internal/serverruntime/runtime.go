@@ -64,6 +64,7 @@ type Runtime struct {
 	reverseVPNError          string
 	CallServer               *callserver.Manager
 	callServerError          string
+	CallTransport            *callserver.Runtime
 	apiToken                 string
 	controllerSecret         string
 	client                   *http.Client
@@ -118,6 +119,7 @@ func New(config Config) (*Runtime, error) {
 		runtime.callServerError = callErr.Error()
 	} else {
 		runtime.CallServer = callManager
+		runtime.CallTransport = platformCallServerRuntime()
 	}
 	if err := runtime.bootstrap(context.Background(), freshState); err != nil {
 		_ = store.Close()
@@ -298,7 +300,30 @@ func bootstrapInterface(topology network.Topology) string {
 	return ""
 }
 
-func (runtime *Runtime) Close() error { return runtime.Store.Close() }
+func (runtime *Runtime) Close() error {
+	if runtime.CallTransport != nil {
+		_ = runtime.CallTransport.Close()
+	}
+	return runtime.Store.Close()
+}
+
+func (runtime *Runtime) ReconcileCallServer(ctx context.Context) {
+	if runtime.CallServer == nil || runtime.CallTransport == nil {
+		return
+	}
+	_ = runtime.CallTransport.Apply(runtime.CallServer)
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			_ = runtime.CallTransport.Close()
+			return
+		case <-ticker.C:
+			_ = runtime.CallTransport.Apply(runtime.CallServer)
+		}
+	}
+}
 
 func (runtime *Runtime) ReconcileReverseVPN(ctx context.Context) {
 	if runtime.ReverseVPN == nil {

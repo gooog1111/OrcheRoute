@@ -138,7 +138,11 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			if runtime.CallServer == nil {
 				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
 			}
-			return 200, map[string]any{"config": runtime.CallServer.PublicConfig(), "capabilities": map[string]any{"transport": "vk-call-xray", "profile": "orcheroute-call-v1", "beta": true}}
+			status := callserver.RuntimeStatus{}
+			if runtime.CallTransport != nil {
+				status = runtime.CallTransport.Status()
+			}
+			return 200, map[string]any{"config": runtime.CallServer.PublicConfig(), "status": status, "capabilities": map[string]any{"transport": "vk-call-xray", "profile": "orcheroute-call-v1", "backend": "embedded-xray", "beta": true}}
 		}
 	}
 	if method == http.MethodPost {
@@ -311,8 +315,34 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			if err != nil {
 				return backendError(err)
 			}
+			if runtime.CallServer.PublicConfig().Enabled && runtime.CallTransport != nil {
+				if err := runtime.CallTransport.Apply(runtime.CallServer); err != nil {
+					return backendError(err)
+				}
+			}
 			return 201, map[string]any{"client": client.PublicAt(time.Now()), "subscription_path": "/subscription/call/" + client.SubscriptionToken,
 				"subscription_url": runtime.CallServer.SubscriptionURL(client.SubscriptionToken), "warning": "subscription_token_is_secret"}
+		case path == "/v1/call-server/apply":
+			if runtime.CallServer == nil || runtime.CallTransport == nil {
+				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
+			}
+			if _, err := runtime.CallServer.SetEnabled(true); err != nil {
+				return backendError(err)
+			}
+			if err := runtime.CallTransport.Apply(runtime.CallServer); err != nil {
+				_, _ = runtime.CallServer.SetEnabled(false)
+				return backendError(err)
+			}
+			return 200, map[string]any{"applied": true, "status": runtime.CallTransport.Status()}
+		case path == "/v1/call-server/disable":
+			if runtime.CallServer == nil || runtime.CallTransport == nil {
+				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
+			}
+			if _, err := runtime.CallServer.SetEnabled(false); err != nil {
+				return backendError(err)
+			}
+			err := runtime.CallTransport.Apply(runtime.CallServer)
+			return result(200, map[string]any{"disabled": err == nil, "status": runtime.CallTransport.Status()}, err)
 		}
 	}
 	if method == http.MethodPut {
@@ -346,6 +376,9 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 				return 400, map[string]any{"error": "invalid_call_server_config"}
 			}
 			updated, err := runtime.CallServer.UpdateConfig(config)
+			if err == nil && updated.Enabled && runtime.CallTransport != nil {
+				err = runtime.CallTransport.Apply(runtime.CallServer)
+			}
 			return result(200, map[string]any{"config": updated, "saved": err == nil}, err)
 		}
 	}
@@ -378,6 +411,9 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return 400, map[string]any{"error": "invalid_traffic_limit"}
 		}
 		client, err := runtime.CallServer.UpdateClient(id, callserver.UpdateClientInput{Name: stringValue(body["name"]), Enabled: boolValue(body["enabled"]), ExpiresAt: int64Value(body["expires_at"]), TrafficLimitBytes: uint64(limit), ResetTraffic: boolValue(body["reset_traffic"]), RotateToken: boolValue(body["rotate_token"])})
+		if err == nil && runtime.CallServer.PublicConfig().Enabled && runtime.CallTransport != nil {
+			err = runtime.CallTransport.Apply(runtime.CallServer)
+		}
 		return result(200, map[string]any{"client": client.PublicAt(time.Now()), "updated": err == nil}, err)
 	}
 	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/subscriptions/") {
@@ -412,6 +448,9 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 		}
 		id, _ := url.PathUnescape(strings.TrimPrefix(path, "/v1/call-server/clients/"))
 		err := runtime.CallServer.DeleteClient(id)
+		if err == nil && runtime.CallServer.PublicConfig().Enabled && runtime.CallTransport != nil {
+			err = runtime.CallTransport.Apply(runtime.CallServer)
+		}
 		return result(200, map[string]any{"deleted": err == nil, "id": id}, err)
 	}
 	if method == http.MethodDelete && strings.HasPrefix(path, "/v1/pools/") {

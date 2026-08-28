@@ -42,6 +42,14 @@ type Manager struct {
 	data Config
 }
 
+type RuntimeSnapshot struct {
+	Enabled        bool
+	ListenAddress  string
+	BackendAddress string
+	Keys           map[string][]byte
+	Clients        []callxray.Client
+}
+
 func Open(path string) (*Manager, error) {
 	manager := &Manager{path: path, now: time.Now, rand: rand.Reader, data: DefaultConfig()}
 	payload, err := os.ReadFile(path)
@@ -73,6 +81,7 @@ func (manager *Manager) UpdateConfig(input Config) (PublicConfig, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	input.Clients = append([]Client(nil), manager.data.Clients...)
+	input.Enabled = manager.data.Enabled
 	if err := input.Normalize(); err != nil {
 		return PublicConfig{}, err
 	}
@@ -84,6 +93,21 @@ func (manager *Manager) UpdateConfig(input Config) (PublicConfig, error) {
 	}
 	manager.data = input
 	return input.PublicAt(manager.now()), nil
+}
+
+func (manager *Manager) SetEnabled(enabled bool) (PublicConfig, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	candidate := manager.data
+	candidate.Enabled = enabled
+	if err := candidate.Validate(); err != nil {
+		return PublicConfig{}, err
+	}
+	if err := manager.saveLocked(candidate); err != nil {
+		return PublicConfig{}, err
+	}
+	manager.data = candidate
+	return candidate.PublicAt(manager.now()), nil
 }
 
 func (manager *Manager) CreateClient(input CreateClientInput) (Client, error) {
@@ -263,6 +287,24 @@ func (manager *Manager) XrayClients() []callxray.Client {
 		}
 	}
 	return result
+}
+
+func (manager *Manager) RuntimeSnapshot() (RuntimeSnapshot, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	snapshot := RuntimeSnapshot{Enabled: manager.data.Enabled, ListenAddress: manager.data.ListenAddress, BackendAddress: manager.data.BackendAddress, Keys: map[string][]byte{}, Clients: []callxray.Client{}}
+	for _, client := range manager.data.Clients {
+		if !client.AvailableAt(manager.now()) {
+			continue
+		}
+		psk, err := client.Profile.PSKBytes()
+		if err != nil {
+			return RuntimeSnapshot{}, err
+		}
+		snapshot.Keys[client.Profile.VLESSUUID] = psk
+		snapshot.Clients = append(snapshot.Clients, callxray.Client{ID: client.Profile.VLESSUUID, Email: client.ID})
+	}
+	return snapshot, nil
 }
 
 func (manager *Manager) RecordTraffic(_ context.Context, id string, rx, tx uint64, seenAt int64) error {
