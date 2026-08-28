@@ -35,6 +35,7 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
@@ -45,6 +46,10 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import mobilecore.Mobilecore;
 
 public final class MainActivity extends ComponentActivity {
     private static final String APP_HOST = WebViewAssetLoader.DEFAULT_DOMAIN;
@@ -61,6 +66,8 @@ public final class MainActivity extends ComponentActivity {
     private String pendingTextFile = "";
     private AppUpdater appUpdater;
     private VkCaptchaDialog vkCaptchaDialog;
+    private final ExecutorService callTransportWorker = Executors.newSingleThreadExecutor();
+    private String pendingVkChallengeID = "";
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -104,17 +111,19 @@ public final class MainActivity extends ComponentActivity {
         vkCaptchaDialog = new VkCaptchaDialog(this, root, new VkCaptchaDialog.Callback() {
             @Override
             public void onSuccess(String successToken) {
-                dispatchVkCaptcha("success", successToken);
+                continueVkCall(successToken);
             }
 
             @Override
             public void onCancel() {
-                dispatchVkCaptcha("cancel", "");
+                String challengeID = takePendingVkChallenge();
+                if (!challengeID.isEmpty()) Mobilecore.cancelVKCallCredentials(challengeID);
+                dispatchVkCall("cancel", "Подтверждение VK отменено.", "");
             }
 
             @Override
             public void onError(String message) {
-                dispatchVkCaptcha("error", message);
+                dispatchVkCall("error", message, "");
             }
         });
         ViewCompat.requestApplyInsets(root);
@@ -139,6 +148,9 @@ public final class MainActivity extends ComponentActivity {
     @Override
     protected void onDestroy() {
         if (vkCaptchaDialog != null) vkCaptchaDialog.close(false);
+        String challengeID = takePendingVkChallenge();
+        if (!challengeID.isEmpty()) Mobilecore.cancelVKCallCredentials(challengeID);
+        callTransportWorker.shutdownNow();
         super.onDestroy();
     }
 
@@ -362,15 +374,78 @@ public final class MainActivity extends ComponentActivity {
         ));
     }
 
-    private void dispatchVkCaptcha(String status, String value) {
+    private void dispatchVkCall(String status, String message, String credentialID) {
         runOnUiThread(() -> webView.evaluateJavascript(
-                "window.dispatchEvent(new CustomEvent('orcheroute:vk-captcha',{detail:{status:"
+                "window.dispatchEvent(new CustomEvent('orcheroute:vk-call',{detail:{status:"
                         + JSONObject.quote(status)
-                        + ",value:"
-                        + JSONObject.quote(value == null ? "" : value)
+                        + ",message:"
+                        + JSONObject.quote(message == null ? "" : message)
+                        + ",credentialId:"
+                        + JSONObject.quote(credentialID == null ? "" : credentialID)
                         + "}}));",
                 null
         ));
+    }
+
+    private synchronized String takePendingVkChallenge() {
+        String value = pendingVkChallengeID;
+        pendingVkChallengeID = "";
+        return value;
+    }
+
+    private synchronized void replacePendingVkChallenge(String value) {
+        if (!pendingVkChallengeID.isEmpty()) Mobilecore.cancelVKCallCredentials(pendingVkChallengeID);
+        pendingVkChallengeID = value == null ? "" : value;
+    }
+
+    private void beginVkCall(String invitation) {
+        callTransportWorker.execute(() -> handleVkCallResult(Mobilecore.beginVKCallCredentials(invitation)));
+    }
+
+    private void continueVkCall(String successToken) {
+        String challengeID = takePendingVkChallenge();
+        if (challengeID.isEmpty()) {
+            dispatchVkCall("error", "Сессия VK CAPTCHA уже завершена.", "");
+            return;
+        }
+        callTransportWorker.execute(() -> handleVkCallResult(
+                Mobilecore.continueVKCallCredentials(challengeID, successToken)
+        ));
+    }
+
+    private void handleVkCallResult(String raw) {
+        try {
+            JSONObject envelope = new JSONObject(raw);
+            if (!envelope.optBoolean("ok")) {
+                JSONObject error = envelope.optJSONObject("error");
+                dispatchVkCall("error", error == null ? "Не удалось подключиться к VK звонку." : error.optString("error", "Ошибка VK"), "");
+                return;
+            }
+            JSONObject result = envelope.getJSONObject("result");
+            String status = result.optString("status");
+            if ("captcha_required".equals(status)) {
+                String challengeID = result.optString("challenge_id");
+                String redirectURL = result.optString("redirect_url");
+                replacePendingVkChallenge(challengeID);
+                runOnUiThread(() -> {
+                    if (vkCaptchaDialog == null || !vkCaptchaDialog.open(redirectURL)) {
+                        String stale = takePendingVkChallenge();
+                        if (!stale.isEmpty()) Mobilecore.cancelVKCallCredentials(stale);
+                        dispatchVkCall("error", "Получен недопустимый адрес VK CAPTCHA.", "");
+                    } else {
+                        dispatchVkCall("captcha_required", "Подтвердите, что вы не робот.", "");
+                    }
+                });
+                return;
+            }
+            if ("ready".equals(status)) {
+                dispatchVkCall("ready", "VK транспорт готов.", result.optString("credential_id"));
+                return;
+            }
+            dispatchVkCall("error", "VK вернул неизвестное состояние.", "");
+        } catch (JSONException error) {
+            dispatchVkCall("error", "Некорректный ответ VK транспорта.", "");
+        }
     }
 
     private final class EmbeddedClient extends WebViewClientCompat {
@@ -451,12 +526,8 @@ public final class MainActivity extends ComponentActivity {
         }
 
         @JavascriptInterface
-        public void openVkCaptcha(String url) {
-            runOnUiThread(() -> {
-                if (vkCaptchaDialog == null || !vkCaptchaDialog.open(url)) {
-                    dispatchVkCaptcha("error", "Получен недопустимый адрес VK CAPTCHA.");
-                }
-            });
+        public void beginVkCall(String invitation) {
+            MainActivity.this.beginVkCall(invitation);
         }
 
         @JavascriptInterface
