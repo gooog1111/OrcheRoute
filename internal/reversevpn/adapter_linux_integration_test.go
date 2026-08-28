@@ -88,3 +88,34 @@ func TestLinuxAdapterWireGuardLifecycle(t *testing.T) {
 		t.Fatal("WireGuard interface remained active after disable")
 	}
 }
+
+func TestLinuxAdapterDoesNotDeleteUnmanagedInterface(t *testing.T) {
+	if os.Getenv("ORCHEROUTE_INTEGRATION_WG") != "1" {
+		t.Skip("set ORCHEROUTE_INTEGRATION_WG=1 as root to run")
+	}
+	if os.Geteuid() != 0 {
+		t.Skip("WireGuard integration test requires root")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	const interfaceName = "or-rvcoll"
+	_ = exec.Command("ip", "link", "del", "dev", interfaceName).Run()
+	if output, err := exec.Command("ip", "link", "add", interfaceName, "type", "dummy").CombinedOutput(); err != nil {
+		t.Fatalf("create unmanaged interface: %v: %s", err, output)
+	}
+	t.Cleanup(func() { _ = exec.Command("ip", "link", "del", "dev", interfaceName).Run() })
+
+	adapter := NewLinuxAdapter(t.TempDir())
+	config := DefaultConfig()
+	config.InterfaceName = interfaceName
+	config.PrivateKey, config.PublicKey, _ = keyPair()
+	if err := adapter.Apply(ctx, config); err == nil || err.Error() != "interface_name_in_use" {
+		t.Fatalf("apply should reject unmanaged interface, got %v", err)
+	}
+	if err := adapter.Disable(ctx, interfaceName); err == nil || err.Error() != "managed_interface_config_missing" {
+		t.Fatalf("disable should reject unmanaged interface, got %v", err)
+	}
+	if !adapter.Active(ctx, interfaceName) {
+		t.Fatal("unmanaged interface was deleted")
+	}
+}

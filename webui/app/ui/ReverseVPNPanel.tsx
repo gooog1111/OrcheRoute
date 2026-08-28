@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { actions, type ReverseVPNClient, type ReverseVPNConfig, type ReverseVPNState } from "../lib/api";
 
 type Runner = (operation: () => Promise<unknown>, success: string, options?: { title?: string }) => Promise<boolean>;
@@ -16,7 +16,6 @@ export function ReverseVPNPanel({ state, interfaces, busy, run, onReload }: {
 	const [name, setName] = useState("");
 	const [expires, setExpires] = useState("");
 	const [limitGB, setLimitGB] = useState("");
-	useEffect(() => setConfig(state?.config ?? null), [state]);
 	const changed = useMemo(() => Boolean(config && state && JSON.stringify(config) !== JSON.stringify(state.config)), [config, state]);
 	if (!config || !state) return <div className="settings-section"><p className="empty-state">Модуль VPN-сервера недоступен в этой сборке.</p></div>;
 	const update = <K extends keyof ReverseVPNConfig>(key: K, value: ReverseVPNConfig[K]) => setConfig({ ...config, [key]: value });
@@ -60,7 +59,7 @@ export function ReverseVPNPanel({ state, interfaces, busy, run, onReload }: {
 			<div className="action-bar"><button className="primary-button" type="button" disabled={busy || !name.trim() || (Boolean(limitGB) && (!Number.isFinite(Number(limitGB)) || Number(limitGB) < 0))} onClick={() => void create()}>Создать подписку</button></div>
 		</div>
 		<div className="reverse-client-list">
-			{config.clients.length === 0 ? <p className="empty-state">Клиентов пока нет.</p> : config.clients.map(client => <ReverseVPNClientCard key={client.id} client={client} busy={busy} run={run} onReload={onReload}/>) }
+			{config.clients.length === 0 ? <p className="empty-state">Клиентов пока нет.</p> : config.clients.map(client => <ReverseVPNClientCard key={JSON.stringify(client)} client={client} busy={busy} run={run} onReload={onReload}/>) }
 		</div>
 	</div>;
 }
@@ -70,7 +69,6 @@ function ReverseVPNClientCard({ client, busy, run, onReload }: { client: Reverse
 	const [enabled, setEnabled] = useState(client.enabled);
 	const [expires, setExpires] = useState(client.expires_at ? localDateTime(client.expires_at) : "");
 	const [limitGB, setLimitGB] = useState(client.traffic_limit_bytes ? String(Math.round(client.traffic_limit_bytes / 1024 ** 3 * 10) / 10) : "");
-	useEffect(() => { setName(client.name); setEnabled(client.enabled); setExpires(client.expires_at ? localDateTime(client.expires_at) : ""); setLimitGB(client.traffic_limit_bytes ? String(Math.round(client.traffic_limit_bytes / 1024 ** 3 * 10) / 10) : ""); }, [client]);
 	const payload = (extra: { reset_traffic?: boolean; rotate_token?: boolean } = {}) => ({ name, enabled, expires_at: expires ? Math.floor(new Date(expires).getTime() / 1000) : 0, traffic_limit_bytes: limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : 0, ...extra });
 	const reloadAfter = async (operation: () => Promise<unknown>, message: string, title: string) => { if (await run(operation, message, { title })) await onReload(); };
 	const copy = async () => { const value = await actions.reverseVPNSubscription(client.id); await navigator.clipboard.writeText(value.subscription_url.startsWith("https://") ? value.subscription_url : new URL(value.subscription_path, window.location.origin).toString()); };

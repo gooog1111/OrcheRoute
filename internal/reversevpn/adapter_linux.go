@@ -38,12 +38,17 @@ func (a *LinuxAdapter) Apply(ctx context.Context, config Config) error {
 		return err
 	}
 	path := filepath.Join(a.Directory, config.InterfaceName+".conf")
+	// wg-quick down is idempotent only when wrapped this way; a missing link is
+	// expected on the first apply and must not turn a valid setup into a failure.
+	// It must read the previous file so PostDown removes the exact old NAT rule.
+	if _, err := os.Stat(path); err == nil {
+		_ = runCommand(ctx, "wg-quick", "down", path)
+	} else if a.Active(ctx, config.InterfaceName) {
+		return fmt.Errorf("interface_name_in_use")
+	}
 	if err := writeSecretAtomic(path, []byte(text)); err != nil {
 		return err
 	}
-	// wg-quick down is idempotent only when wrapped this way; a missing link is
-	// expected on the first apply and must not turn a valid setup into a failure.
-	_ = runCommand(ctx, "wg-quick", "down", path)
 	if err := runCommand(ctx, "sysctl", "-w", "net.ipv4.ip_forward=1"); err != nil {
 		return err
 	}
@@ -56,15 +61,13 @@ func (a *LinuxAdapter) Apply(ctx context.Context, config Config) error {
 
 func (a *LinuxAdapter) Disable(ctx context.Context, interfaceName string) error {
 	path := filepath.Join(a.Directory, interfaceName+".conf")
-	if _, err := os.Stat(path); err == nil {
-		if err := runCommand(ctx, "wg-quick", "down", path); err == nil {
-			return nil
-		}
-	}
 	if !a.Active(ctx, interfaceName) {
 		return nil
 	}
-	return runCommand(ctx, "ip", "link", "delete", "dev", interfaceName)
+	if _, err := os.Stat(path); err == nil {
+		return runCommand(ctx, "wg-quick", "down", path)
+	}
+	return fmt.Errorf("managed_interface_config_missing")
 }
 
 func (a *LinuxAdapter) Active(ctx context.Context, interfaceName string) bool {

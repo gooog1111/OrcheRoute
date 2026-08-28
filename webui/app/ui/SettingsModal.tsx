@@ -701,7 +701,7 @@ export function SettingsModal({
               <AppearanceForm theme={theme} onTheme={onTheme} />
             )}
             {activeTab === "access" && <AccessPanel data={data} busy={busy} />}
-            {activeTab === "reverse-vpn" && <ReverseVPNPanel state={data?.reverseVPN ?? null} interfaces={(data?.interfaces ?? []).filter(item => !item.loopback).map(item => item.name)} busy={busy} run={run} onReload={onReload} />}
+            {activeTab === "reverse-vpn" && <ReverseVPNPanel key={JSON.stringify(data?.reverseVPN ?? null)} state={data?.reverseVPN ?? null} interfaces={(data?.interfaces ?? []).filter(item => !item.loopback).map(item => item.name)} busy={busy} run={run} onReload={onReload} />}
             {activeTab === "network" &&
               (platform.networkEditor === "vpn-service" ? (
                 <AndroidNetworkForm data={data} busy={busy} run={run} />

@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	coreparser "github.com/gooog1111/orcheroute/internal/core/parser"
 	"github.com/gooog1111/orcheroute/internal/reversevpn"
-	"github.com/gooog1111/orcheroute/internal/subscriptions"
 )
 
 type reverseVPNFakeAdapter struct{ active bool }
@@ -77,7 +77,7 @@ func TestReverseVPNAPIKeepsSecretsOutOfConfig(t *testing.T) {
 	if subscriptionResponse.Header().Get("Subscription-Userinfo") == "" {
 		t.Fatal("subscription traffic metadata missing")
 	}
-	links := subscriptions.Decode(subscriptionResponse.Body.Bytes())
+	links := coreparser.DecodeSubscriptionBody(subscriptionResponse.Body.String())
 	if len(links) != 1 || !bytes.HasPrefix([]byte(links[0]), []byte("wireguard://")) {
 		t.Fatalf("Android/shared subscription parser rejected generated profile: %#v", links)
 	}

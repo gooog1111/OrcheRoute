@@ -343,6 +343,12 @@ func (m *Manager) Apply(ctx context.Context) error {
 	if m.adapter == nil {
 		return fmt.Errorf("reverse_vpn_not_supported")
 	}
+	if m.config.Enabled && m.adapter.Active(ctx, m.config.InterfaceName) {
+		if _, err := m.captureCountersLocked(ctx); err != nil {
+			m.status.LastError = err.Error()
+			return fmt.Errorf("accounting_snapshot_failed: %w", err)
+		}
+	}
 	previous := m.config
 	candidate := m.config
 	if candidate.PrivateKey == "" || candidate.PublicKey == "" {
@@ -360,8 +366,6 @@ func (m *Manager) Apply(ctx context.Context) error {
 		m.status.LastError = err.Error()
 		if previous.Enabled {
 			_ = m.adapter.Apply(context.Background(), previous)
-		} else {
-			_ = m.adapter.Disable(context.Background(), candidate.InterfaceName)
 		}
 		return err
 	}
@@ -418,43 +422,10 @@ func (m *Manager) RefreshAccounting(ctx context.Context) error {
 	if !m.config.Enabled {
 		return nil
 	}
-	accounting, ok := m.adapter.(AccountingAdapter)
-	if !ok {
-		return nil
-	}
-	counters, err := accounting.Counters(ctx, m.config.InterfaceName)
+	availabilityChanged, err := m.captureCountersLocked(ctx)
 	if err != nil {
 		m.status.LastError = err.Error()
 		return err
-	}
-	candidate := m.config
-	changed := false
-	availabilityChanged := false
-	for index := range candidate.Clients {
-		client := &candidate.Clients[index]
-		wasAvailable := client.AvailableAt(m.now())
-		counter, found := counters[client.PublicKey]
-		if found {
-			client.TrafficRXBytes += counterDelta(client.LastCounterRXBytes, counter.RXBytes)
-			client.TrafficTXBytes += counterDelta(client.LastCounterTXBytes, counter.TXBytes)
-			client.LastCounterRXBytes, client.LastCounterTXBytes = counter.RXBytes, counter.TXBytes
-			if counter.LastHandshake > 0 {
-				client.LastSeenAt = counter.LastHandshake
-			}
-			changed = true
-			if !client.AvailableAt(m.now()) {
-				availabilityChanged = true
-			}
-		}
-		if wasAvailable != client.AvailableAt(m.now()) {
-			availabilityChanged = true
-		}
-	}
-	if changed {
-		if err := m.saveLocked(candidate); err != nil {
-			return err
-		}
-		m.config = candidate
 	}
 	if availabilityChanged {
 		m.needsApply = true
@@ -469,6 +440,48 @@ func (m *Manager) RefreshAccounting(ctx context.Context) error {
 		m.status.LastError = ""
 	}
 	return nil
+}
+
+func (m *Manager) captureCountersLocked(ctx context.Context) (bool, error) {
+	accounting, ok := m.adapter.(AccountingAdapter)
+	if !ok {
+		return false, nil
+	}
+	counters, err := accounting.Counters(ctx, m.config.InterfaceName)
+	if err != nil {
+		return false, err
+	}
+	candidate := m.config
+	changed := false
+	availabilityChanged := false
+	now := m.now()
+	for index := range candidate.Clients {
+		client := &candidate.Clients[index]
+		wasAvailable := client.AvailableAt(now)
+		counter, found := counters[client.PublicKey]
+		if found {
+			client.TrafficRXBytes += counterDelta(client.LastCounterRXBytes, counter.RXBytes)
+			client.TrafficTXBytes += counterDelta(client.LastCounterTXBytes, counter.TXBytes)
+			client.LastCounterRXBytes, client.LastCounterTXBytes = counter.RXBytes, counter.TXBytes
+			if counter.LastHandshake > 0 {
+				client.LastSeenAt = counter.LastHandshake
+			}
+			changed = true
+			if !client.AvailableAt(now) {
+				availabilityChanged = true
+			}
+		}
+		if wasAvailable != client.AvailableAt(now) {
+			availabilityChanged = true
+		}
+	}
+	if changed {
+		if err := m.saveLocked(candidate); err != nil {
+			return false, err
+		}
+		m.config = candidate
+	}
+	return availabilityChanged, nil
 }
 
 func counterDelta(previous, current uint64) uint64 {
