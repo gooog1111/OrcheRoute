@@ -3,8 +3,12 @@
 package mobilecore
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"time"
+
+	"github.com/gooog1111/orcheroute/internal/calltransport"
 )
 
 func embeddedEngineAvailable() bool { return false }
@@ -33,3 +37,15 @@ func engineUnavailable() string {
 func platformCallHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }
+
+type standardCallUnderlay struct{}
+
+func (standardCallUnderlay) ListenPacket(ctx context.Context, network, address string) (net.PacketConn, error) {
+	return (&net.ListenConfig{}).ListenPacket(ctx, network, address)
+}
+
+func (standardCallUnderlay) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, address)
+}
+
+func platformCallUnderlay() calltransport.Underlay { return standardCallUnderlay{} }

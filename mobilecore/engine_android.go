@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gooog1111/orcheroute/internal/calltransport"
 	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/common/utils"
@@ -583,6 +584,18 @@ func platformCallHTTPClient(timeout time.Duration) *http.Client {
 		},
 	}
 }
+
+type protectedCallUnderlay struct{}
+
+func (protectedCallUnderlay) ListenPacket(ctx context.Context, network, address string) (net.PacketConn, error) {
+	return (&net.ListenConfig{Control: protectedSocketControl}).ListenPacket(ctx, network, address)
+}
+
+func (protectedCallUnderlay) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: protectedSocketControl}).DialContext(ctx, network, address)
+}
+
+func platformCallUnderlay() calltransport.Underlay { return protectedCallUnderlay{} }
 
 func sortInts(values []int) {
 	for i := 1; i < len(values); i++ {

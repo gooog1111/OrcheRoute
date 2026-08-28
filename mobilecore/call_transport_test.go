@@ -1,6 +1,7 @@
 package mobilecore
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -42,5 +43,21 @@ func TestVKCredentialBoundaryRejectsIncompleteRequests(t *testing.T) {
 	}
 	if result := ContinueVKCallCredentials("", ""); !strings.Contains(result, "call_transport_vk_invalid_captcha_continuation") {
 		t.Fatalf("unexpected continuation result: %s", result)
+	}
+}
+
+func TestVKCarrierRejectsInvalidEndpointsBeforeConsumingCredentials(t *testing.T) {
+	psk := base64.RawURLEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
+	if result := StartVKCallCarrier("missing", "host-without-port", psk, "127.0.0.1:0"); !strings.Contains(result, "call_transport_invalid_peer") {
+		t.Fatalf("unexpected peer validation: %s", result)
+	}
+	if result := StartVKCallCarrier("missing", "127.0.0.1:56000", "bad", "127.0.0.1:0"); !strings.Contains(result, "call_transport_invalid_psk") {
+		t.Fatalf("unexpected PSK validation: %s", result)
+	}
+	if result := StartVKCallCarrier("missing", "127.0.0.1:56000", psk, "0.0.0.0:9000"); !strings.Contains(result, "call_transport_invalid_local_listener") {
+		t.Fatalf("unexpected listener validation: %s", result)
+	}
+	if result := StopVKCallCarrier(); !strings.Contains(result, `"status":"idle"`) {
+		t.Fatalf("unexpected stop result: %s", result)
 	}
 }

@@ -2,8 +2,10 @@ package mobilecore
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +28,15 @@ var vkCallFlows = struct {
 	pending map[string]vkPendingFlow
 	ready   map[string]calltransport.ProviderCredentials
 }{pending: map[string]vkPendingFlow{}, ready: map[string]calltransport.ProviderCredentials{}}
+
+var vkCarrier = struct {
+	sync.Mutex
+	cancel     context.CancelFunc
+	status     string
+	endpoint   string
+	lastErr    string
+	generation uint64
+}{status: "idle"}
 
 // BeginVKCallCredentials starts the provider signalling flow. TURN passwords
 // never cross the gomobile/UI boundary: a ready result contains only an opaque
@@ -113,6 +124,133 @@ func takeVKCallCredentials(id string) (calltransport.ProviderCredentials, error)
 		return calltransport.ProviderCredentials{}, fmt.Errorf("call_transport_vk_credentials_expired")
 	}
 	return credentials, nil
+}
+
+func restoreVKCallCredentials(id string, credentials calltransport.ProviderCredentials) {
+	id = strings.TrimSpace(id)
+	if id == "" || !time.Now().Before(credentials.ExpiresAt) {
+		return
+	}
+	vkCallFlows.Lock()
+	vkCallFlows.ready[id] = credentials
+	vkCallFlows.Unlock()
+}
+
+func StartVKCallCarrier(credentialID, peerAddress, pskBase64, listenAddress string) string {
+	peer, err := net.ResolveUDPAddr("udp", strings.TrimSpace(peerAddress))
+	if err != nil || peer.IP == nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_invalid_peer"}})
+	}
+	psk, err := decodeCallPSK(pskBase64)
+	if err != nil {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	if strings.TrimSpace(listenAddress) == "" {
+		listenAddress = "127.0.0.1:0"
+	}
+	if host, _, splitErr := net.SplitHostPort(listenAddress); splitErr != nil || (host != "127.0.0.1" && host != "::1" && host != "localhost") {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_invalid_local_listener"}})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	vkCarrier.Lock()
+	if vkCarrier.cancel != nil {
+		vkCarrier.Unlock()
+		cancel()
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_already_running"}})
+	}
+	vkCarrier.cancel, vkCarrier.status, vkCarrier.lastErr = cancel, "connecting", ""
+	vkCarrier.generation++
+	generation := vkCarrier.generation
+	vkCarrier.Unlock()
+	credentials, err := takeVKCallCredentials(credentialID)
+	if err != nil {
+		cancel()
+		setVKCarrierStopped(generation, err.Error())
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	connectCtx, connectCancel := context.WithTimeout(ctx, 20*time.Second)
+	carrier, err := calltransport.DialTURNDTLS(connectCtx, credentials.TURN, peer, psk, platformCallUnderlay())
+	connectCancel()
+	if err != nil {
+		cancel()
+		restoreVKCallCredentials(credentialID, credentials)
+		setVKCarrierStopped(generation, err.Error())
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	reliable, err := calltransport.NewReliableClient(carrier)
+	if err != nil {
+		cancel()
+		_ = carrier.Close()
+		restoreVKCallCredentials(credentialID, credentials)
+		setVKCarrierStopped(generation, err.Error())
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
+	}
+	listener, err := net.Listen("tcp", listenAddress)
+	if err != nil {
+		cancel()
+		_ = reliable.Close()
+		restoreVKCallCredentials(credentialID, credentials)
+		setVKCarrierStopped(generation, err.Error())
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_local_listen"}})
+	}
+	vkCarrier.Lock()
+	vkCarrier.cancel, vkCarrier.status, vkCarrier.endpoint = cancel, "ready", listener.Addr().String()
+	endpoint := vkCarrier.endpoint
+	vkCarrier.Unlock()
+	go func() {
+		err := calltransport.ServeClient(ctx, reliable, listener)
+		if err != nil {
+			setVKCarrierStopped(generation, err.Error())
+		} else {
+			setVKCarrierStopped(generation, "")
+		}
+	}()
+	return encode(map[string]any{"ok": true, "result": map[string]any{"status": "ready", "local_endpoint": endpoint}})
+}
+
+func StopVKCallCarrier() string {
+	vkCarrier.Lock()
+	cancel := vkCarrier.cancel
+	vkCarrier.cancel, vkCarrier.status, vkCarrier.endpoint = nil, "idle", ""
+	vkCarrier.generation++
+	vkCarrier.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	return encode(map[string]any{"ok": true, "result": map[string]any{"status": "idle"}})
+}
+
+func VKCallCarrierStatus() string {
+	vkCarrier.Lock()
+	defer vkCarrier.Unlock()
+	return encode(map[string]any{"ok": true, "result": map[string]any{
+		"status": vkCarrier.status, "local_endpoint": vkCarrier.endpoint, "error": vkCarrier.lastErr,
+	}})
+}
+
+func setVKCarrierStopped(generation uint64, message string) {
+	vkCarrier.Lock()
+	if vkCarrier.generation != generation {
+		vkCarrier.Unlock()
+		return
+	}
+	vkCarrier.cancel, vkCarrier.endpoint, vkCarrier.lastErr = nil, "", message
+	if message == "" {
+		vkCarrier.status = "idle"
+	} else {
+		vkCarrier.status = "error"
+	}
+	vkCarrier.Unlock()
+}
+
+func decodeCallPSK(value string) ([]byte, error) {
+	value = strings.TrimSpace(value)
+	for _, encoding := range []*base64.Encoding{base64.RawURLEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.StdEncoding} {
+		if decoded, err := encoding.DecodeString(value); err == nil && len(decoded) >= 16 {
+			return decoded, nil
+		}
+	}
+	return nil, fmt.Errorf("call_transport_invalid_psk")
 }
 
 func cleanupVKFlowsLocked(now time.Time) {
