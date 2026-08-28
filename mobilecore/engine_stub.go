@@ -2,6 +2,11 @@
 
 package mobilecore
 
+import (
+	"net/http"
+	"time"
+)
+
 func embeddedEngineAvailable() bool { return false }
 
 func engineInit(string, SocketProtector) string { return engineUnavailable() }
@@ -23,4 +28,8 @@ func engineTestSpeedAdaptive(string, string, int, int, float64, float64, int64) 
 
 func engineUnavailable() string {
 	return encode(map[string]any{"ok": false, "error": map[string]string{"error": "embedded_engine_unavailable"}})
+}
+
+func platformCallHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout}
 }

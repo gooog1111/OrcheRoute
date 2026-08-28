@@ -21,6 +21,14 @@ type ClientIdentity struct {
 	Secret string
 }
 
+// DefaultIdentity is a public installed-application identity used by the VK
+// anonymous calls flow. It originates from the GPLv3 vk-turn-proxy client and
+// is not a user secret. Keeping the override on Source allows replacement if
+// VK retires this application identity.
+func DefaultIdentity() ClientIdentity {
+	return ClientIdentity{ID: "6287487", Secret: "QbYic1K3lEV5kTGiqlq2"}
+}
+
 type Endpoints struct {
 	Login string
 	API   string

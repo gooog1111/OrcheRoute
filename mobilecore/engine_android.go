@@ -575,6 +575,15 @@ func protectedSocketControl(_, _ string, connection syscall.RawConn) error {
 	return nil
 }
 
+func platformCallHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second, Control: protectedSocketControl}).DialContext,
+		},
+	}
+}
+
 func sortInts(values []int) {
 	for i := 1; i < len(values); i++ {
 		for j := i; j > 0 && values[j] < values[j-1]; j-- {
