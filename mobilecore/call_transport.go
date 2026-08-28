@@ -139,9 +139,17 @@ func restoreVKCallCredentials(id string, credentials calltransport.ProviderCrede
 }
 
 func StartVKCallCarrier(credentialID, peerAddress, pskBase64, listenAddress string) string {
+	return StartVKCallCarrierForProfile(credentialID, peerAddress, "orcheroute-call", pskBase64, listenAddress)
+}
+
+func StartVKCallCarrierForProfile(credentialID, peerAddress, profileIdentity, pskBase64, listenAddress string) string {
 	peer, err := parseCallPeer(peerAddress)
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_invalid_peer"}})
+	}
+	profileIdentity = strings.TrimSpace(profileIdentity)
+	if profileIdentity == "" || len(profileIdentity) > 128 {
+		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_invalid_identity"}})
 	}
 	psk, err := decodeCallPSK(pskBase64)
 	if err != nil {
@@ -171,7 +179,7 @@ func StartVKCallCarrier(credentialID, peerAddress, pskBase64, listenAddress stri
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
 	connectCtx, connectCancel := context.WithTimeout(ctx, 20*time.Second)
-	carrier, err := calltransport.DialTURNDTLS(connectCtx, credentials.TURN, peer, psk, platformCallUnderlay())
+	carrier, err := calltransport.DialTURNDTLSWithIdentity(connectCtx, credentials.TURN, peer, profileIdentity, psk, platformCallUnderlay())
 	connectCancel()
 	if err != nil {
 		cancel()
