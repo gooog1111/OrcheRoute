@@ -137,8 +137,11 @@ func run(action, dir string, beta bool) error {
 	}
 	core := exec.Command("systemctl", "is-active", "--quiet", "orcheroute-core.service").Run() == nil
 	write(dir, status{State: "installing", Message: "Устанавливаем и проверяем пакет", CurrentVersion: current, LatestVersion: rel.Version, Active: true, UpdatedAt: time.Now().Unix(), Beta: beta})
-	if out, e := exec.CommandContext(ctx, "dpkg", "-i", candidate).CombinedOutput(); e != nil {
-		return rollbackInstall(ctx, rollback, fmt.Errorf("dpkg_failed:%s", tail(string(out))))
+	installer, arguments := packageInstallCommand(candidate)
+	command := exec.CommandContext(ctx, installer, arguments...)
+	command.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+	if out, e := command.CombinedOutput(); e != nil {
+		return rollbackInstall(ctx, rollback, fmt.Errorf("apt_install_failed:%s", tail(string(out))))
 	}
 	time.Sleep(3 * time.Second)
 	if exec.Command("systemctl", "is-active", "--quiet", "orcheroute-go.service").Run() != nil || (core && exec.Command("systemctl", "is-active", "--quiet", "orcheroute-core.service").Run() != nil) || !health() {
@@ -266,6 +269,10 @@ func ensureRollback(ctx context.Context, dir, current string, beta bool) (string
 
 func validRollback(path, version string) bool {
 	return debField(path, "Package") == "orcheroute" && debField(path, "Architecture") == "amd64" && debField(path, "Version") == version
+}
+
+func packageInstallCommand(path string) (string, []string) {
+	return "apt-get", []string{"install", "--yes", "--no-remove", path}
 }
 
 func rollbackAssetURL(version string, beta bool) string {

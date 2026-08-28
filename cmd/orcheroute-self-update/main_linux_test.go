@@ -47,6 +47,22 @@ func TestRollbackAssetURL(t *testing.T) {
 	}
 }
 
+func TestPackageInstallUsesAPTToResolveDependencies(t *testing.T) {
+	command, arguments := packageInstallCommand("/var/lib/orcheroute/self-update/update.deb")
+	if command != "apt-get" {
+		t.Fatalf("installer=%q", command)
+	}
+	want := []string{"install", "--yes", "--no-remove", "/var/lib/orcheroute/self-update/update.deb"}
+	if len(arguments) != len(want) {
+		t.Fatalf("arguments=%q", arguments)
+	}
+	for index := range want {
+		if arguments[index] != want[index] {
+			t.Fatalf("arguments[%d]=%q want %q", index, arguments[index], want[index])
+		}
+	}
+}
+
 func TestBackupExcluded(t *testing.T) {
 	for _, name := range []string{"backups", "self-update", "packages", "app-update.json", "state.db", "state.db-wal", "state.db-shm"} {
 		if !backupExcluded(name) {

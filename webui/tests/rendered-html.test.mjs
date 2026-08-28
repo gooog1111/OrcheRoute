@@ -563,3 +563,11 @@ test("light skins keep diagnostics and power controls readable", async () => {
     await readFile(new URL(`../public/themes/hello-kitty/${asset}`, import.meta.url));
   }
 });
+
+test("inbound VPN reports missing Linux tools and future updates resolve dependencies through APT", async () => {
+  const panel = await readFile(new URL("../app/ui/ReverseVPNPanel.tsx", import.meta.url), "utf8");
+  const updater = await readFile(new URL("../../cmd/orcheroute-self-update/main_linux.go", import.meta.url), "utf8");
+  assert.match(panel, /reverseVPNError\(state\.status\.last_error\)/);
+  assert.match(panel, /sudo apt install wireguard-tools iptables/);
+  assert.match(updater, /return "apt-get", \[\]string\{"install", "--yes", "--no-remove", path\}/);
+});

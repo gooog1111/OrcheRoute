@@ -35,7 +35,7 @@ export function ReverseVPNPanel({ state, interfaces, busy, run, onReload }: {
 	};
 	return <div className="settings-section reverse-vpn-settings">
 		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>VPN-сервер OrcheRoute</h3><p>Персональные подписки для конечных устройств, сроки действия и учёт трафика. Этот модуль не меняет исходящий VPN OrcheRoute.</p></div><span className={`reverse-vpn-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
-		{state.status.last_error && <p className="inline-feedback error">{state.status.last_error}</p>}
+		{state.status.last_error && <p className="inline-feedback error">{reverseVPNError(state.status.last_error)}</p>}
 		<div className="access-panel">
 			<div className="form-grid two">
 				<label className="form-field"><span>Публичный адрес</span><input value={config.public_endpoint ?? ""} onChange={e => update("public_endpoint", e.target.value)} placeholder="vpn.example.ru:51820" disabled={busy || config.enabled}/><small>Домен или IP и UDP-порт, доступные клиентам.</small></label>
@@ -86,3 +86,6 @@ function ReverseVPNClientCard({ client, busy, run, onReload }: { client: Reverse
 const localDateTime = (timestamp: number) => { const date = new Date(timestamp * 1000); date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); return date.toISOString().slice(0, 16); };
 const formatBytes = (value: number) => value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} ГБ` : value >= 1024 ** 2 ? `${(value / 1024 ** 2).toFixed(1)} МБ` : `${Math.round(value / 1024)} КБ`;
 const safeFilename = (value: string) => value.replace(/[^a-zA-Z0-9а-яА-Я._-]+/g, "-").replace(/^-+|-+$/g, "") || "orcheroute-client";
+const reverseVPNError = (value: string) => value.startsWith("dependency_missing:")
+	? `Не установлен компонент ${value.slice("dependency_missing:".length)}. Выполните: sudo apt install wireguard-tools iptables.`
+	: value;
