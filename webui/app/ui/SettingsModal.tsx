@@ -14,12 +14,14 @@ import QRCode from "qrcode";
 import {
   actions,
   canOpenTextFile,
+  canImportCallProfile,
   canScanQr,
   checkAndroidAppUpdate,
   dismissAndroidKeyboard,
   getAndroidAppUpdateStatus,
   getServerAppUpdateStatus,
   installAndroidAppUpdate,
+  importCallProfile,
   loadOperations,
   openTextFile,
   saveTextFile,
@@ -3763,6 +3765,7 @@ function SubscriptionEditor({
   );
   const [loadingSecret, setLoadingSecret] = useState(Boolean(item));
   const [scanError, setScanError] = useState("");
+  const [callStatus, setCallStatus] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!item) return;
@@ -3792,15 +3795,28 @@ function SubscriptionEditor({
       const message = (event as CustomEvent<{ message?: string }>).detail?.message;
       setScanError(message || "Не удалось прочитать выбранный файл.");
     };
+    const receiveCallStatus = (event: Event) => {
+      const detail = (event as CustomEvent<{ status?: string; message?: string }>).detail;
+      const message = detail?.message || "Состояние Call-транспорта изменилось.";
+      if (detail?.status === "error" || detail?.status === "cancel") {
+        setCallStatus("");
+        setScanError(message);
+        return;
+      }
+      setScanError("");
+      setCallStatus(message);
+    };
     window.addEventListener("orcheroute:qr-scan", receive);
     window.addEventListener("orcheroute:qr-error", fail);
     window.addEventListener("orcheroute:file-open", receiveFile);
     window.addEventListener("orcheroute:file-open-error", failFile);
+    window.addEventListener("orcheroute:vk-call", receiveCallStatus);
     return () => {
       window.removeEventListener("orcheroute:qr-scan", receive);
       window.removeEventListener("orcheroute:qr-error", fail);
       window.removeEventListener("orcheroute:file-open", receiveFile);
       window.removeEventListener("orcheroute:file-open-error", failFile);
+      window.removeEventListener("orcheroute:vk-call", receiveCallStatus);
     };
   }, []);
   const preview = useMemo(
@@ -3815,7 +3831,17 @@ function SubscriptionEditor({
       ),
     [group, interval, item?.enabled, name, secret],
   );
+  const callProfile = !item && /^orcheroute:\/\/call\//i.test(secret.trim());
   const submit = () => {
+    if (callProfile) {
+      setScanError("");
+      setCallStatus("Подключаем профиль OrcheRoute Call…");
+      if (!importCallProfile(secret.trim())) {
+        setCallStatus("");
+        setScanError("Импорт OrcheRoute Call доступен только в Android-приложении.");
+      }
+      return;
+    }
     void onSave(item ? preview.payloads.slice(0, 1) : preview.payloads);
   };
   const paste = async () => setSecret(await navigator.clipboard.readText());
@@ -3843,7 +3869,7 @@ function SubscriptionEditor({
             <small>
               {item
                 ? "Ссылка отображается полностью и сохраняется только после подтверждения."
-                : "Вставьте ссылки, URI серверов либо конфигурацию WireGuard/AmneziaWG."}
+                : "Вставьте ссылки, URI серверов, профиль OrcheRoute Call либо конфигурацию WireGuard/AmneziaWG."}
             </small>
           </div>
           <button type="button" onClick={onCancel} aria-label="Закрыть">
@@ -3939,16 +3965,19 @@ function SubscriptionEditor({
             <span>
               {item
                 ? `${lines(secret).length} строк`
-                : `${preview.urls} подписок · ${preview.servers} серверов${preview.duplicates ? ` · дублей отброшено: ${preview.duplicates}` : ""}`}
+                : callProfile
+                  ? "Профиль OrcheRoute Call"
+                  : `${preview.urls} подписок · ${preview.servers} серверов${preview.duplicates ? ` · дублей отброшено: ${preview.duplicates}` : ""}`}
             </span>
           </div>
-          {secret.trim() && !preview.payloads.length && (
+          {secret.trim() && !preview.payloads.length && !callProfile && (
             <div className="inline-feedback error">
               Поддерживаются HTTP/HTTPS-подписки, URI прокси и конфигурации
               WireGuard/AmneziaWG. В файле подходящих данных не найдено.
             </div>
           )}
           {scanError && <div className="inline-feedback error">{scanError}</div>}
+          {callStatus && <div className="inline-feedback success">{callStatus}</div>}
         </div>
         <footer>
           <button className="secondary-button" type="button" onClick={onCancel}>
@@ -3961,11 +3990,14 @@ function SubscriptionEditor({
               busy ||
               loadingSecret ||
               !secret.trim() ||
-              !preview.payloads.length
+              (!preview.payloads.length && !callProfile) ||
+              (callProfile && !canImportCallProfile())
             }
             onClick={submit}
           >
-            {item
+            {callProfile
+              ? "Подключить профиль"
+              : item
               ? "Сохранить"
               : `Добавить${preview.payloads.length > 1 ? ` · ${preview.payloads.length}` : ""}`}
           </button>
