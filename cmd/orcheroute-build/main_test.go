@@ -2,11 +2,32 @@ package main
 
 import (
 	"archive/zip"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 )
+
+func TestOutputInDoesNotMixSuccessfulStderrIntoStdout(t *testing.T) {
+	t.Setenv("ORCHEROUTE_OUTPUT_HELPER", "1")
+	got, err := outputIn("", os.Args[0], "-test.run=TestOutputInHelperProcess", "--")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "clean-path\n" {
+		t.Fatalf("stdout = %q, want only the command stdout", got)
+	}
+}
+
+func TestOutputInHelperProcess(t *testing.T) {
+	if os.Getenv("ORCHEROUTE_OUTPUT_HELPER") != "1" {
+		return
+	}
+	fmt.Fprintln(os.Stdout, "clean-path")
+	fmt.Fprintln(os.Stderr, "wsl warning")
+	os.Exit(0)
+}
 
 func TestReplaceDirectoryCopiesFreshTreeAndRemovesStaleFiles(t *testing.T) {
 	root := t.TempDir()

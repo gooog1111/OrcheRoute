@@ -257,9 +257,17 @@ func output(name string, args ...string) (string, error) {
 func outputIn(dir, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
-	data, err := cmd.CombinedOutput()
+	data, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("%s: %w: %s", name, err, strings.TrimSpace(string(data)))
+		detail := ""
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			detail = strings.TrimSpace(string(exitErr.Stderr))
+		}
+		if detail != "" {
+			return "", fmt.Errorf("%s: %w: %s", name, err, detail)
+		}
+		return "", fmt.Errorf("%s: %w", name, err)
 	}
 	return string(data), nil
 }
