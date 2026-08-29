@@ -39,6 +39,8 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 		"invitation_url": "https://vk.com/call/join/test-invite", "subscription_base_url": "https://vpn.example",
 	}
 	callReverseVPNAPI(t, runtime, http.MethodPut, "/v1/call-server", settings, http.StatusOK)
+	delete(settings, "invitation_url")
+	callReverseVPNAPI(t, runtime, http.MethodPut, "/v1/call-server", settings, http.StatusOK)
 	created := callReverseVPNAPI(t, runtime, http.MethodPost, "/v1/call-server/clients", map[string]any{"name": "Phone", "traffic_limit_bytes": 1024}, http.StatusCreated)
 	client := created["client"].(map[string]any)
 	path := created["subscription_path"].(string)

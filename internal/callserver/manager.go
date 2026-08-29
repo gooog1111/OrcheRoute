@@ -78,10 +78,24 @@ func (manager *Manager) PublicConfig() PublicConfig {
 }
 
 func (manager *Manager) UpdateConfig(input Config) (PublicConfig, error) {
+	return manager.updateConfig(input, true)
+}
+
+// UpdatePublicConfig applies settings received from a secret-free API state.
+// Omitting the invitation keeps the existing call credential; an explicitly
+// provided empty value still clears it.
+func (manager *Manager) UpdatePublicConfig(input Config, invitationProvided bool) (PublicConfig, error) {
+	return manager.updateConfig(input, invitationProvided)
+}
+
+func (manager *Manager) updateConfig(input Config, invitationProvided bool) (PublicConfig, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	input.Clients = append([]Client(nil), manager.data.Clients...)
 	input.Enabled = manager.data.Enabled
+	if !invitationProvided {
+		input.InvitationURL = manager.data.InvitationURL
+	}
 	if err := input.Normalize(); err != nil {
 		return PublicConfig{}, err
 	}

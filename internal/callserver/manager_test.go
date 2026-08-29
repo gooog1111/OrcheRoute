@@ -107,6 +107,22 @@ func TestManagerUpdatesAndDeletesOneClient(t *testing.T) {
 	}
 }
 
+func TestPublicConfigUpdatePreservesOmittedInvitation(t *testing.T) {
+	manager, _ := configuredManager(t)
+	public := manager.PublicConfig()
+	config := Config{Version: public.Version, ListenAddress: public.ListenAddress, PublicEndpoint: public.PublicEndpoint,
+		BackendAddress: public.BackendAddress, SubscriptionBaseURL: public.SubscriptionBaseURL}
+	if _, err := manager.UpdatePublicConfig(config, false); err != nil {
+		t.Fatal(err)
+	}
+	if !manager.PublicConfig().InvitationConfigured {
+		t.Fatal("secret invitation was cleared by a public settings update")
+	}
+	if _, err := manager.CreateClient(CreateClientInput{Name: "Still configured"}); err != nil {
+		t.Fatalf("preserved invitation could not issue a client: %v", err)
+	}
+}
+
 func mustJSON(t *testing.T, value any) string {
 	t.Helper()
 	payload, err := json.Marshal(value)
