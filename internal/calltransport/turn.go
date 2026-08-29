@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pion/dtls/v3"
+	"github.com/pion/transport/v4/stdnet"
 	"github.com/pion/turn/v5"
 )
 
@@ -90,13 +91,19 @@ func AllocateTURN(ctx context.Context, config TURNConfig, underlay Underlay) (*T
 	}
 
 	client, err := turn.NewClient(&turn.ClientConfig{
-		STUNServerAddr:         config.ServerAddress,
-		TURNServerAddr:         config.ServerAddress,
-		Username:               config.Username,
-		Password:               config.Password,
-		Realm:                  config.Realm,
-		Software:               "OrcheRoute",
-		Conn:                   packet,
+		STUNServerAddr: config.ServerAddress,
+		TURNServerAddr: config.ServerAddress,
+		Username:       config.Username,
+		Password:       config.Password,
+		Realm:          config.Realm,
+		Software:       "OrcheRoute",
+		Conn:           packet,
+		// A TURN client only needs address resolution here. Pion's default
+		// stdnet.NewNet enumerates every interface first; ordinary Android
+		// applications cannot perform that netlink query. The zero-value
+		// implementation retains resolver/socket methods without touching
+		// the restricted interface table.
+		Net:                    &stdnet.Net{},
 		RTO:                    time.Second,
 		RequestedAddressFamily: turn.RequestedAddressFamilyIPv4,
 	})
