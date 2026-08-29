@@ -57,6 +57,12 @@ func (b *builder) run() error {
 	case "web":
 		return b.web()
 	case "linux-server":
+		if runtime.GOOS == "windows" {
+			if err := b.web(); err != nil {
+				return err
+			}
+			return b.linuxViaWSL()
+		}
 		return b.linuxServer()
 	case "android":
 		return b.android()
