@@ -3,6 +3,7 @@ package calltransport
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"testing"
@@ -86,6 +87,29 @@ func TestTURNAllocationCarriesDatagrams(t *testing.T) {
 	}
 	if string(response[:count]) != string(payload) {
 		t.Fatalf("unexpected TURN response %q", response[:count])
+	}
+}
+
+func TestTURNAllocationHonorsContext(t *testing.T) {
+	silent, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer silent.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	allocation, err := AllocateTURN(ctx, testTURNConfig(silent.LocalAddr().String()), nil)
+	if allocation != nil {
+		_ = allocation.Close()
+		t.Fatal("unexpected TURN allocation from a silent endpoint")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline, got %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("TURN allocation ignored context for %s", elapsed)
 	}
 }
 

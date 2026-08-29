@@ -116,7 +116,27 @@ func AllocateTURN(ctx context.Context, config TURNConfig, underlay Underlay) (*T
 		_ = packet.Close()
 		return nil, fmt.Errorf("call_transport_turn_listen: %w", err)
 	}
-	relay, err := client.Allocate()
+	type allocationResult struct {
+		relay net.PacketConn
+		err   error
+	}
+	result := make(chan allocationResult, 1)
+	go func() {
+		relay, allocateErr := client.Allocate()
+		result <- allocationResult{relay: relay, err: allocateErr}
+	}()
+	var relay net.PacketConn
+	select {
+	case allocated := <-result:
+		relay, err = allocated.relay, allocated.err
+	case <-ctx.Done():
+		// Pion's Allocate has no context and may otherwise keep retrying long
+		// after the OrcheRoute connection deadline. Closing the underlying
+		// packet socket wakes its transaction immediately.
+		_ = packet.Close()
+		client.Close()
+		return nil, fmt.Errorf("call_transport_turn_allocate: %w", ctx.Err())
+	}
 	if err != nil {
 		client.Close()
 		_ = packet.Close()
