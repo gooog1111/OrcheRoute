@@ -242,14 +242,12 @@ export type DashboardData = {
   operations: OperationSnapshot | null;
   access: WebAccess | null;
   appUpdate: AndroidAppUpdateStatus | null;
-	reverseVPN: ReverseVPNState | null;
+	callServer: CallServerState | null;
 };
 
-export type ReverseVPNClient = {
+export type CallServerClient = {
 	id: string;
 	name: string;
-	address: string;
-	public_key: string;
 	enabled: boolean;
 	created_at: number;
 	expires_at?: number;
@@ -261,26 +259,21 @@ export type ReverseVPNClient = {
 	available: boolean;
 };
 
-export type ReverseVPNConfig = {
+export type CallServerConfig = {
 	version: 1;
 	enabled: boolean;
-	interface_name: string;
-	listen_port: number;
-	server_cidr: string;
-	mtu: number;
-	dns: string[];
-	outbound_interface?: string;
+	listen_address: string;
 	public_endpoint?: string;
+	backend_address: string;
+	invitation_configured: boolean;
 	subscription_base_url?: string;
-	transport: "direct";
-	public_key?: string;
-	clients: ReverseVPNClient[];
+	clients: CallServerClient[];
 };
 
-export type ReverseVPNState = {
-	config: ReverseVPNConfig;
-	status: { desired_enabled: boolean; active: boolean; interface_name: string; transport: string; clients: number; last_applied_at?: number; last_error?: string };
-	capabilities: { transports: string[]; client_profile: string; beta: boolean };
+export type CallServerState = {
+	config: CallServerConfig;
+	status: { active: boolean; listen_address?: string; backend_address?: string; clients: number; started_at?: number; last_error?: string };
+	capabilities: { transport: string; profile: string; backend: string; beta: boolean };
 };
 
 export type OperationSnapshot = {
@@ -468,7 +461,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export async function loadDashboard(): Promise<DashboardData> {
-  const [status, pools, nodes, subscriptions, network, interfaces, qualification, dns, routes, components, operations, access, appUpdate, reverseVPN] = await Promise.all([
+  const [status, pools, nodes, subscriptions, network, interfaces, qualification, dns, routes, components, operations, access, appUpdate, callServer] = await Promise.all([
     request<OrcheRouteStatus>("/v1/status"),
     request<{ pools: Pool[] }>("/v1/pools").catch(() => ({ pools: [] })),
     request<{ nodes: Node[] }>("/v1/nodes").catch(() => ({ nodes: [] })),
@@ -482,7 +475,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     request<OperationSnapshot>("/v1/operations").catch(() => null),
     platformCapabilities().showAccessSettings ? request<WebAccess>("/v1/web/access").catch(() => null) : Promise.resolve(null),
     platformCapabilities().appUpdater === "android" ? Promise.resolve(getAndroidAppUpdateStatus()) : request<AndroidAppUpdateStatus>("/v1/app-update").catch(() => null),
-	platformCapabilities().kind === "server" ? request<ReverseVPNState>("/v1/reverse-vpn").catch(() => null) : Promise.resolve(null),
+	platformCapabilities().kind === "server" ? request<CallServerState>("/v1/call-server").catch(() => null) : Promise.resolve(null),
   ]);
   return {
     status,
@@ -498,7 +491,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     operations,
     access,
     appUpdate,
-	reverseVPN,
+	callServer,
   };
 }
 
@@ -517,26 +510,26 @@ export function loadOperations(): Promise<OperationSnapshot> {
 }
 
 export const actions = {
-	saveReverseVPN(config: ReverseVPNConfig) {
-		return request<{ saved: boolean; config: ReverseVPNConfig }>("/v1/reverse-vpn", { method: "PUT", body: JSON.stringify(config) });
+	saveCallServer(config: Omit<CallServerConfig, "clients" | "invitation_configured"> & { invitation_url?: string }) {
+		return request<{ saved: boolean; config: CallServerConfig }>("/v1/call-server", { method: "PUT", body: JSON.stringify(config) });
 	},
-	setReverseVPNEnabled(enabled: boolean) {
-		return request<{ status: ReverseVPNState["status"] }>(`/v1/reverse-vpn/${enabled ? "apply" : "disable"}`, { method: "POST", body: "{}" });
+	setCallServerEnabled(enabled: boolean) {
+		return request<{ status: CallServerState["status"] }>(`/v1/call-server/${enabled ? "apply" : "disable"}`, { method: "POST", body: "{}" });
 	},
-	createReverseVPNClient(payload: { name: string; expires_at?: number; traffic_limit_bytes?: number }) {
-		return request<{ client: ReverseVPNClient & { private_key: string; subscription_token: string }; subscription_path: string; subscription_url: string }>("/v1/reverse-vpn/clients", { method: "POST", body: JSON.stringify(payload) });
+	createCallServerClient(payload: { name: string; expires_at?: number; traffic_limit_bytes?: number }) {
+		return request<{ client: CallServerClient; subscription_path: string; subscription_url: string }>("/v1/call-server/clients", { method: "POST", body: JSON.stringify(payload) });
 	},
-	updateReverseVPNClient(id: string, payload: { name: string; enabled: boolean; expires_at?: number; traffic_limit_bytes?: number; reset_traffic?: boolean; rotate_token?: boolean }) {
-		return request<{ updated: boolean; client: ReverseVPNClient }>(`/v1/reverse-vpn/clients/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) });
+	updateCallServerClient(id: string, payload: { name: string; enabled: boolean; expires_at?: number; traffic_limit_bytes?: number; reset_traffic?: boolean; rotate_token?: boolean }) {
+		return request<{ updated: boolean; client: CallServerClient }>(`/v1/call-server/clients/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) });
 	},
-	deleteReverseVPNClient(id: string) {
-		return request<{ deleted: boolean }>(`/v1/reverse-vpn/clients/${encodeURIComponent(id)}`, { method: "DELETE", body: "{}" });
+	deleteCallServerClient(id: string) {
+		return request<{ deleted: boolean }>(`/v1/call-server/clients/${encodeURIComponent(id)}`, { method: "DELETE", body: "{}" });
 	},
-	reverseVPNSubscription(id: string) {
-		return request<{ subscription_path: string; subscription_url: string }>(`/v1/reverse-vpn/clients/${encodeURIComponent(id)}/subscription`);
+	callServerSubscription(id: string) {
+		return request<{ subscription_path: string; subscription_url: string }>(`/v1/call-server/clients/${encodeURIComponent(id)}/subscription`);
 	},
-	reverseVPNProfile(id: string) {
-		return request<{ profile: string }>(`/v1/reverse-vpn/clients/${encodeURIComponent(id)}/profile`);
+	callServerProfile(id: string) {
+		return request<{ profile: string }>(`/v1/call-server/clients/${encodeURIComponent(id)}/profile`);
 	},
   setEnabled(enabled: boolean) {
     return request<{ accepted: boolean; enabled: boolean }>(

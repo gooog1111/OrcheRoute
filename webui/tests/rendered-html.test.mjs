@@ -564,16 +564,17 @@ test("light skins keep diagnostics and power controls readable", async () => {
   }
 });
 
-test("inbound VPN reports missing Linux tools and future updates resolve dependencies through APT", async () => {
-  const panel = await readFile(new URL("../app/ui/ReverseVPNPanel.tsx", import.meta.url), "utf8");
-  const updater = await readFile(new URL("../../cmd/orcheroute-self-update/main_linux.go", import.meta.url), "utf8");
-  assert.match(panel, /reverseVPNError\(state\.status\.last_error\)/);
-  assert.match(panel, /sudo apt install wireguard-tools iptables/);
-  assert.match(updater, /return "apt-get", \[\]string\{"install", "--yes", "--no-remove", path\}/);
+test("inbound VPN uses the managed Call Server instead of external WireGuard tools", async () => {
+  const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");
+  const backend = await readFile(new URL("../../internal/callserver/backend_xray_linux.go", import.meta.url), "utf8");
+  assert.match(panel, /callServerError\(state\.status\.last_error\)/);
+  assert.match(panel, /OrcheRoute Call Server/);
+  assert.doesNotMatch(panel, /wireguard-tools|iptables/);
+  assert.match(backend, /xraycore\.StartInstance/);
 });
 
 test("inbound VPN subscription copy works outside the secure Clipboard API", async () => {
-  const panel = await readFile(new URL("../app/ui/ReverseVPNPanel.tsx", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");
   const clipboard = await readFile(new URL("../app/lib/clipboard.ts", import.meta.url), "utf8");
   assert.match(panel, /copyText\(value\.subscription_url/);
   assert.match(panel, /Скопировано/);

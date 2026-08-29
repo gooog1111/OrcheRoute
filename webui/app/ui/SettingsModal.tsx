@@ -37,7 +37,7 @@ import { platformCapabilities } from "../platform/runtime";
 import { ChevronIcon, CloseIcon } from "./Icons";
 import { OperationPanel, type OperationView } from "./OperationPanel";
 import { themes, type ThemeID } from "./theme";
-import { ReverseVPNPanel } from "./ReverseVPNPanel";
+import { CallServerPanel } from "./CallServerPanel";
 
 export type SettingsTab =
   "general" | "appearance" | "access" | "reverse-vpn" | "network" | "routes" | "sources" | "qualification" | "components";
@@ -702,7 +702,7 @@ export function SettingsModal({
               <AppearanceForm theme={theme} onTheme={onTheme} />
             )}
             {activeTab === "access" && <AccessPanel data={data} busy={busy} />}
-            {activeTab === "reverse-vpn" && <ReverseVPNPanel key={JSON.stringify(data?.reverseVPN ?? null)} state={data?.reverseVPN ?? null} interfaces={(data?.interfaces ?? []).filter(item => !item.loopback).map(item => item.name)} busy={busy} run={run} onReload={onReload} />}
+            {activeTab === "reverse-vpn" && <CallServerPanel key={JSON.stringify(data?.callServer ?? null)} state={data?.callServer ?? null} busy={busy} run={run} onReload={onReload} />}
             {activeTab === "network" &&
               (platform.networkEditor === "vpn-service" ? (
                 <AndroidNetworkForm data={data} busy={busy} run={run} />
