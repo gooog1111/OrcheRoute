@@ -13,7 +13,15 @@ Copyright: MetaCubeX contributors
 License: GPL-3.0
  Source: https://github.com/MetaCubeX/mihomo
 
+Files: opt/orcheroute/bin/orcheroute-server
+Copyright: 2026 Ivan Kiselev and OrcheRoute contributors
+ XTLS Xray-core contributors
+License: GPL-3.0 and MPL-2.0
+ The OrcheRoute application is distributed under GPL-3.0. The statically linked
+ Xray Core component remains available under MPL-2.0; its exact version,
+ source URL and license notice are recorded in THIRD_PARTY_NOTICES.md.
+
 Comment:
  vk-turn-proxy and olcRTC are credited as design references in
  /usr/share/doc/orcheroute/THIRD_PARTY_NOTICES.md. Their code is not included in
- the first inbound VPN beta binary.
+ the inbound VPN binary.

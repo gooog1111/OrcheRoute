@@ -25,9 +25,9 @@ func TestDebianPackageStartsControlPlaneWithoutOptionalNftables(t *testing.T) {
 	if !strings.Contains(control, "Recommends: nftables") {
 		t.Fatal("nftables must remain a recommended VPN routing dependency")
 	}
-	for _, dependency := range []string{"wireguard-tools", "iptables"} {
-		if !strings.Contains(control, dependency) {
-			t.Fatalf("inbound VPN dependency %s must be recommended", dependency)
+	for _, obsolete := range []string{"wireguard-tools", "iptables"} {
+		if strings.Contains(control, obsolete) {
+			t.Fatalf("embedded Xray call server must not require legacy %s", obsolete)
 		}
 	}
 }
@@ -82,6 +82,9 @@ func TestDebianPackageContainsLicenseMetadata(t *testing.T) {
 	}
 	if !strings.Contains(string(copyright), "License: GPL-3.0") {
 		t.Fatal("Debian copyright does not declare GPLv3")
+	}
+	if !strings.Contains(string(copyright), "Xray-core contributors") || !strings.Contains(string(copyright), "MPL-2.0") {
+		t.Fatal("Debian copyright does not declare embedded Xray Core and MPL-2.0")
 	}
 	script, err := os.ReadFile(filepath.Join(root, "scripts", "package-linux-server.sh"))
 	if err != nil {

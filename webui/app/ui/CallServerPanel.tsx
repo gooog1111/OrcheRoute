@@ -54,7 +54,7 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 	const ready = Boolean(config.public_endpoint && config.invitation_configured && config.clients.some(client => client.available));
 
 	return <div className="settings-section call-server-settings">
-		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>OrcheRoute Call Server</h3><p>Персональные профили Xray/VLESS поверх транспорта звонка VK. Срок и лимит применяются отдельно к каждому клиенту.</p></div><span className={`reverse-vpn-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
+		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>OrcheRoute Call Server</h3><p>Персональные профили Xray/VLESS поверх транспорта звонка VK. Срок и лимит применяются отдельно к каждому клиенту.</p></div><span className={`call-server-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
 		{state.status.last_error && <p className="inline-feedback error">{callServerError(state.status.last_error)}</p>}
 		<div className="access-panel">
 			<div className="form-grid two">
@@ -75,7 +75,7 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 			</div>
 			<div className="action-bar"><button className="primary-button" type="button" disabled={busy || !name.trim() || !config.public_endpoint || !config.invitation_configured || (Boolean(limitGB) && (!Number.isFinite(Number(limitGB)) || Number(limitGB) < 0))} onClick={() => void create()}>Создать подписку</button></div>
 		</div>
-		<div className="reverse-client-list">
+		<div className="call-client-list">
 			{config.clients.length === 0 ? <p className="empty-state">Клиентов пока нет.</p> : config.clients.map(client => <CallServerClientCard key={client.id} client={client} busy={busy} run={run} onReload={onReload}/>) }
 		</div>
 	</div>;
@@ -98,12 +98,12 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 		window.setTimeout(() => setCopyStatus("idle"), 1800);
 	};
 	const download = async () => { const value = await actions.callServerProfile(client.id); const url = URL.createObjectURL(new Blob([value.profile], { type: "text/plain" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${safeFilename(client.name)}.txt`; anchor.click(); URL.revokeObjectURL(url); };
-	return <details className="reverse-client-card">
+	return <details className="call-client-card">
 		<summary><span className={`node-status ${client.available ? "alive" : ""}`}/><span><strong>{client.name}</strong><small>{formatBytes(client.traffic_used_bytes)}{client.traffic_limit_bytes ? ` из ${formatBytes(client.traffic_limit_bytes)}` : ""}</small></span><em>{client.available ? "Доступен" : "Отключён"}</em></summary>
-		<div className="reverse-client-body">
+		<div className="call-client-body">
 			<div className="form-grid two"><label className="form-field"><span>Имя</span><input value={name} onChange={event => setName(event.target.value)} disabled={busy}/></label><label className="choice-row"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={busy}/><span><strong>Клиент включён</strong></span></label><label className="form-field"><span>Действует до</span><input type="datetime-local" value={expires} onChange={event => setExpires(event.target.value)} disabled={busy}/></label><label className="form-field"><span>Лимит, ГБ</span><input type="number" min={0} step="0.1" value={limitGB} onChange={event => setLimitGB(event.target.value)} disabled={busy}/></label></div>
 			<div className="pool-audit"><div><span>Получено <strong>{formatBytes(client.traffic_rx_bytes)}</strong></span><span>Отправлено <strong>{formatBytes(client.traffic_tx_bytes)}</strong></span><span>Последняя связь <strong>{client.last_seen_at ? new Date(client.last_seen_at * 1000).toLocaleString("ru-RU") : "—"}</strong></span></div></div>
-			<div className="reverse-client-actions"><button type="button" onClick={() => void copy()} disabled={busy}>{copyStatus === "copied" ? "Скопировано" : copyStatus === "error" ? "Ошибка копирования" : "Копировать подписку"}</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>Скачать профиль</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy || !name.trim()}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteCallServerClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
+			<div className="call-client-actions"><button type="button" onClick={() => void copy()} disabled={busy}>{copyStatus === "copied" ? "Скопировано" : copyStatus === "error" ? "Ошибка копирования" : "Копировать подписку"}</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>Скачать профиль</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy || !name.trim()}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteCallServerClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
 		</div>
 	</details>;
 }

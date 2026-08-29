@@ -23,7 +23,6 @@ import (
 	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
 	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/network"
-	"github.com/gooog1111/orcheroute/internal/reversevpn"
 	"github.com/gooog1111/orcheroute/internal/serverstate"
 	"github.com/gooog1111/orcheroute/internal/subscriptions"
 	"golang.org/x/net/proxy"
@@ -60,8 +59,6 @@ func DefaultConfig() Config {
 type Runtime struct {
 	Config                   Config
 	Store                    *serverstate.Store
-	ReverseVPN               *reversevpn.Manager
-	reverseVPNError          string
 	CallServer               *callserver.Manager
 	callServerError          string
 	CallTransport            *callserver.Runtime
@@ -108,12 +105,6 @@ func New(config Config) (*Runtime, error) {
 		return nil, err
 	}
 	runtime := &Runtime{Config: config, Store: store, apiToken: values["api_token"], controllerSecret: values["controller_secret"], client: &http.Client{Timeout: 10 * time.Second}, startedAt: time.Now().Unix()}
-	reverseManager, reverseErr := reversevpn.Open(filepath.Join(config.StateDirectory, "reverse-vpn.json"), platformReverseVPNAdapter(config.StateDirectory))
-	if reverseErr != nil {
-		runtime.reverseVPNError = reverseErr.Error()
-	} else {
-		runtime.ReverseVPN = reverseManager
-	}
 	callManager, callErr := callserver.Open(filepath.Join(config.StateDirectory, "call-server.json"))
 	if callErr != nil {
 		runtime.callServerError = callErr.Error()
@@ -321,23 +312,6 @@ func (runtime *Runtime) ReconcileCallServer(ctx context.Context) {
 			return
 		case <-ticker.C:
 			_ = runtime.CallTransport.Apply(runtime.CallServer)
-		}
-	}
-}
-
-func (runtime *Runtime) ReconcileReverseVPN(ctx context.Context) {
-	if runtime.ReverseVPN == nil {
-		return
-	}
-	_ = runtime.ReverseVPN.Reconcile(ctx)
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			_ = runtime.ReverseVPN.RefreshAccounting(ctx)
 		}
 	}
 }

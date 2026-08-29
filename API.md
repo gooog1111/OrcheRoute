@@ -1645,7 +1645,7 @@ whitelist-пула, принадлежащая соответствующему 
 | Отчёты квалификации | `/var/lib/orcheroute/qualification/` |
 | Геобазы | `/var/lib/orcheroute/GeoIP.dat`, `/var/lib/orcheroute/GeoSite.dat` |
 | Состояние обновления компонентов | `/var/lib/orcheroute/component-operation.json` |
-| Настройки, ключи, лимиты и счётчики входящего VPN | `/var/lib/orcheroute/reverse-vpn.json` |
+| Настройки, ключи, лимиты и счётчики входящего VPN | `/var/lib/orcheroute/call-server.json` |
 | API и контроллер | `orcheroute-go.service` |
 | Mihomo core | `orcheroute-core.service` |
 | Policy routing ролей | `orcheroute-routing.service` |
@@ -1656,27 +1656,31 @@ whitelist-пула, принадлежащая соответствующему 
 
 ## Входящий VPN-сервер (beta)
 
-Модуль отделён от исходящего Mihomo/TUN-профиля. Он выключен при чистой
-установке, использует собственный интерфейс `or-reverse` и не меняет состояние
-обычного VPN-клиента OrcheRoute.
+Модуль отделён от исходящего Mihomo/TUN-профиля и выключен при чистой
+установке. Linux Server запускает встроенный Xray/VLESS на loopback, а внешний
+UDP-тракт использует DTLS → KCP → smux. Клиент получает краткоживущие
+TURN-реквизиты по ссылке-приглашению VK Call.
 
-- `GET /v1/reverse-vpn` — безопасная конфигурация без закрытых ключей и токенов,
-  фактическое состояние интерфейса и возможности сборки;
-- `PUT /v1/reverse-vpn` — сохранить сетевые параметры выключенного сервера;
-- `POST /v1/reverse-vpn/apply` — транзакционно создать или обновить WireGuard;
-- `POST /v1/reverse-vpn/disable` — остановить только входящий VPN;
-- `POST /v1/reverse-vpn/clients` — создать клиента, ключи и секретную ссылку;
-- `PATCH /v1/reverse-vpn/clients/{id}` — изменить имя, состояние, срок, лимит,
+- `GET /v1/call-server` — безопасная конфигурация без приглашения, PSK, UUID и
+  токенов, а также фактическое состояние DTLS/Xray runtime;
+- `PUT /v1/call-server` — сохранить адреса и при необходимости заменить
+  приглашение; отсутствие `invitation_url` сохраняет действующее значение;
+- `POST /v1/call-server/apply` — запустить встроенный Xray и DTLS-транспорт;
+- `POST /v1/call-server/disable` — остановить только входящий VPN;
+- `POST /v1/call-server/clients` — создать клиента и секретную ссылку;
+- `PATCH /v1/call-server/clients/{id}` — изменить имя, состояние, срок, лимит,
   сбросить учёт или заменить токен;
-- `DELETE /v1/reverse-vpn/clients/{id}` — удалить клиента и peer;
-- `GET /v1/reverse-vpn/clients/{id}/subscription` — получить персональный URL;
-- `GET /v1/reverse-vpn/clients/{id}/profile` — получить WireGuard-конфигурацию.
+- `DELETE /v1/call-server/clients/{id}` — удалить и немедленно отозвать клиента;
+- `GET /v1/call-server/clients/{id}/subscription` — получить персональный URL;
+- `GET /v1/call-server/clients/{id}/profile` — получить профиль
+  `orcheroute-call-v1` для импорта в Android.
 
-Публичный `GET /subscription/reverse/{token}` не требует Basic-авторизации:
-сам случайный токен является секретом. Ответ содержит WireGuard-конфигурацию и
-`Subscription-Userinfo` со счётчиками, лимитом и сроком. Публиковать такую ссылку
-следует только через HTTPS. По достижении срока или лимита peer исключается из
-активной конфигурации; накопленные значения сохраняются между перезапусками.
+Публичный `GET /subscription/call/{token}` не требует Basic-авторизации: сам
+случайный токен является секретом. Ответ содержит Call-профиль и
+`Subscription-Userinfo` со счётчиками, лимитом и сроком. Публиковать такую
+ссылку следует только через HTTPS. Xray ведёт раздельные счётчики клиента;
+после достижения срока или лимита его DTLS PSK и VLESS UUID исключаются из
+активной конфигурации, а накопленные значения сохраняются между перезапусками.
 
 ## Важные эксплуатационные правила
 

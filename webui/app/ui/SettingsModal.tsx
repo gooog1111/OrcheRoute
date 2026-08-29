@@ -40,7 +40,7 @@ import { themes, type ThemeID } from "./theme";
 import { CallServerPanel } from "./CallServerPanel";
 
 export type SettingsTab =
-  "general" | "appearance" | "access" | "reverse-vpn" | "network" | "routes" | "sources" | "qualification" | "components";
+  "general" | "appearance" | "access" | "call-server" | "network" | "routes" | "sources" | "qualification" | "components";
 
 type Props = {
   data: DashboardData | null;
@@ -191,7 +191,7 @@ function errorText(reason: unknown) {
 	public_endpoint_required: "Сначала укажите публичный адрес VPN-сервера.",
 	client_expiry_must_be_future: "Срок действия включённого клиента должен быть в будущем.",
 	subscription_inactive: "Подписка отключена, просрочена или исчерпала лимит трафика.",
-	dependency_missing: "Не установлен системный компонент. Выполните: sudo apt install wireguard-tools iptables.",
+	dependency_missing: "Не установлен необходимый системный компонент.",
   };
   if (translations[reason.message]) return translations[reason.message];
   const detailed = Object.entries(translations).find(([code]) =>
@@ -227,7 +227,7 @@ export function SettingsModal({
   const navRef = useRef<HTMLElement | null>(null);
   const tabs = useMemo<SettingsTab[]>(
     () => platform.showAccessSettings
-      ? ["general", "appearance", "access", "reverse-vpn", "network", "routes", "sources", "qualification", "components"]
+      ? ["general", "appearance", "access", "call-server", "network", "routes", "sources", "qualification", "components"]
       : ["general", "appearance", "network", "routes", "sources", "qualification", "components"],
     [platform.showAccessSettings],
   );
@@ -665,7 +665,7 @@ export function SettingsModal({
                 label="Доступ"
               />
             )}
-            {platform.kind === "server" && <Tab active={activeTab === "reverse-vpn"} onClick={() => onTab("reverse-vpn")} label="VPN-сервер" />}
+            {platform.kind === "server" && <Tab active={activeTab === "call-server"} onClick={() => onTab("call-server")} label="VPN-сервер" />}
             <Tab
               active={activeTab === "network"}
               onClick={() => onTab("network")}
@@ -702,7 +702,7 @@ export function SettingsModal({
               <AppearanceForm theme={theme} onTheme={onTheme} />
             )}
             {activeTab === "access" && <AccessPanel data={data} busy={busy} />}
-            {activeTab === "reverse-vpn" && <CallServerPanel key={JSON.stringify(data?.callServer ?? null)} state={data?.callServer ?? null} busy={busy} run={run} onReload={onReload} />}
+            {activeTab === "call-server" && <CallServerPanel key={JSON.stringify(data?.callServer ?? null)} state={data?.callServer ?? null} busy={busy} run={run} onReload={onReload} />}
             {activeTab === "network" &&
               (platform.networkEditor === "vpn-service" ? (
                 <AndroidNetworkForm data={data} busy={busy} run={run} />
