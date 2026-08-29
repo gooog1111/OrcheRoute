@@ -595,3 +595,14 @@ test("android imports a generated Call profile from the shared subscription dial
   assert.match(settings, /orcheroute:vk-call/);
   assert.match(activity, /public void beginVkCallProfile\(String profile\)/);
 });
+
+test("call server builds a domainless route automatically and exports profile QR", async () => {
+  const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");
+  assert.match(api, /call-server\/auto-configure/);
+  assert.match(panel, /Построить тракт/);
+  assert.match(panel, /Домен не требуется/);
+  assert.match(panel, /Файл и QR работают без домена/);
+  assert.match(panel, /QRCode\.toDataURL\(value\.profile/);
+  assert.match(panel, /Показать QR/);
+});

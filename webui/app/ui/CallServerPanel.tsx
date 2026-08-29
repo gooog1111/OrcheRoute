@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import QRCode from "qrcode";
 import { actions, type CallServerClient, type CallServerConfig, type CallServerState } from "../lib/api";
 import { copyText } from "../lib/clipboard";
 
@@ -44,6 +45,13 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 		const enabling = !config.enabled;
 		if (await run(() => actions.setCallServerEnabled(enabling), enabling ? "VPN-сервер запущен." : "VPN-сервер остановлен.", { title: enabling ? "Запускаем VPN-сервер" : "Останавливаем VPN-сервер" })) await onReload();
 	};
+	const autoConfigure = async () => {
+		const result: { current?: Awaited<ReturnType<typeof actions.autoConfigureCallServer>> } = {};
+		const ok = await run(async () => { result.current = await actions.autoConfigureCallServer(window.location.origin); }, "Сетевой тракт построен.", { title: "Определяем сеть и строим тракт" });
+		const detected = result.current;
+		if (!ok || !detected) return;
+		await onReload();
+	};
 	const create = async () => {
 		const expiresAt = expires ? Math.floor(new Date(expires).getTime() / 1000) : undefined;
 		const limit = limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : undefined;
@@ -56,14 +64,21 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 	return <div className="settings-section call-server-settings">
 		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>OrcheRoute Call Server</h3><p>Персональные профили Xray/VLESS поверх транспорта звонка VK. Срок и лимит применяются отдельно к каждому клиенту.</p></div><span className={`call-server-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
 		{state.status.last_error && <p className="inline-feedback error">{callServerError(state.status.last_error)}</p>}
+		<div className="access-panel call-auto-setup">
+			<div className="access-panel-heading"><div><strong>Автоматическая настройка</strong><small>OrcheRoute определит внешний Direct IP и настроит DTLS и встроенный Xray. Домен не требуется.</small></div></div>
+			<div className="action-bar"><button className="primary-button" type="button" disabled={busy || config.enabled} onClick={() => void autoConfigure()}>{config.public_endpoint ? "Перестроить тракт" : "Построить тракт"}</button></div>
+			{config.public_endpoint && <div className="pool-audit"><div><span>Публичный UDP <strong>{config.public_endpoint}</strong></span><span>Передача профиля <strong>{config.subscription_base_url ? "HTTPS-ссылка" : "Файл или QR"}</strong></span></div><small>После запуска этот UDP-порт должен быть разрешён в firewall или проброшен на роутере.</small></div>}
+		</div>
 		<div className="access-panel">
 			<div className="form-grid two">
-				<label className="form-field"><span>Публичный UDP-адрес</span><input value={config.public_endpoint ?? ""} onChange={event => update("public_endpoint", event.target.value)} placeholder="203.0.113.25:4443" disabled={busy}/><small>Внешний IP сервера и проброшенный UDP-порт. DNS-имя здесь не используется.</small></label>
-				<label className="form-field"><span>Адрес подписок</span><input type="url" value={config.subscription_base_url ?? ""} onChange={event => update("subscription_base_url", event.target.value)} placeholder="https://vpn.example.ru" disabled={busy}/><small>Публичный HTTPS-адрес этой панели без пути.</small></label>
-				<label className="form-field"><span>Слушать DTLS</span><input value={config.listen_address} onChange={event => update("listen_address", event.target.value)} placeholder="0.0.0.0:4443" disabled={busy}/></label>
-				<label className="form-field"><span>Локальный VLESS</span><input value={config.backend_address} onChange={event => update("backend_address", event.target.value)} placeholder="127.0.0.1:18443" disabled={busy}/><small>Только loopback-адрес встроенного Xray.</small></label>
 				<label className="form-field form-field-wide"><span>Ссылка-приглашение VK Call</span><input type="url" value={invitation} onChange={event => setInvitation(event.target.value)} placeholder={config.invitation_configured ? "Ссылка уже сохранена; оставьте пустым, чтобы не менять" : "https://vk.com/call/join/..."} disabled={busy}/><small>{config.invitation_configured ? "Действующая ссылка скрыта и не будет очищена при сохранении." : "Используется клиентом для получения краткоживущих TURN-реквизитов."}</small></label>
 			</div>
+			<details className="advanced-settings"><summary>Ручная настройка сети</summary><div className="form-grid two">
+				<label className="form-field"><span>Публичный UDP-адрес</span><input value={config.public_endpoint ?? ""} onChange={event => update("public_endpoint", event.target.value)} placeholder="203.0.113.25:4443" disabled={busy}/><small>Внешний IP сервера и проброшенный UDP-порт.</small></label>
+				<label className="form-field"><span>Адрес подписок</span><input type="url" value={config.subscription_base_url ?? ""} onChange={event => update("subscription_base_url", event.target.value)} placeholder="Необязательно" disabled={busy}/><small>Нужен только для обновляемой HTTPS-ссылки. Файл и QR работают без домена.</small></label>
+				<label className="form-field"><span>Слушать DTLS</span><input value={config.listen_address} onChange={event => update("listen_address", event.target.value)} placeholder="0.0.0.0:4443" disabled={busy}/></label>
+				<label className="form-field"><span>Локальный VLESS</span><input value={config.backend_address} onChange={event => update("backend_address", event.target.value)} placeholder="127.0.0.1:18443" disabled={busy}/></label>
+			</div></details>
 			<div className="action-bar"><button className="secondary-button" type="button" disabled={busy || !changed} onClick={() => void save()}>Сохранить настройки</button><button className={config.enabled ? "danger-button" : "primary-button"} type="button" disabled={busy || changed || (!config.enabled && !ready)} onClick={() => void toggle()}>{config.enabled ? "Остановить сервер" : "Запустить сервер"}</button></div>
 		</div>
 		<div className="access-panel">
@@ -87,6 +102,7 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 	const [expires, setExpires] = useState(client.expires_at ? localDateTime(client.expires_at) : "");
 	const [limitGB, setLimitGB] = useState(client.traffic_limit_bytes ? String(Math.round(client.traffic_limit_bytes / 1024 ** 3 * 10) / 10) : "");
 	const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+	const [profileQR, setProfileQR] = useState("");
 	const payload = (extra: { reset_traffic?: boolean; rotate_token?: boolean } = {}) => ({ name, enabled, expires_at: expires ? Math.floor(new Date(expires).getTime() / 1000) : 0, traffic_limit_bytes: limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : 0, ...extra });
 	const reloadAfter = async (operation: () => Promise<unknown>, message: string, title: string) => { if (await run(operation, message, { title })) await onReload(); };
 	const copy = async () => {
@@ -98,12 +114,18 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 		window.setTimeout(() => setCopyStatus("idle"), 1800);
 	};
 	const download = async () => { const value = await actions.callServerProfile(client.id); const url = URL.createObjectURL(new Blob([value.profile], { type: "text/plain" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${safeFilename(client.name)}.txt`; anchor.click(); URL.revokeObjectURL(url); };
+	const showQR = async () => { const value = await actions.callServerProfile(client.id); setProfileQR(await QRCode.toDataURL(value.profile, { width: 320, margin: 2, errorCorrectionLevel: "M" })); };
 	return <details className="call-client-card">
 		<summary><span className={`node-status ${client.available ? "alive" : ""}`}/><span><strong>{client.name}</strong><small>{formatBytes(client.traffic_used_bytes)}{client.traffic_limit_bytes ? ` из ${formatBytes(client.traffic_limit_bytes)}` : ""}</small></span><em>{client.available ? "Доступен" : "Отключён"}</em></summary>
 		<div className="call-client-body">
 			<div className="form-grid two"><label className="form-field"><span>Имя</span><input value={name} onChange={event => setName(event.target.value)} disabled={busy}/></label><label className="choice-row"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={busy}/><span><strong>Клиент включён</strong></span></label><label className="form-field"><span>Действует до</span><input type="datetime-local" value={expires} onChange={event => setExpires(event.target.value)} disabled={busy}/></label><label className="form-field"><span>Лимит, ГБ</span><input type="number" min={0} step="0.1" value={limitGB} onChange={event => setLimitGB(event.target.value)} disabled={busy}/></label></div>
 			<div className="pool-audit"><div><span>Получено <strong>{formatBytes(client.traffic_rx_bytes)}</strong></span><span>Отправлено <strong>{formatBytes(client.traffic_tx_bytes)}</strong></span><span>Последняя связь <strong>{client.last_seen_at ? new Date(client.last_seen_at * 1000).toLocaleString("ru-RU") : "—"}</strong></span></div></div>
-			<div className="call-client-actions"><button type="button" onClick={() => void copy()} disabled={busy}>{copyStatus === "copied" ? "Скопировано" : copyStatus === "error" ? "Ошибка копирования" : "Копировать подписку"}</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>Скачать профиль</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy || !name.trim()}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteCallServerClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
+			{profileQR && <div className="call-profile-qr">
+				{/* eslint-disable-next-line @next/next/no-img-element */}
+				<img src={profileQR} alt={`QR профиля ${client.name}`}/>
+				<p>Отсканируйте QR в Android OrcheRoute. Не публикуйте его: внутри находятся персональные ключи.</p><button type="button" onClick={() => setProfileQR("")}>Закрыть QR</button>
+			</div>}
+			<div className="call-client-actions"><button type="button" onClick={() => void copy()} disabled={busy}>{copyStatus === "copied" ? "Скопировано" : copyStatus === "error" ? "Ошибка копирования" : "Копировать подписку"}</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>Скачать профиль</button><button type="button" onClick={() => void showQR()} disabled={busy || !client.available}>Показать QR</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy || !name.trim()}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteCallServerClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
 		</div>
 	</details>;
 }

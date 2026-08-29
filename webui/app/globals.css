@@ -189,6 +189,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .call-client-card > summary em { color: var(--muted); font-size: 9px; font-style: normal; text-transform: uppercase; }
 .call-client-body { padding: 14px; display: grid; gap: 14px; border-top: 1px solid var(--line); background: var(--surface); }
 .call-client-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.call-profile-qr { display: grid; justify-items: center; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-soft); text-align: center; }
+.call-profile-qr img { width: min(320px, 100%); height: auto; padding: 8px; border-radius: 12px; background: #fff; image-rendering: pixelated; }
+.call-profile-qr p { max-width: 420px; margin: 0; color: var(--muted); }
+.advanced-settings { margin-top: 14px; }
+.advanced-settings > summary { cursor: pointer; color: var(--muted); font-weight: 700; }
+.advanced-settings[open] > summary { margin-bottom: 14px; }
 .call-client-actions button { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); color: var(--text); cursor: pointer; font-size: 10px; }
 .call-client-actions button:hover:not(:disabled) { border-color: var(--line-strong); }
 .call-client-actions button.danger { border-color: rgba(255,119,110,.28); color: var(--danger); background: rgba(255,119,110,.06); }

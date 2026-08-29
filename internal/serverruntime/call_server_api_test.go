@@ -15,6 +15,7 @@ import (
 	"time"
 
 	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
+	"github.com/gooog1111/orcheroute/internal/core/connectivity"
 )
 
 func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) {
@@ -77,6 +78,59 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 		t.Fatal("embedded call server did not become active")
 	}
 	callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/disable", map[string]any{}, http.StatusOK)
+}
+
+func TestCallServerAutoConfigureUsesDirectIPAndTreatsDomainAsOptional(t *testing.T) {
+	directory := t.TempDir()
+	runtimeEnv := filepath.Join(directory, "runtime.env")
+	if err := os.WriteFile(runtimeEnv, []byte("api_token=test-token\ncontroller_secret=test-secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := DefaultConfig()
+	config.StateDirectory, config.ProductionState = directory, directory
+	config.ConfigDirectory, config.RuntimeEnv = directory, runtimeEnv
+	config.MihomoAPI = "http://127.0.0.1:1"
+	runtime, err := New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	if err := atomicJSON(runtime.identityPath(), IdentitySnapshot{Direct: &connectivity.Identity{IP: "8.8.8.8"}, UpdatedAt: time.Now().Unix()}); err != nil {
+		t.Fatal(err)
+	}
+
+	result := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/auto-configure", map[string]any{"browser_origin": "http://192.168.1.5:19110"}, http.StatusOK)
+	configured := result["config"].(map[string]any)
+	if configured["public_endpoint"] != "8.8.8.8:4443" || configured["listen_address"] != "0.0.0.0:4443" || configured["backend_address"] != "127.0.0.1:18443" {
+		t.Fatalf("unexpected automatic config: %#v", configured)
+	}
+	if value, exists := configured["subscription_base_url"]; exists && value != "" {
+		t.Fatalf("domain must stay optional, got %#v", value)
+	}
+
+	httpsResult := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/auto-configure", map[string]any{"browser_origin": "https://vpn.example/settings?ignored=1"}, http.StatusOK)
+	httpsConfig := httpsResult["config"].(map[string]any)
+	if httpsConfig["subscription_base_url"] != "https://vpn.example" {
+		t.Fatalf("HTTPS origin was not normalized: %#v", httpsConfig)
+	}
+	preserved := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/auto-configure", map[string]any{"browser_origin": "http://192.168.1.5:19110"}, http.StatusOK)
+	if preserved["config"].(map[string]any)["subscription_base_url"] != "https://vpn.example" {
+		t.Fatalf("LAN setup erased an existing HTTPS address: %#v", preserved)
+	}
+	if err := atomicJSON(runtime.identityPath(), IdentitySnapshot{Direct: &connectivity.Identity{IP: "8.8.8.8"}, UpdatedAt: time.Now().Add(-3 * time.Minute).Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	stale := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/auto-configure", map[string]any{}, http.StatusConflict)
+	if stale["error"] != "call_server_direct_ip_stale" {
+		t.Fatalf("stale Direct IP was accepted: %#v", stale)
+	}
+	if err := atomicJSON(runtime.identityPath(), IdentitySnapshot{Direct: &connectivity.Identity{IP: "192.168.1.10"}, UpdatedAt: time.Now().Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	rejected := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/auto-configure", map[string]any{}, http.StatusConflict)
+	if rejected["error"] != "call_server_direct_ip_not_public" {
+		t.Fatalf("private Direct IP was not rejected: %#v", rejected)
+	}
 }
 
 func callServerAPI(t *testing.T, runtime *Runtime, method, path string, body any, expected int) map[string]any {

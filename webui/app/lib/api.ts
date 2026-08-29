@@ -276,6 +276,15 @@ export type CallServerState = {
 	capabilities: { transport: string; profile: string; backend: string; beta: boolean };
 };
 
+export type CallServerAutoConfigResult = {
+	configured: boolean;
+	config: CallServerConfig;
+	source: string;
+	public_ip: string;
+	udp_port: string;
+	warnings: string[];
+};
+
 export type OperationSnapshot = {
   subscription_update: {
     status: "idle" | "queued" | "running" | "cancelling" | "cancelled" | "success" | "warning" | "error";
@@ -522,6 +531,9 @@ export function loadOperations(): Promise<OperationSnapshot> {
 }
 
 export const actions = {
+	autoConfigureCallServer(browserOrigin: string) {
+		return request<CallServerAutoConfigResult>("/v1/call-server/auto-configure", { method: "POST", body: JSON.stringify({ browser_origin: browserOrigin }) });
+	},
 	saveCallServer(config: Omit<CallServerConfig, "clients" | "invitation_configured"> & { invitation_url?: string }) {
 		return request<{ saved: boolean; config: CallServerConfig }>("/v1/call-server", { method: "PUT", body: JSON.stringify(config) });
 	},

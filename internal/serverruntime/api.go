@@ -277,6 +277,8 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			}
 			return 201, map[string]any{"client": client.PublicAt(time.Now()), "subscription_path": "/subscription/call/" + client.SubscriptionToken,
 				"subscription_url": runtime.CallServer.SubscriptionURL(client.SubscriptionToken), "warning": "subscription_token_is_secret"}
+		case path == "/v1/call-server/auto-configure":
+			return runtime.autoConfigureCallServer(body)
 		case path == "/v1/call-server/apply":
 			if runtime.CallServer == nil || runtime.CallTransport == nil {
 				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
