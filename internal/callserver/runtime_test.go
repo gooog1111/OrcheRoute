@@ -11,7 +11,19 @@ import (
 
 type testBackend struct {
 	listener net.Listener
+	run      *testBackendRun
 	starts   int
+}
+
+type testBackendRun struct {
+	net.Listener
+	traffic map[string]Traffic
+}
+
+func (running *testBackendRun) DrainTraffic() map[string]Traffic {
+	result := running.traffic
+	running.traffic = map[string]Traffic{}
+	return result
 }
 
 func (backend *testBackend) Start(_ context.Context, address string, _ []callxray.Client) (io.Closer, error) {
@@ -20,8 +32,9 @@ func (backend *testBackend) Start(_ context.Context, address string, _ []callxra
 		return nil, err
 	}
 	backend.listener = listener
+	backend.run = &testBackendRun{Listener: listener, traffic: map[string]Traffic{}}
 	backend.starts++
-	return listener, nil
+	return backend.run, nil
 }
 
 func TestRuntimeAppliesAndStopsConfiguredRegistry(t *testing.T) {
@@ -32,7 +45,8 @@ func TestRuntimeAppliesAndStopsConfiguredRegistry(t *testing.T) {
 	if _, err := manager.UpdateConfig(config); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := manager.CreateClient(CreateClientInput{Name: "Phone"}); err != nil {
+	client, err := manager.CreateClient(CreateClientInput{Name: "Phone"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := manager.SetEnabled(true); err != nil {
@@ -49,6 +63,14 @@ func TestRuntimeAppliesAndStopsConfiguredRegistry(t *testing.T) {
 	}
 	if err := runtime.Apply(manager); err != nil || backend.starts != 1 {
 		t.Fatalf("unchanged runtime restarted: starts=%d err=%v", backend.starts, err)
+	}
+	backend.run.traffic[client.ID] = Traffic{RXBytes: 60, TXBytes: 40}
+	if err := runtime.Apply(manager); err != nil || backend.starts != 1 {
+		t.Fatalf("traffic sync restarted runtime: starts=%d err=%v", backend.starts, err)
+	}
+	public := manager.PublicConfig().Clients[0]
+	if public.TrafficRXBytes != 60 || public.TrafficTXBytes != 40 || public.LastSeenAt == 0 {
+		t.Fatalf("runtime traffic was not persisted: %#v", public)
 	}
 	if _, err := manager.SetEnabled(false); err != nil {
 		t.Fatal(err)

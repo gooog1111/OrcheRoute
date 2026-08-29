@@ -15,7 +15,9 @@ import (
 	_ "github.com/xtls/xray-core/app/policy"
 	_ "github.com/xtls/xray-core/app/proxyman/inbound"
 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
+	_ "github.com/xtls/xray-core/app/stats"
 	xraycore "github.com/xtls/xray-core/core"
+	xraystats "github.com/xtls/xray-core/features/stats"
 	_ "github.com/xtls/xray-core/main/json"
 	_ "github.com/xtls/xray-core/proxy/blackhole"
 	_ "github.com/xtls/xray-core/proxy/freedom"
@@ -25,6 +27,40 @@ import (
 )
 
 type EmbeddedXrayBackend struct{}
+
+type embeddedXrayRuntime struct {
+	instance *xraycore.Instance
+	stats    xraystats.Manager
+	clients  []string
+}
+
+func (runtime *embeddedXrayRuntime) Close() error { return runtime.instance.Close() }
+
+func (runtime *embeddedXrayRuntime) DrainTraffic() map[string]Traffic {
+	result := make(map[string]Traffic, len(runtime.clients))
+	for _, id := range runtime.clients {
+		uplink := runtime.stats.GetCounter("user>>>" + id + ">>>traffic>>>uplink")
+		downlink := runtime.stats.GetCounter("user>>>" + id + ">>>traffic>>>downlink")
+		traffic := Traffic{}
+		if uplink != nil {
+			traffic.RXBytes = positiveBytes(uplink.Set(0))
+		}
+		if downlink != nil {
+			traffic.TXBytes = positiveBytes(downlink.Set(0))
+		}
+		if traffic.RXBytes != 0 || traffic.TXBytes != 0 {
+			result[id] = traffic
+		}
+	}
+	return result
+}
+
+func positiveBytes(value int64) uint64 {
+	if value <= 0 {
+		return 0
+	}
+	return uint64(value)
+}
 
 func (EmbeddedXrayBackend) Start(_ context.Context, address string, clients []callxray.Client) (io.Closer, error) {
 	host, portValue, err := net.SplitHostPort(address)
@@ -43,5 +79,14 @@ func (EmbeddedXrayBackend) Start(_ context.Context, address string, clients []ca
 	if err != nil {
 		return nil, fmt.Errorf("call_server_xray_start: %w", err)
 	}
-	return instance, nil
+	manager, ok := instance.GetFeature(xraystats.ManagerType()).(xraystats.Manager)
+	if !ok {
+		_ = instance.Close()
+		return nil, fmt.Errorf("call_server_xray_stats_unavailable")
+	}
+	ids := make([]string, 0, len(clients))
+	for _, client := range clients {
+		ids = append(ids, client.Email)
+	}
+	return &embeddedXrayRuntime{instance: instance, stats: manager, clients: ids}, nil
 }

@@ -41,7 +41,11 @@ func ServerConfig(input ServerInput) ([]byte, error) {
 		clients = append(clients, map[string]any{"id": id, "email": strings.TrimSpace(client.Email)})
 	}
 	config := map[string]any{
-		"log": map[string]any{"loglevel": "warning"},
+		"log":   map[string]any{"loglevel": "warning"},
+		"stats": map[string]any{},
+		"policy": map[string]any{"levels": map[string]any{
+			"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true},
+		}},
 		"inbounds": []any{map[string]any{
 			"tag": "orcheroute-call-in", "listen": input.ListenAddress, "port": input.ListenPort, "protocol": "vless",
 			"settings":       map[string]any{"clients": clients, "decryption": "none"},

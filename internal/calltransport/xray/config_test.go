@@ -24,6 +24,10 @@ func TestServerConfigBuildsLoopbackVLESSInbound(t *testing.T) {
 	if stream["security"] != "none" || stream["network"] != "tcp" {
 		t.Fatalf("unexpected stream settings: %#v", stream)
 	}
+	level := config["policy"].(map[string]any)["levels"].(map[string]any)["0"].(map[string]any)
+	if config["stats"] == nil || level["statsUserUplink"] != true || level["statsUserDownlink"] != true {
+		t.Fatalf("per-client traffic accounting is disabled: %#v", config)
+	}
 }
 
 func TestMihomoProxyTargetsOnlyLocalCarrier(t *testing.T) {

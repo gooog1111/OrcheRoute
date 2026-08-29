@@ -17,6 +17,15 @@ type Backend interface {
 	Start(context.Context, string, []callxray.Client) (io.Closer, error)
 }
 
+type Traffic struct {
+	RXBytes uint64
+	TXBytes uint64
+}
+
+type trafficReporter interface {
+	DrainTraffic() map[string]Traffic
+}
+
 type RuntimeStatus struct {
 	Active         bool   `json:"active"`
 	ListenAddress  string `json:"listen_address,omitempty"`
@@ -49,12 +58,15 @@ func (runtime *Runtime) Apply(manager *Manager) error {
 	if manager == nil {
 		return fmt.Errorf("call_server_manager_required")
 	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	if err := runtime.syncTrafficLocked(manager); err != nil {
+		return err
+	}
 	snapshot, err := manager.RuntimeSnapshot()
 	if err != nil {
 		return err
 	}
-	runtime.mu.Lock()
-	defer runtime.mu.Unlock()
 	if reflect.DeepEqual(runtime.snapshot, snapshot) && runtime.status.Active == snapshot.Enabled {
 		return nil
 	}
@@ -67,6 +79,27 @@ func (runtime *Runtime) Apply(manager *Manager) error {
 	if err := runtime.startLocked(snapshot); err != nil {
 		runtime.status.LastError = err.Error()
 		return err
+	}
+	return nil
+}
+
+func (runtime *Runtime) syncTrafficLocked(manager *Manager) error {
+	reporter, ok := runtime.backendRun.(trafficReporter)
+	if !ok {
+		return nil
+	}
+	known := make(map[string]bool)
+	for _, client := range manager.PublicConfig().Clients {
+		known[client.ID] = true
+	}
+	now := time.Now().Unix()
+	for id, traffic := range reporter.DrainTraffic() {
+		if !known[id] || (traffic.RXBytes == 0 && traffic.TXBytes == 0) {
+			continue
+		}
+		if err := manager.RecordTraffic(context.Background(), id, traffic.RXBytes, traffic.TXBytes, now); err != nil {
+			return err
+		}
 	}
 	return nil
 }
