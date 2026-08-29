@@ -102,6 +102,7 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 	const [expires, setExpires] = useState(client.expires_at ? localDateTime(client.expires_at) : "");
 	const [limitGB, setLimitGB] = useState(client.traffic_limit_bytes ? String(Math.round(client.traffic_limit_bytes / 1024 ** 3 * 10) / 10) : "");
 	const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+	const [downloadStatus, setDownloadStatus] = useState<"idle" | "started" | "error">("idle");
 	const [profileQR, setProfileQR] = useState("");
 	const payload = (extra: { reset_traffic?: boolean; rotate_token?: boolean } = {}) => ({ name, enabled, expires_at: expires ? Math.floor(new Date(expires).getTime() / 1000) : 0, traffic_limit_bytes: limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : 0, ...extra });
 	const reloadAfter = async (operation: () => Promise<unknown>, message: string, title: string) => { if (await run(operation, message, { title })) await onReload(); };
@@ -113,7 +114,24 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 		} catch { setCopyStatus("error"); }
 		window.setTimeout(() => setCopyStatus("idle"), 1800);
 	};
-	const download = async () => { const value = await actions.callServerProfile(client.id); const url = URL.createObjectURL(new Blob([value.profile], { type: "text/plain" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${safeFilename(client.name)}.txt`; anchor.click(); URL.revokeObjectURL(url); };
+	const download = async () => {
+		try {
+			const value = await actions.callServerProfile(client.id);
+			const url = URL.createObjectURL(new Blob([value.profile], { type: "text/plain;charset=utf-8" }));
+			const anchor = document.createElement("a");
+			anchor.href = url;
+			anchor.download = `${safeFilename(client.name)}.txt`;
+			anchor.hidden = true;
+			document.body.appendChild(anchor);
+			anchor.click();
+			window.setTimeout(() => { anchor.remove(); URL.revokeObjectURL(url); }, 1000);
+			setDownloadStatus("started");
+			window.setTimeout(() => setDownloadStatus("idle"), 1800);
+		} catch {
+			setDownloadStatus("error");
+			window.setTimeout(() => setDownloadStatus("idle"), 3000);
+		}
+	};
 	const showQR = async () => { const value = await actions.callServerProfile(client.id); setProfileQR(await QRCode.toDataURL(value.profile, { width: 320, margin: 2, errorCorrectionLevel: "M" })); };
 	return <details className="call-client-card">
 		<summary><span className={`node-status ${client.available ? "alive" : ""}`}/><span><strong>{client.name}</strong><small>{formatBytes(client.traffic_used_bytes)}{client.traffic_limit_bytes ? ` из ${formatBytes(client.traffic_limit_bytes)}` : ""}</small></span><em>{client.available ? "Доступен" : "Отключён"}</em></summary>
@@ -125,7 +143,7 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 				<img src={profileQR} alt={`QR профиля ${client.name}`}/>
 				<p>Отсканируйте QR в Android OrcheRoute. Не публикуйте его: внутри находятся персональные ключи.</p><button type="button" onClick={() => setProfileQR("")}>Закрыть QR</button>
 			</div>}
-			<div className="call-client-actions"><button type="button" onClick={() => void copy()} disabled={busy}>{copyStatus === "copied" ? "Скопировано" : copyStatus === "error" ? "Ошибка копирования" : "Копировать подписку"}</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>Скачать профиль</button><button type="button" onClick={() => void showQR()} disabled={busy || !client.available}>Показать QR</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy || !name.trim()}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteCallServerClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
+			<div className="call-client-actions"><button type="button" onClick={() => void copy()} disabled={busy}>{copyStatus === "copied" ? "Скопировано" : copyStatus === "error" ? "Ошибка копирования" : "Копировать подписку"}</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>{downloadStatus === "started" ? "Скачивание начато" : downloadStatus === "error" ? "Ошибка скачивания" : "Скачать профиль"}</button><button type="button" onClick={() => void showQR()} disabled={busy || !client.available}>Показать QR</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy || !name.trim()}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteCallServerClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
 		</div>
 	</details>;
 }

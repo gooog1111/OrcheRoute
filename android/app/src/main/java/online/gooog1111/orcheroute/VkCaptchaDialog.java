@@ -15,6 +15,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -61,8 +62,10 @@ final class VkCaptchaDialog {
     private final FrameLayout parent;
     private final Callback callback;
     private final AtomicBoolean finished = new AtomicBoolean();
+    private final AtomicBoolean submitting = new AtomicBoolean();
     private FrameLayout overlay;
     private WebView webView;
+    private TextView status;
 
     VkCaptchaDialog(Activity activity, FrameLayout parent, Callback callback) {
         this.activity = activity;
@@ -80,6 +83,7 @@ final class VkCaptchaDialog {
         if (!allowedCaptchaURL(uri)) return false;
         close(false);
         finished.set(false);
+        submitting.set(false);
 
         overlay = new FrameLayout(activity);
         overlay.setBackgroundColor(Color.rgb(15, 18, 20));
@@ -112,6 +116,18 @@ final class VkCaptchaDialog {
         int margin = Math.round(12 * activity.getResources().getDisplayMetrics().density);
         closeLayout.setMargins(margin, margin, margin, margin);
         overlay.addView(close, closeLayout);
+
+        status = new TextView(activity);
+        status.setTextColor(Color.WHITE);
+        status.setBackgroundColor(Color.argb(220, 28, 32, 35));
+        status.setPadding(margin, margin, margin, margin);
+        status.setVisibility(View.GONE);
+        FrameLayout.LayoutParams statusLayout = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM
+        );
+        overlay.addView(status, statusLayout);
         parent.addView(overlay, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -126,6 +142,7 @@ final class VkCaptchaDialog {
         WebView oldWebView = webView;
         overlay = null;
         webView = null;
+        status = null;
         parent.removeView(oldOverlay);
         if (oldWebView != null) {
             oldWebView.stopLoading();
@@ -133,6 +150,25 @@ final class VkCaptchaDialog {
             oldWebView.destroy();
         }
         if (notify && finished.compareAndSet(false, true)) callback.onCancel();
+    }
+
+    void complete() {
+        if (!isOpen()) return;
+        finished.set(true);
+        close(false);
+    }
+
+    void submissionFailed(String message) {
+        activity.runOnUiThread(() -> {
+            if (!isOpen()) return;
+            submitting.set(false);
+            if (status != null) {
+                status.setText(message == null || message.isBlank()
+                        ? "VK не принял подтверждение. Попробуйте ещё раз."
+                        : message + " Попробуйте ещё раз.");
+                status.setVisibility(View.VISIBLE);
+            }
+        });
     }
 
     private static boolean allowedCaptchaURL(Uri uri) {
@@ -154,8 +190,11 @@ final class VkCaptchaDialog {
                 if (!isOpen() || token == null || token.length() < 16 || token.length() > 8192) return;
                 Uri current = Uri.parse(webView == null ? "" : webView.getUrl());
                 if (!"id.vk.ru".equalsIgnoreCase(current.getHost())) return;
-                if (!finished.compareAndSet(false, true)) return;
-                close(false);
+                if (!submitting.compareAndSet(false, true)) return;
+                if (status != null) {
+                    status.setText("Проверяем подтверждение VK…");
+                    status.setVisibility(View.VISIBLE);
+                }
                 callback.onSuccess(token);
             });
         }
@@ -173,6 +212,7 @@ final class VkCaptchaDialog {
         public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (!request.isForMainFrame()) return;
             String message = error == null ? "Не удалось открыть VK CAPTCHA." : String.valueOf(error.getDescription());
+            submissionFailed(message);
             callback.onError(message);
         }
     }

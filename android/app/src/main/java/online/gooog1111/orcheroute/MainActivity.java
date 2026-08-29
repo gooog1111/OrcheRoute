@@ -401,6 +401,10 @@ public final class MainActivity extends ComponentActivity {
         return value;
     }
 
+    private synchronized PendingVkChallenge peekPendingVkChallenge() {
+        return new PendingVkChallenge(pendingVkChallengeID, pendingVkProfileMode);
+    }
+
     private synchronized void replacePendingVkChallenge(String value, boolean profileMode) {
         if (!pendingVkChallengeID.isEmpty()) Mobilecore.cancelVKCallCredentials(pendingVkChallengeID);
         pendingVkChallengeID = value == null ? "" : value;
@@ -416,7 +420,7 @@ public final class MainActivity extends ComponentActivity {
     }
 
     private void continueVkCall(String successToken) {
-        PendingVkChallenge challenge = takePendingVkChallenge();
+        PendingVkChallenge challenge = peekPendingVkChallenge();
         if (challenge.id.isEmpty()) {
             dispatchVkCall("error", "Сессия VK CAPTCHA уже завершена.", "");
             return;
@@ -431,7 +435,9 @@ public final class MainActivity extends ComponentActivity {
             JSONObject envelope = new JSONObject(raw);
             if (!envelope.optBoolean("ok")) {
                 JSONObject error = envelope.optJSONObject("error");
-                dispatchVkCall("error", error == null ? "Не удалось подключиться к VK звонку." : error.optString("error", "Ошибка VK"), "");
+                String message = error == null ? "Не удалось подключиться к VK звонку." : error.optString("error", "Ошибка VK");
+                if (vkCaptchaDialog != null && vkCaptchaDialog.isOpen()) vkCaptchaDialog.submissionFailed(message);
+                dispatchVkCall("error", message, "");
                 return;
             }
             JSONObject result = envelope.getJSONObject("result");
@@ -452,6 +458,8 @@ public final class MainActivity extends ComponentActivity {
                 return;
             }
             if ("ready".equals(status)) {
+                takePendingVkChallenge();
+                runOnUiThread(() -> { if (vkCaptchaDialog != null) vkCaptchaDialog.complete(); });
                 String credentialID = result.optString("credential_id");
                 if (profileMode) {
                     handleVkCarrierResult(Mobilecore.startVKCallProfileCarrier(credentialID, "127.0.0.1:0"));

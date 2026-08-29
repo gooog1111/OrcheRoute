@@ -100,7 +100,6 @@ func ContinueVKCallCredentials(challengeID, successToken string) string {
 	vkCallFlows.Lock()
 	cleanupVKFlowsLocked(now)
 	flow, ok := vkCallFlows.pending[challengeID]
-	delete(vkCallFlows.pending, challengeID)
 	vkCallFlows.Unlock()
 	if !ok || !now.Before(flow.expiresAt) {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": "call_transport_vk_challenge_expired"}})
@@ -111,6 +110,9 @@ func ContinueVKCallCredentials(challengeID, successToken string) string {
 	if err != nil {
 		return encode(map[string]any{"ok": false, "error": map[string]string{"error": err.Error()}})
 	}
+	vkCallFlows.Lock()
+	delete(vkCallFlows.pending, challengeID)
+	vkCallFlows.Unlock()
 	return storeReadyVK(credentials, flow.profile)
 }
 
