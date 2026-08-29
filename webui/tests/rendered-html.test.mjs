@@ -584,15 +584,16 @@ test("inbound VPN subscription copy works outside the secure Clipboard API", asy
   assert.match(clipboard, /setSelectionRange\(0, field\.value\.length\)/);
 });
 
-test("android imports a generated Call profile from the shared subscription dialog", async () => {
+test("Call profiles are saved as ordinary vkcall server sources before activation", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
   assert.match(api, /beginVkCallProfile\?: \(profile: string\) => void/);
   assert.match(api, /bridge\.beginVkCallProfile\(profile\)/);
   assert.match(settings, /\^orcheroute:\\\/\\\/call\\\//);
-  assert.match(settings, /Подключить профиль/);
-  assert.match(settings, /orcheroute:vk-call/);
+  assert.match(settings, /proxyLinkPattern\.test\(value\) \|\| callProfilePattern\.test\(value\)/);
+  assert.doesNotMatch(settings, /Подключить профиль/);
+  assert.doesNotMatch(settings, /if \(callProfile\) \{\s*setScanError/);
   assert.match(activity, /public void beginVkCallProfile\(String profile\)/);
 });
 

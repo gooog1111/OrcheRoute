@@ -14,14 +14,12 @@ import QRCode from "qrcode";
 import {
   actions,
   canOpenTextFile,
-  canImportCallProfile,
   canScanQr,
   checkAndroidAppUpdate,
   dismissAndroidKeyboard,
   getAndroidAppUpdateStatus,
   getServerAppUpdateStatus,
   installAndroidAppUpdate,
-  importCallProfile,
   loadOperations,
   openTextFile,
   saveTextFile,
@@ -3588,6 +3586,7 @@ type SubscriptionPayload = {
 };
 const proxyLinkPattern =
   /^(vless|vmess|trojan|ss|hysteria2|hy2|wireguard|wg|amneziawg|awg):\/\//i;
+const callProfilePattern = /^orcheroute:\/\/call\//i;
 const subscriptionURLPattern = /^https?:\/\//i;
 const wireGuardConfigPattern = /\[\s*interface\s*\][\s\S]*\[\s*peer\s*\]/i;
 const blackTempleSchemePattern = /^blacktemple:\/\//i;
@@ -3664,12 +3663,14 @@ function prepareSubscriptionImport(
     };
   }
   if (parser === "inline") {
-    const raw = lines(trimmed).filter((value) => proxyLinkPattern.test(value));
+    const raw = lines(trimmed).filter(
+      (value) => proxyLinkPattern.test(value) || callProfilePattern.test(value),
+    );
     const decoded = raw.length
       ? raw
-      : lines(decodePossibleBase64(trimmed)).filter((value) =>
-          proxyLinkPattern.test(value),
-        );
+        : lines(decodePossibleBase64(trimmed)).filter(
+            (value) => proxyLinkPattern.test(value) || callProfilePattern.test(value),
+          );
     const unique = [...new Set(decoded)];
     return {
       payloads: unique.length
@@ -3695,10 +3696,12 @@ function prepareSubscriptionImport(
       inputLines.filter((value) => subscriptionURLPattern.test(value)),
     ),
   ];
-  let servers = inputLines.filter((value) => proxyLinkPattern.test(value));
+  let servers = inputLines.filter(
+    (value) => proxyLinkPattern.test(value) || callProfilePattern.test(value),
+  );
   if (!urls.length && !servers.length)
-    servers = lines(decodePossibleBase64(trimmed)).filter((value) =>
-      proxyLinkPattern.test(value),
+    servers = lines(decodePossibleBase64(trimmed)).filter(
+      (value) => proxyLinkPattern.test(value) || callProfilePattern.test(value),
     );
   const uniqueServers = [...new Set(servers)];
   const duplicateCount =
@@ -3765,7 +3768,6 @@ function SubscriptionEditor({
   );
   const [loadingSecret, setLoadingSecret] = useState(Boolean(item));
   const [scanError, setScanError] = useState("");
-  const [callStatus, setCallStatus] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!item) return;
@@ -3795,28 +3797,15 @@ function SubscriptionEditor({
       const message = (event as CustomEvent<{ message?: string }>).detail?.message;
       setScanError(message || "Не удалось прочитать выбранный файл.");
     };
-    const receiveCallStatus = (event: Event) => {
-      const detail = (event as CustomEvent<{ status?: string; message?: string }>).detail;
-      const message = detail?.message || "Состояние Call-транспорта изменилось.";
-      if (detail?.status === "error" || detail?.status === "cancel") {
-        setCallStatus("");
-        setScanError(message);
-        return;
-      }
-      setScanError("");
-      setCallStatus(message);
-    };
     window.addEventListener("orcheroute:qr-scan", receive);
     window.addEventListener("orcheroute:qr-error", fail);
     window.addEventListener("orcheroute:file-open", receiveFile);
     window.addEventListener("orcheroute:file-open-error", failFile);
-    window.addEventListener("orcheroute:vk-call", receiveCallStatus);
     return () => {
       window.removeEventListener("orcheroute:qr-scan", receive);
       window.removeEventListener("orcheroute:qr-error", fail);
       window.removeEventListener("orcheroute:file-open", receiveFile);
       window.removeEventListener("orcheroute:file-open-error", failFile);
-      window.removeEventListener("orcheroute:vk-call", receiveCallStatus);
     };
   }, []);
   const preview = useMemo(
@@ -3831,17 +3820,8 @@ function SubscriptionEditor({
       ),
     [group, interval, item?.enabled, name, secret],
   );
-  const callProfile = !item && /^orcheroute:\/\/call\//i.test(secret.trim());
+  const callProfile = !item && callProfilePattern.test(secret.trim());
   const submit = () => {
-    if (callProfile) {
-      setScanError("");
-      setCallStatus("Подключаем профиль OrcheRoute Call…");
-      if (!importCallProfile(secret.trim())) {
-        setCallStatus("");
-        setScanError("Импорт OrcheRoute Call доступен только в Android-приложении.");
-      }
-      return;
-    }
     void onSave(item ? preview.payloads.slice(0, 1) : preview.payloads);
   };
   const paste = async () => setSecret(await navigator.clipboard.readText());
@@ -3977,7 +3957,6 @@ function SubscriptionEditor({
             </div>
           )}
           {scanError && <div className="inline-feedback error">{scanError}</div>}
-          {callStatus && <div className="inline-feedback success">{callStatus}</div>}
         </div>
         <footer>
           <button className="secondary-button" type="button" onClick={onCancel}>
@@ -3990,14 +3969,11 @@ function SubscriptionEditor({
               busy ||
               loadingSecret ||
               !secret.trim() ||
-              (!preview.payloads.length && !callProfile) ||
-              (callProfile && !canImportCallProfile())
+              !preview.payloads.length
             }
             onClick={submit}
           >
-            {callProfile
-              ? "Подключить профиль"
-              : item
+            {item
               ? "Сохранить"
               : `Добавить${preview.payloads.length > 1 ? ` · ${preview.payloads.length}` : ""}`}
           </button>

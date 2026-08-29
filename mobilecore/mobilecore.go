@@ -38,7 +38,7 @@ func Capabilities() string {
 		"qualification_policy":   true,
 		"whitelist_pool":         true,
 		"connectivity_automaton": true,
-		"share_protocols":        []string{"vless", "vmess", "trojan", "ss"},
+		"share_protocols":        []string{"vless", "vmess", "trojan", "ss", "vkcall"},
 	}})
 }
 

@@ -42,7 +42,7 @@ func IsShareLink(value string) bool {
 	lower := strings.ToLower(strings.TrimSpace(value))
 	for _, prefix := range []string{
 		"vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "hy2://",
-		"wireguard://", "wg://", "amneziawg://", "awg://",
+		"wireguard://", "wg://", "amneziawg://", "awg://", "orcheroute://call/",
 	} {
 		if strings.HasPrefix(lower, prefix) {
 			return true

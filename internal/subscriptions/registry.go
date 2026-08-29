@@ -189,7 +189,7 @@ func Decode(body []byte) []string {
 	for _, raw := range strings.Split(text, "\n") {
 		line := strings.ReplaceAll(strings.TrimSpace(strings.TrimSuffix(raw, "\r")), "&amp;", "&")
 		lower := strings.ToLower(line)
-		for _, prefix := range []string{"vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "hy2://", "wireguard://", "wg://", "amneziawg://", "awg://"} {
+		for _, prefix := range []string{"vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "hy2://", "wireguard://", "wg://", "amneziawg://", "awg://", "orcheroute://call/"} {
 			if strings.HasPrefix(lower, prefix) {
 				result = append(result, line)
 				break

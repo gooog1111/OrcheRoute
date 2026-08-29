@@ -12,6 +12,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
 )
 
 var controlRE = regexp.MustCompile(`[\x00-\x1f\x7f]`)
@@ -85,9 +88,34 @@ func ParseLink(link, source string, index int) (map[string]any, error) {
 		return parseHysteria2(link, source, index)
 	case "wireguard", "wg", "amneziawg", "awg":
 		return parseWireGuard(link, source, index)
+	case "orcheroute":
+		return parseVKCall(link, source, index)
 	default:
 		return nil, fmt.Errorf("unsupported protocol")
 	}
+}
+
+func parseVKCall(link, source string, index int) (map[string]any, error) {
+	profile, err := callprofile.Decode(link, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	host, portValue, err := net.SplitHostPort(profile.PeerAddress)
+	if err != nil {
+		return nil, fmt.Errorf("invalid vkcall peer")
+	}
+	port, err := strconv.Atoi(portValue)
+	if err != nil {
+		return nil, fmt.Errorf("invalid vkcall peer")
+	}
+	label := profile.Name
+	if label == "" {
+		label = "VK Call"
+	}
+	return map[string]any{
+		"name": name(source, index, label), "type": "vkcall",
+		"server": host, "port": port, "udp": true, "profile": link,
+	}, nil
 }
 
 func parseWireGuard(link, source string, index int) (map[string]any, error) {

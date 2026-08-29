@@ -26,8 +26,8 @@ func TestValidateFields(t *testing.T) {
 }
 
 func TestDecodePlainAndBase64(t *testing.T) {
-	body := "ignored\nVLESS://id@example.test:443?x=1&amp;y=2\nss://abc\n"
-	want := []string{"VLESS://id@example.test:443?x=1&y=2", "ss://abc"}
+	body := "ignored\nVLESS://id@example.test:443?x=1&amp;y=2\nss://abc\norcheroute://call/profile\n"
+	want := []string{"VLESS://id@example.test:443?x=1&y=2", "ss://abc", "orcheroute://call/profile"}
 	if got := Decode([]byte(body)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("plain: %#v", got)
 	}

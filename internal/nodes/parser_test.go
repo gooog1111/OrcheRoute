@@ -3,7 +3,11 @@ package nodes
 import (
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
+
+	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
 )
 
 func TestSupportedProtocolLinks(t *testing.T) {
@@ -47,6 +51,34 @@ func TestHysteria2Fields(t *testing.T) {
 	proxy, err := ParseLink("hysteria2://password@example.com:8443?sni=cdn.example&obfs=salamander&obfs-password=secret&insecure=true", "test", 1)
 	if err != nil || proxy["type"] != "hysteria2" || proxy["sni"] != "cdn.example" || proxy["skip-cert-verify"] != true {
 		t.Fatalf("unexpected hysteria2 proxy: %#v, %v", proxy, err)
+	}
+}
+
+func TestVKCallProfileBecomesCanonicalNode(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	profile, err := callprofile.New(callprofile.NewInput{
+		Name:          "Call test",
+		InvitationURL: "https://vk.com/call/join/mJm6labHtIX06vO54fNKJ0B4TBQI1fsK8jHIND9GBq8",
+		PeerAddress:   "192.0.2.1:4443",
+		Random:        strings.NewReader(strings.Repeat("a", 64)),
+		Now:           now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := callprofile.Encode(profile, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy, err := ParseLink(link, "mobile", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proxy["type"] != "vkcall" || proxy["server"] != "192.0.2.1" || proxy["port"] != 4443 || proxy["profile"] != link {
+		t.Fatalf("unexpected vkcall node: %#v", proxy)
+	}
+	if _, exposed := proxy["psk"]; exposed {
+		t.Fatal("vkcall PSK was exposed as a node field")
 	}
 }
 

@@ -28,7 +28,7 @@ func TestParseSubscriptionRejectsMissingSource(t *testing.T) {
 }
 
 func TestIsShareLinkCoversSupportedMobileProtocols(t *testing.T) {
-	for _, value := range []string{"vless://node", "hy2://node", "wg://node", "amneziawg://node"} {
+	for _, value := range []string{"vless://node", "hy2://node", "wg://node", "amneziawg://node", "orcheroute://call/profile"} {
 		if !IsShareLink(value) {
 			t.Errorf("%q was not recognized", value)
 		}
