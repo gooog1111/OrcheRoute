@@ -192,6 +192,18 @@ function errorText(reason: unknown) {
 	client_expiry_must_be_future: "Срок действия включённого клиента должен быть в будущем.",
 	subscription_inactive: "Подписка отключена, просрочена или исчерпала лимит трафика.",
 	dependency_missing: "Не установлен необходимый системный компонент.",
+	call_server_invitation_required: "Сначала сохраните ссылку-приглашение VK Call.",
+	call_server_provider_probe_unavailable: "Проверка VK Call недоступна в этой сборке.",
+	call_server_provider_probe_incomplete: "VK Call не вернул полные TURN-реквизиты.",
+	call_server_invalid_public_endpoint: "Публичный адрес должен иметь формат vpn.example.ru:4443.",
+	call_transport_vk_captcha_required: "VK запросил CAPTCHA. Откройте приглашение в Android OrcheRoute и завершите проверку там.",
+	call_transport_vk_anonymous_access_missing_token: "VK не выдал анонимный токен для проверки.",
+	call_transport_vk_anonymous_access: "Не удалось получить анонимный доступ к VK.",
+	call_transport_vk_call_token: "VK не подтвердил ссылку-приглашение.",
+	call_transport_vk_call_token_missing: "VK не подтвердил ссылку-приглашение.",
+	call_transport_vk_session: "Не удалось создать временную сессию VK Call.",
+	call_transport_vk_join: "Не удалось присоединиться к VK Call для проверки.",
+	call_transport_vk_turn_credentials_missing: "VK принял приглашение, но не выдал TURN-сервер.",
   };
   if (translations[reason.message]) return translations[reason.message];
   const detailed = Object.entries(translations).find(([code]) =>

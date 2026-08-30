@@ -89,8 +89,8 @@ func TestVKCarrierRejectsInvalidEndpointsBeforeConsumingCredentials(t *testing.T
 	if result := StartVKCallCarrier("missing", "host-without-port", psk, "127.0.0.1:0"); !strings.Contains(result, "call_transport_invalid_peer") {
 		t.Fatalf("unexpected peer validation: %s", result)
 	}
-	if result := StartVKCallCarrier("missing", "turn.example:56000", psk, "127.0.0.1:0"); !strings.Contains(result, "call_transport_invalid_peer") {
-		t.Fatalf("hostname must not be resolved before protected transport: %s", result)
+	if result := StartVKCallCarrier("missing", "localhost:56000", psk, "127.0.0.1:0"); !strings.Contains(result, "call_transport_vk_credentials_expired") {
+		t.Fatalf("hostname peer was not accepted: %s", result)
 	}
 	if result := StartVKCallCarrierForProfile("missing", "127.0.0.1:56000", "", psk, "127.0.0.1:0"); !strings.Contains(result, "call_transport_invalid_identity") {
 		t.Fatalf("empty client identity was accepted: %s", result)

@@ -279,6 +279,14 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 				"subscription_url": runtime.CallServer.SubscriptionURL(client.SubscriptionToken), "warning": "subscription_token_is_secret"}
 		case path == "/v1/call-server/auto-configure":
 			return runtime.autoConfigureCallServer(body)
+		case path == "/v1/call-server/test":
+			if runtime.CallServer == nil || runtime.callServerProbe == nil {
+				return 503, map[string]any{"error": "call_server_provider_probe_unavailable", "message": runtime.callServerError}
+			}
+			probeContext, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			probe, err := runtime.callServerProbe(probeContext)
+			return result(200, map[string]any{"ok": err == nil, "result": probe}, err)
 		case path == "/v1/call-server/apply":
 			if runtime.CallServer == nil || runtime.CallTransport == nil {
 				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}

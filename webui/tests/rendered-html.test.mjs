@@ -589,7 +589,9 @@ test("inbound VPN uses the managed Call Server instead of external WireGuard too
 test("inbound VPN subscription copy works outside the secure Clipboard API", async () => {
   const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");
   const clipboard = await readFile(new URL("../app/lib/clipboard.ts", import.meta.url), "utf8");
-  assert.match(panel, /copyText\(value\.subscription_url/);
+  assert.match(panel, /copyText\(await loadSubscriptionURL\(\)\)/);
+  assert.match(panel, /Показать ссылку/);
+  assert.match(panel, /target="_blank"/);
   assert.match(panel, /Скопировано/);
   assert.match(panel, /Ошибка копирования/);
   assert.match(clipboard, /window\.isSecureContext/);
@@ -618,13 +620,18 @@ test("Call profiles are saved as ordinary vkcall server sources before activatio
   assert.doesNotMatch(activity, /public void beginVkCallProfile\(String profile\)/);
 });
 
-test("call server builds a domainless route automatically and exports profile QR", async () => {
+test("call server accepts a domain, tests VK and exports profile QR", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");
   assert.match(api, /call-server\/auto-configure/);
+  assert.match(api, /call-server\/test/);
   assert.match(panel, /Построить тракт/);
-  assert.match(panel, /Домен не требуется/);
+  assert.match(panel, /IP позже можно заменить доменным именем/);
+  assert.match(panel, /Проверить VK Call/);
+  assert.match(panel, /Публичный IP или доменное имя и UDP-порт/);
+  assert.match(panel, /placeholder="Необязательно"/);
   assert.match(panel, /Файл и QR работают без домена/);
-  assert.match(panel, /QRCode\.toDataURL\(address/);
+  assert.match(panel, /QRCode\.toDataURL\(await loadSubscriptionURL\(\)/);
   assert.match(panel, /Показать QR/);
+  assert.doesNotMatch(panel, /Обычные протоколы|обычные VPN-протоколы/);
 });

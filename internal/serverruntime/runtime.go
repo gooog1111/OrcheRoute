@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/callserver"
+	callvk "github.com/gooog1111/orcheroute/internal/calltransport/vk"
 	"github.com/gooog1111/orcheroute/internal/controller"
 	"github.com/gooog1111/orcheroute/internal/core/noderank"
 	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
@@ -62,6 +63,7 @@ type Runtime struct {
 	CallServer               *callserver.Manager
 	callServerError          string
 	CallTransport            *callserver.Runtime
+	callServerProbe          func(context.Context) (callserver.ProviderProbeResult, error)
 	apiToken                 string
 	controllerSecret         string
 	client                   *http.Client
@@ -111,6 +113,9 @@ func New(config Config) (*Runtime, error) {
 	} else {
 		runtime.CallServer = callManager
 		runtime.CallTransport = platformCallServerRuntime(config)
+		runtime.callServerProbe = func(ctx context.Context) (callserver.ProviderProbeResult, error) {
+			return callserver.ProbeProvider(ctx, callManager, callvk.Source{Name: "OrcheRoute Server"})
+		}
 	}
 	if err := runtime.bootstrap(context.Background(), freshState); err != nil {
 		_ = store.Close()

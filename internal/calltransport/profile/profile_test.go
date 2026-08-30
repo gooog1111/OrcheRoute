@@ -78,10 +78,10 @@ func TestProfilePublicViewDoesNotLeakSecrets(t *testing.T) {
 func TestProfileRejectsUnsafeOrExpiredValues(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	for name, mutate := range map[string]func(*Profile){
-		"hostname peer": func(value *Profile) { value.PeerAddress = "turn.example:443" },
-		"invalid psk":   func(value *Profile) { value.PSK = "short" },
-		"invalid uuid":  func(value *Profile) { value.VLESSUUID = "not-a-uuid" },
-		"expired":       func(value *Profile) { value.ExpiresAt = now.Add(-time.Second).Unix() },
+		"invalid hostname peer": func(value *Profile) { value.PeerAddress = "bad_name.example:443" },
+		"invalid psk":           func(value *Profile) { value.PSK = "short" },
+		"invalid uuid":          func(value *Profile) { value.VLESSUUID = "not-a-uuid" },
+		"expired":               func(value *Profile) { value.ExpiresAt = now.Add(-time.Second).Unix() },
 	} {
 		t.Run(name, func(t *testing.T) {
 			profile := validProfile(now)
@@ -90,6 +90,20 @@ func TestProfileRejectsUnsafeOrExpiredValues(t *testing.T) {
 				t.Fatal("invalid profile was accepted")
 			}
 		})
+	}
+}
+
+func TestProfileAcceptsPublicHostnamePeer(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	profile := validProfile(now)
+	profile.PeerAddress = "vpn.example:4443"
+	encoded, err := Encode(profile, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := Decode(encoded, now)
+	if err != nil || decoded.PeerAddress != "vpn.example:4443" {
+		t.Fatalf("hostname peer did not round-trip: %#v, %v", decoded.Public(), err)
 	}
 }
 

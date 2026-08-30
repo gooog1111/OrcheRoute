@@ -4,6 +4,7 @@ package serverruntime
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gooog1111/orcheroute/internal/callserver"
 	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
 	"github.com/gooog1111/orcheroute/internal/core/connectivity"
 )
@@ -33,6 +35,9 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer runtime.Close()
+	runtime.callServerProbe = func(context.Context) (callserver.ProviderProbeResult, error) {
+		return callserver.ProviderProbeResult{Provider: "vk", TURNEndpoint: "turn.example:3478", Network: "udp", ExpiresAt: time.Now().Add(8 * time.Minute).Unix()}, nil
+	}
 	callServerAPI(t, runtime, http.MethodGet, "/v1/reverse-vpn", nil, http.StatusNotFound)
 
 	settings := map[string]any{
@@ -43,6 +48,10 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	callServerAPI(t, runtime, http.MethodPut, "/v1/call-server", settings, http.StatusOK)
 	delete(settings, "invitation_url")
 	callServerAPI(t, runtime, http.MethodPut, "/v1/call-server", settings, http.StatusOK)
+	probe := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/test", map[string]any{}, http.StatusOK)
+	if probe["ok"] != true || probe["result"].(map[string]any)["turn_endpoint"] != "turn.example:3478" {
+		t.Fatalf("provider probe did not return connection evidence: %#v", probe)
+	}
 	created := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/clients", map[string]any{"name": "Phone", "traffic_limit_bytes": 1024}, http.StatusCreated)
 	client := created["client"].(map[string]any)
 	path := created["subscription_path"].(string)
@@ -71,6 +80,9 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	}
 	if subscriptionResponse.Header().Get("Subscription-Userinfo") == "" {
 		t.Fatal("subscription traffic metadata missing")
+	}
+	if disposition := subscriptionResponse.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "inline") {
+		t.Fatalf("subscription is not browser-readable: %q", disposition)
 	}
 	callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/apply", map[string]any{}, http.StatusOK)
 	active := callServerAPI(t, runtime, http.MethodGet, "/v1/call-server", nil, http.StatusOK)

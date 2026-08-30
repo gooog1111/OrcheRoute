@@ -18,6 +18,7 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 	const [name, setName] = useState("");
 	const [expires, setExpires] = useState("");
 	const [limitGB, setLimitGB] = useState("");
+	const [probeResult, setProbeResult] = useState("");
 	const changed = useMemo(() => Boolean(config && state && (
 		invitation.trim() || JSON.stringify(config) !== JSON.stringify(state.config)
 	)), [config, invitation, state]);
@@ -57,6 +58,16 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 		if (!ok || !detected) return;
 		await onReload();
 	};
+	const testProvider = async () => {
+		let endpoint = "";
+		const ok = await run(async () => {
+			const response = await actions.testCallServer();
+			endpoint = response.result.status === "captcha_required"
+				? "VK доступен · CAPTCHA будет пройдена Android-клиентом при подключении"
+				: `VK Call доступен · ${response.result.turn_endpoint} · ${response.result.network.toUpperCase()}`;
+		}, "Проверка VK Call завершена.", { title: "Проверяем VK Call" });
+		setProbeResult(ok ? endpoint : "");
+	};
 	const create = async () => {
 		const expiresAt = expires ? Math.floor(new Date(expires).getTime() / 1000) : undefined;
 		const limit = limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : undefined;
@@ -67,10 +78,10 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 	const ready = Boolean(config.public_endpoint && config.invitation_configured && config.clients.some(client => client.available));
 
 	return <div className="settings-section call-server-settings">
-		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>OrcheRoute VPN Server</h3><p>Одна персональная подписка содержит VK Call, VLESS, Trojan и Hysteria2. SNI обычных протоколов: {config.fake_sni}.</p></div><span className={`call-server-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
+		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>OrcheRoute VPN Server</h3><p>Одна персональная подписка содержит VK Call, VLESS, Trojan и Hysteria2. Fake SNI: {config.fake_sni}.</p></div><span className={`call-server-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
 		{state.status.last_error && <p className="inline-feedback error">{callServerError(state.status.last_error)}</p>}
 		<div className="access-panel call-auto-setup">
-			<div className="access-panel-heading"><div><strong>Автоматическая настройка</strong><small>OrcheRoute определит внешний Direct IP и настроит VK Call и обычные VPN-протоколы. Домен не требуется.</small></div></div>
+			<div className="access-panel-heading"><div><strong>Автоматическая настройка</strong><small>OrcheRoute определит внешний Direct IP и настроит VK Call, VLESS, Trojan и Hysteria2. IP позже можно заменить доменным именем.</small></div></div>
 			<div className="action-bar"><button className="primary-button" type="button" disabled={busy || config.enabled} onClick={() => void autoConfigure()}>{config.public_endpoint ? "Перестроить тракт" : "Построить тракт"}</button></div>
 			{config.public_endpoint && <div className="pool-audit"><div><span>Публичный UDP <strong>{config.public_endpoint}</strong></span><span>Передача профиля <strong>{config.subscription_base_url ? "HTTPS-ссылка" : "Файл или QR"}</strong></span></div><small>После запуска этот UDP-порт должен быть разрешён в firewall или проброшен на роутере.</small></div>}
 		</div>
@@ -78,9 +89,11 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 			<div className="form-grid two">
 				<label className="form-field form-field-wide"><span>Ссылка-приглашение VK Call</span><input type="url" value={invitation} onChange={event => setInvitation(event.target.value)} placeholder={config.invitation_configured ? "Ссылка уже сохранена; оставьте пустым, чтобы не менять" : "https://vk.com/call/join/..."} disabled={busy}/><small>{config.invitation_configured ? "Действующая ссылка скрыта и не будет очищена при сохранении." : "Используется клиентом для получения краткоживущих TURN-реквизитов."}</small></label>
 			</div>
+			<div className="action-bar"><button className="secondary-button call-provider-test" type="button" disabled={busy || !config.invitation_configured || Boolean(invitation.trim())} onClick={() => void testProvider()}>Проверить VK Call</button></div>
+			{probeResult && <div className="call-provider-result success"><strong>Проверка выполнена</strong><span>{probeResult}</span></div>}
 			<details className="advanced-settings"><summary>Ручная настройка сети</summary><div className="form-grid two">
-				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.ordinary_enabled} onChange={event => update("ordinary_enabled", event.target.checked)} disabled={busy}/><span><strong>Обычные протоколы</strong><small>Добавлять VLESS, Trojan и Hysteria2 в персональную подписку.</small></span></label>
-				<label className="form-field"><span>Публичный UDP-адрес</span><input value={config.public_endpoint ?? ""} onChange={event => update("public_endpoint", event.target.value)} placeholder="203.0.113.25:4443" disabled={busy}/><small>Внешний IP сервера и проброшенный UDP-порт.</small></label>
+				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.ordinary_enabled} onChange={event => update("ordinary_enabled", event.target.checked)} disabled={busy}/><span><strong>VLESS, Trojan и Hysteria2</strong><small>Добавлять эти серверы в персональную подписку.</small></span></label>
+				<label className="form-field"><span>Публичный адрес VK Call</span><input value={config.public_endpoint ?? ""} onChange={event => update("public_endpoint", event.target.value)} placeholder="vpn.example.ru:4443" disabled={busy}/><small>Публичный IP или доменное имя и UDP-порт.</small></label>
 				<label className="form-field"><span>Адрес подписок</span><input type="url" value={config.subscription_base_url ?? ""} onChange={event => update("subscription_base_url", event.target.value)} placeholder="Необязательно" disabled={busy}/><small>Нужен только для обновляемой HTTPS-ссылки. Файл и QR работают без домена.</small></label>
 				<label className="form-field"><span>Слушать DTLS</span><input value={config.listen_address} onChange={event => update("listen_address", event.target.value)} placeholder="0.0.0.0:4443" disabled={busy}/></label>
 				<label className="form-field"><span>Локальный VLESS</span><input value={config.backend_address} onChange={event => update("backend_address", event.target.value)} placeholder="127.0.0.1:18443" disabled={busy}/></label>
@@ -94,11 +107,11 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 		<div className="access-panel">
 			<div className="access-panel-heading"><div><strong>Новый клиент</strong><small>Нулевой срок или лимит означает отсутствие ограничения.</small></div></div>
 			<div className="form-grid two">
-				<label className="form-field"><span>Имя</span><input value={name} onChange={event => setName(event.target.value)} placeholder="Телефон Ивана" disabled={busy}/></label>
+				<label className="form-field"><span>Название</span><input value={name} onChange={event => setName(event.target.value)} placeholder="Необязательно" disabled={busy}/></label>
 				<label className="form-field"><span>Действует до</span><input type="datetime-local" value={expires} onChange={event => setExpires(event.target.value)} disabled={busy}/></label>
 				<label className="form-field"><span>Лимит, ГБ</span><input type="number" min={0} step="0.1" value={limitGB} onChange={event => setLimitGB(event.target.value)} placeholder="Без лимита" disabled={busy}/></label>
 			</div>
-			<div className="action-bar"><button className="primary-button" type="button" disabled={busy || !name.trim() || !config.public_endpoint || !config.invitation_configured || (Boolean(limitGB) && (!Number.isFinite(Number(limitGB)) || Number(limitGB) < 0))} onClick={() => void create()}>Создать подписку</button></div>
+			<div className="action-bar"><button className="primary-button" type="button" disabled={busy || !config.public_endpoint || !config.invitation_configured || (Boolean(limitGB) && (!Number.isFinite(Number(limitGB)) || Number(limitGB) < 0))} onClick={() => void create()}>Создать подписку</button></div>
 		</div>
 		<div className="call-client-list">
 			{config.clients.length === 0 ? <p className="empty-state">Клиентов пока нет.</p> : config.clients.map(client => <CallServerClientCard key={client.id} client={client} busy={busy} run={run} onReload={onReload}/>) }
@@ -114,15 +127,31 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 	const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
 	const [downloadStatus, setDownloadStatus] = useState<"idle" | "started" | "error">("idle");
 	const [profileQR, setProfileQR] = useState("");
+	const [subscriptionURL, setSubscriptionURL] = useState("");
+	const [subscriptionLinkError, setSubscriptionLinkError] = useState(false);
 	const payload = (extra: { reset_traffic?: boolean; rotate_token?: boolean } = {}) => ({ name, enabled, expires_at: expires ? Math.floor(new Date(expires).getTime() / 1000) : 0, traffic_limit_bytes: limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : 0, ...extra });
 	const reloadAfter = async (operation: () => Promise<unknown>, message: string, title: string) => { if (await run(operation, message, { title })) await onReload(); };
+	const loadSubscriptionURL = async () => {
+		if (subscriptionURL) return subscriptionURL;
+		const value = await actions.callServerSubscription(client.id);
+		const address = new URL(value.subscription_url || value.subscription_path, window.location.origin).toString();
+		setSubscriptionURL(address);
+		return address;
+	};
 	const copy = async () => {
 		try {
-			const value = await actions.callServerSubscription(client.id);
-			await copyText(value.subscription_url.startsWith("https://") ? value.subscription_url : new URL(value.subscription_path, window.location.origin).toString());
+			await copyText(await loadSubscriptionURL());
 			setCopyStatus("copied");
 		} catch { setCopyStatus("error"); }
 		window.setTimeout(() => setCopyStatus("idle"), 1800);
+	};
+	const revealSubscriptionURL = async () => {
+		try {
+			await loadSubscriptionURL();
+			setSubscriptionLinkError(false);
+		} catch {
+			setSubscriptionLinkError(true);
+		}
 	};
 	const download = async () => {
 		try {
@@ -143,21 +172,21 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 		}
 	};
 	const showQR = async () => {
-		const value = await actions.callServerSubscription(client.id);
-		const address = value.subscription_url.startsWith("https://") ? value.subscription_url : new URL(value.subscription_path, window.location.origin).toString();
-		setProfileQR(await QRCode.toDataURL(address, { width: 320, margin: 2, errorCorrectionLevel: "M" }));
+		setProfileQR(await QRCode.toDataURL(await loadSubscriptionURL(), { width: 320, margin: 2, errorCorrectionLevel: "M" }));
 	};
 	return <details className="call-client-card">
 		<summary><span className={`node-status ${client.available ? "alive" : ""}`}/><span><strong>{client.name}</strong><small>{formatBytes(client.traffic_used_bytes)}{client.traffic_limit_bytes ? ` из ${formatBytes(client.traffic_limit_bytes)}` : ""}</small></span><em>{client.available ? "Доступен" : "Отключён"}</em></summary>
 		<div className="call-client-body">
-			<div className="form-grid two"><label className="form-field"><span>Имя</span><input value={name} onChange={event => setName(event.target.value)} disabled={busy}/></label><label className="choice-row"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={busy}/><span><strong>Клиент включён</strong></span></label><label className="form-field"><span>Действует до</span><input type="datetime-local" value={expires} onChange={event => setExpires(event.target.value)} disabled={busy}/></label><label className="form-field"><span>Лимит, ГБ</span><input type="number" min={0} step="0.1" value={limitGB} onChange={event => setLimitGB(event.target.value)} disabled={busy}/></label></div>
+			<div className="form-grid two"><label className="form-field"><span>Название</span><input value={name} onChange={event => setName(event.target.value)} placeholder="Необязательно" disabled={busy}/></label><label className="choice-row"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={busy}/><span><strong>Клиент включён</strong></span></label><label className="form-field"><span>Действует до</span><input type="datetime-local" value={expires} onChange={event => setExpires(event.target.value)} disabled={busy}/></label><label className="form-field"><span>Лимит, ГБ</span><input type="number" min={0} step="0.1" value={limitGB} onChange={event => setLimitGB(event.target.value)} disabled={busy}/></label></div>
 			<div className="pool-audit"><div><span>Получено <strong>{formatBytes(client.traffic_rx_bytes)}</strong></span><span>Отправлено <strong>{formatBytes(client.traffic_tx_bytes)}</strong></span><span>Последняя связь <strong>{client.last_seen_at ? new Date(client.last_seen_at * 1000).toLocaleString("ru-RU") : "—"}</strong></span></div></div>
 			{profileQR && <div className="call-profile-qr">
 				{/* eslint-disable-next-line @next/next/no-img-element */}
 				<img src={profileQR} alt={`QR профиля ${client.name}`}/>
 				<p>Отсканируйте QR в Android OrcheRoute. Не публикуйте его: внутри находятся персональные ключи.</p><button type="button" onClick={() => setProfileQR("")}>Закрыть QR</button>
 			</div>}
-			<div className="call-client-actions"><button type="button" onClick={() => void copy()} disabled={busy}>{copyStatus === "copied" ? "Скопировано" : copyStatus === "error" ? "Ошибка копирования" : "Копировать подписку"}</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>{downloadStatus === "started" ? "Скачивание начато" : downloadStatus === "error" ? "Ошибка скачивания" : "Скачать профиль"}</button><button type="button" onClick={() => void showQR()} disabled={busy || !client.available}>Показать QR</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy || !name.trim()}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteCallServerClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
+			{subscriptionURL && <div className="call-subscription-link"><span>Прямая ссылка</span><a href={subscriptionURL} target="_blank" rel="noreferrer">{subscriptionURL}</a></div>}
+			{subscriptionLinkError && <p className="inline-feedback error">Не удалось получить прямую ссылку подписки.</p>}
+			<div className="call-client-actions"><button type="button" onClick={() => void revealSubscriptionURL()} disabled={busy}>{subscriptionURL ? "Ссылка показана" : "Показать ссылку"}</button><button type="button" onClick={() => void copy()} disabled={busy}>{copyStatus === "copied" ? "Скопировано" : copyStatus === "error" ? "Ошибка копирования" : "Копировать подписку"}</button><button type="button" onClick={() => void download()} disabled={busy || !client.available}>{downloadStatus === "started" ? "Скачивание начато" : downloadStatus === "error" ? "Ошибка скачивания" : "Скачать профиль"}</button><button type="button" onClick={() => void showQR()} disabled={busy || !client.available}>Показать QR</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload()), "Клиент обновлён.", "Обновляем клиента")} disabled={busy}>Сохранить</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ reset_traffic: true })), "Счётчик трафика сброшен.", "Сбрасываем трафик")} disabled={busy}>Сбросить трафик</button><button type="button" onClick={() => void reloadAfter(() => actions.updateCallServerClient(client.id, payload({ rotate_token: true })), "Ссылка подписки заменена.", "Меняем ссылку")} disabled={busy}>Сменить ссылку</button><button className="danger" type="button" onClick={() => confirm(`Удалить ${client.name}?`) && void reloadAfter(() => actions.deleteCallServerClient(client.id), "Клиент удалён.", "Удаляем клиента")} disabled={busy}>Удалить</button></div>
 		</div>
 	</details>;
 }

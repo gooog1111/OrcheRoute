@@ -212,8 +212,11 @@ func validatePeer(value string) error {
 	if err != nil {
 		return fmt.Errorf("call_transport_profile_invalid_peer")
 	}
-	address, err := netip.ParseAddr(host)
-	if err != nil || address.IsUnspecified() || address.IsMulticast() {
+	if address, parseErr := netip.ParseAddr(host); parseErr == nil {
+		if address.IsUnspecified() || address.IsMulticast() {
+			return fmt.Errorf("call_transport_profile_invalid_peer")
+		}
+	} else if !validPeerDNSName(host) {
 		return fmt.Errorf("call_transport_profile_invalid_peer")
 	}
 	port, err := strconv.Atoi(portValue)
@@ -221,6 +224,24 @@ func validatePeer(value string) error {
 		return fmt.Errorf("call_transport_profile_invalid_peer")
 	}
 	return nil
+}
+
+func validPeerDNSName(value string) bool {
+	value = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(value)), ".")
+	if value == "" || len(value) > 253 || value == "localhost" {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, character := range label {
+			if (character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '-' {
+				return false
+			}
+		}
+	}
+	return strings.Contains(value, ".")
 }
 
 func decodePSK(value string) ([]byte, error) {

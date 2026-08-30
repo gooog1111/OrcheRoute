@@ -47,9 +47,9 @@ sudo apt install ./OrcheRoute-Linux-Server-0.6.3-amd64.deb
 `/etc/orcheroute/initial-credentials`.
 
 В beta-канале Linux Server также доступен входящий VPN-сервер. Одна персональная
-подписка содержит VK Call, VLESS Reality, Trojan TLS и Hysteria2; для обычных
-протоколов по умолчанию используется SNI `m.vk.ru` и порты TCP 24443, TCP 24444
-и UDP 24445. VK Call работает через встроенный Xray, обычные listeners — через
+подписка содержит VK Call, VLESS Reality, Trojan TLS и Hysteria2; по умолчанию
+используется SNI `m.vk.ru` и порты TCP 24443, TCP 24444 и UDP 24445.
+VK Call работает через встроенный Xray, VLESS/Trojan/Hysteria2 listeners — через
 изолированный экземпляр комплектного Mihomo и не меняют действующую исходящую
 маршрутизацию. Срок действия применяется ко всей подписке; счётчик трафика beta
 пока учитывает только тракт VK Call.

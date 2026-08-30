@@ -142,12 +142,8 @@ func (config Config) Validate() error {
 		return fmt.Errorf("call_server_invalid_backend_address")
 	}
 	if config.PublicEndpoint != "" {
-		if err := validEndpoint(config.PublicEndpoint, false); err != nil {
+		if err := validPublicEndpoint(config.PublicEndpoint); err != nil {
 			return fmt.Errorf("call_server_invalid_public_endpoint")
-		}
-		host, _, _ := net.SplitHostPort(config.PublicEndpoint)
-		if _, err := netip.ParseAddr(host); err != nil {
-			return fmt.Errorf("call_server_public_endpoint_must_be_ip")
 		}
 	}
 	if config.OrdinaryEnabled {
@@ -188,6 +184,42 @@ func (config Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+func validPublicEndpoint(value string) error {
+	host, port, err := net.SplitHostPort(strings.TrimSpace(value))
+	portNumber, portErr := strconv.Atoi(port)
+	if err != nil || portErr != nil || portNumber < 1 || portNumber > 65535 {
+		return fmt.Errorf("invalid_endpoint")
+	}
+	if address, parseErr := netip.ParseAddr(host); parseErr == nil {
+		if address.IsUnspecified() || address.IsMulticast() {
+			return fmt.Errorf("invalid_endpoint")
+		}
+		return nil
+	}
+	if !validDNSName(host) {
+		return fmt.Errorf("invalid_endpoint")
+	}
+	return nil
+}
+
+func validDNSName(value string) bool {
+	value = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(value)), ".")
+	if value == "" || len(value) > 253 || value == "localhost" {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, character := range label {
+			if (character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '-' {
+				return false
+			}
+		}
+	}
+	return strings.Contains(value, ".")
 }
 
 func validEndpoint(value string, loopback bool) error {

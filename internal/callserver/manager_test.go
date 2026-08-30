@@ -70,6 +70,26 @@ func TestManagerPersistsClientsWithoutLeakingSecrets(t *testing.T) {
 	}
 }
 
+func TestManagerAcceptsHostnameAndGeneratesOptionalClientName(t *testing.T) {
+	manager, _ := configuredManager(t)
+	config := manager.data
+	config.PublicEndpoint = "vpn.example:4443"
+	if _, err := manager.UpdateConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	client, err := manager.CreateClient(CreateClientInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(client.Name, "OrcheRoute ") || client.Profile.PeerAddress != "vpn.example:4443" {
+		t.Fatalf("unexpected generated client: %#v", client.PublicAt(manager.now()))
+	}
+	profiles, err := manager.ClientProfile(client.ID)
+	if err != nil || !strings.Contains(profiles, "vpn.example") {
+		t.Fatalf("hostname missing from subscription: %q, %v", profiles, err)
+	}
+}
+
 func TestManagerEnforcesExpiryAndTrafficLimit(t *testing.T) {
 	manager, now := configuredManager(t)
 	client, err := manager.CreateClient(CreateClientInput{Name: "Limited", ExpiresAt: now.Add(time.Hour).Unix(), TrafficLimitBytes: 100})
@@ -129,6 +149,24 @@ func TestPublicConfigUpdatePreservesOmittedInvitation(t *testing.T) {
 	}
 	if _, err := manager.CreateClient(CreateClientInput{Name: "Still configured"}); err != nil {
 		t.Fatalf("preserved invitation could not issue a client: %v", err)
+	}
+}
+
+func TestPublicConfigUpdateMovesExistingProfilesToHostnameAndNewInvitation(t *testing.T) {
+	manager, _ := configuredManager(t)
+	client, err := manager.CreateClient(CreateClientInput{Name: "Phone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := manager.data
+	config.PublicEndpoint = "vpn.example:4443"
+	config.InvitationURL = "https://vk.ru/call/join/new-invite"
+	if _, err := manager.UpdatePublicConfig(config, true); err != nil {
+		t.Fatal(err)
+	}
+	updated := manager.data.Clients[0]
+	if updated.ID != client.ID || updated.Profile.PeerAddress != "vpn.example:4443" || updated.Profile.InvitationURL != "https://vk.com/call/join/new-invite" {
+		t.Fatalf("existing profile kept stale route: %#v", updated.Profile.Public())
 	}
 }
 

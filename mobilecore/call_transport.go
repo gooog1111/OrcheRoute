@@ -279,7 +279,14 @@ func parseCallPeer(value string) (*net.UDPAddr, error) {
 		return nil, fmt.Errorf("call_transport_invalid_peer")
 	}
 	address, err := netip.ParseAddr(host)
-	if err != nil || address.IsUnspecified() || address.IsMulticast() {
+	if err != nil {
+		resolved, resolveErr := net.ResolveUDPAddr("udp", strings.TrimSpace(value))
+		if resolveErr != nil || resolved.IP == nil || resolved.IP.IsUnspecified() || resolved.IP.IsMulticast() {
+			return nil, fmt.Errorf("call_transport_invalid_peer")
+		}
+		return resolved, nil
+	}
+	if address.IsUnspecified() || address.IsMulticast() {
 		return nil, fmt.Errorf("call_transport_invalid_peer")
 	}
 	port, err := strconv.Atoi(portValue)

@@ -101,6 +101,8 @@ func (manager *Manager) UpdatePublicConfig(input Config, invitationProvided bool
 func (manager *Manager) updateConfig(input Config, invitationProvided bool) (PublicConfig, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
+	previousEndpoint := manager.data.PublicEndpoint
+	previousInvitation := manager.data.InvitationURL
 	input.Clients = append([]Client(nil), manager.data.Clients...)
 	input.Enabled = manager.data.Enabled
 	input.RealityPrivateKey, input.RealityPublicKey, input.RealityShortID = manager.data.RealityPrivateKey, manager.data.RealityPublicKey, manager.data.RealityShortID
@@ -110,6 +112,21 @@ func (manager *Manager) updateConfig(input Config, invitationProvided bool) (Pub
 	}
 	if err := input.Normalize(); err != nil {
 		return PublicConfig{}, err
+	}
+	endpointChanged := input.PublicEndpoint != previousEndpoint
+	invitationChanged := invitationProvided && input.InvitationURL != previousInvitation
+	if endpointChanged || invitationChanged {
+		for index := range input.Clients {
+			if endpointChanged {
+				input.Clients[index].Profile.PeerAddress = input.PublicEndpoint
+			}
+			if invitationChanged {
+				input.Clients[index].Profile.InvitationURL = input.InvitationURL
+			}
+			if err := input.Clients[index].Profile.Normalize(); err != nil {
+				return PublicConfig{}, err
+			}
+		}
 	}
 	if _, err := manager.ensureServerIdentityLocked(&input); err != nil {
 		return PublicConfig{}, err
@@ -145,10 +162,6 @@ func (manager *Manager) SetEnabled(enabled bool) (PublicConfig, error) {
 func (manager *Manager) CreateClient(input CreateClientInput) (Client, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
-	name := strings.TrimSpace(input.Name)
-	if name == "" {
-		return Client{}, fmt.Errorf("call_server_client_name_required")
-	}
 	now := manager.now()
 	if input.ExpiresAt != 0 && input.ExpiresAt <= now.Unix() {
 		return Client{}, fmt.Errorf("call_server_client_expiry_must_be_future")
@@ -159,17 +172,21 @@ func (manager *Manager) CreateClient(input CreateClientInput) (Client, error) {
 	if _, err := manager.ensureServerIdentityLocked(&manager.data); err != nil {
 		return Client{}, err
 	}
-	profile, err := callprofile.New(callprofile.NewInput{Name: name, InvitationURL: manager.data.InvitationURL,
-		PeerAddress: manager.data.PublicEndpoint, ExpiresAt: input.ExpiresAt, TrafficLimitBytes: input.TrafficLimitBytes,
-		Random: manager.rand, Now: now})
-	if err != nil {
-		return Client{}, err
-	}
 	id, err := manager.randomString(12)
 	if err != nil {
 		return Client{}, err
 	}
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		name = defaultClientName(id)
+	}
 	token, err := manager.randomString(32)
+	if err != nil {
+		return Client{}, err
+	}
+	profile, err := callprofile.New(callprofile.NewInput{Name: name, InvitationURL: manager.data.InvitationURL,
+		PeerAddress: manager.data.PublicEndpoint, ExpiresAt: input.ExpiresAt, TrafficLimitBytes: input.TrafficLimitBytes,
+		Random: manager.rand, Now: now})
 	if err != nil {
 		return Client{}, err
 	}
@@ -191,7 +208,7 @@ func (manager *Manager) UpdateClient(id string, input UpdateClientInput) (Client
 	defer manager.mu.Unlock()
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
-		return Client{}, fmt.Errorf("call_server_client_name_required")
+		name = defaultClientName(id)
 	}
 	if input.Enabled && input.ExpiresAt != 0 && input.ExpiresAt <= manager.now().Unix() {
 		return Client{}, fmt.Errorf("call_server_client_expiry_must_be_future")
@@ -225,6 +242,17 @@ func (manager *Manager) UpdateClient(id string, input UpdateClientInput) (Client
 		return *client, nil
 	}
 	return Client{}, fmt.Errorf("call_server_client_not_found")
+}
+
+func defaultClientName(id string) string {
+	id = strings.TrimSpace(id)
+	if len(id) > 6 {
+		id = id[:6]
+	}
+	if id == "" {
+		return "OrcheRoute"
+	}
+	return "OrcheRoute " + id
 }
 
 func (manager *Manager) DeleteClient(id string) error {
