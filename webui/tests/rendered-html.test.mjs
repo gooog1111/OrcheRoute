@@ -326,7 +326,7 @@ test("android dashboard follows live VPN state and shows direct and proxy identi
   assert.match(dashboard, /<span>Proxy<\/span>/);
   assert.match(dashboard, /className="connected-server"/);
   assert.match(dashboard, /activeServerName/);
-  assert.match(dashboard, /data\?\.status\.proxy\.active_node \|\| activeNode\?\.display_name/);
+  assert.match(dashboard, /activeNode\?\.display_name \|\| data\?\.status\.proxy\.active_node/);
   assert.match(dashboard, /data\?\.status\.wan\.mode === "allowlist" \? "Недоступен при белых списках"/);
   assert.match(dashboard, /platform\.dashboardPollMs/);
   assert.match(platform, /kind: "android"[\s\S]*dashboardPollMs: 1000[\s\S]*liveDashboard: true/);
