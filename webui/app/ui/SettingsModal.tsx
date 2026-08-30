@@ -1090,6 +1090,8 @@ function PoolNodes({
   const allNodes = [...(data?.nodes.filter((node) => node.pool === pool) ?? [])]
     .sort((left, right) => {
       if (left.alive !== right.alive) return left.alive ? -1 : 1;
+      if (Boolean(left.activation_required) !== Boolean(right.activation_required))
+        return left.activation_required ? -1 : 1;
       if ((left.score ?? 0) !== (right.score ?? 0)) {
         return (right.score ?? 0) - (left.score ?? 0);
       }
@@ -1098,10 +1100,12 @@ function PoolNodes({
       }
       return left.display_name.localeCompare(right.display_name);
     });
-  const unavailable = allNodes.filter((node) => !node.alive).length;
+  const unavailable = allNodes.filter(
+    (node) => !node.alive && !node.activation_required,
+  ).length;
   const nodes = showUnavailable
     ? allNodes
-    : allNodes.filter((node) => node.alive);
+    : allNodes.filter((node) => node.alive || node.activation_required);
   const visibleNodes = expanded ? nodes : nodes.slice(0, 5);
   const report = pool === "whitelist" ? null : data?.qualification?.reports?.[pool];
   const sourceNames = Object.fromEntries(
@@ -1161,7 +1165,7 @@ function PoolNodes({
             <button
               type="button"
               className="node-editor-main"
-              disabled={!node.alive || busy || pool === "whitelist"}
+              disabled={(!node.alive && !node.activation_required) || busy || pool === "whitelist"}
               onClick={() => pool !== "whitelist" &&
                 void run(
                   () => actions.setManual(node.id),
@@ -1176,7 +1180,11 @@ function PoolNodes({
                   {node.source_name ||
                     node.source_id ||
                     "Источник прежнего формата"}{" "}
-                  · {node.alive ? "доступен" : "недоступен"}
+                  · {node.alive
+                    ? "доступен"
+                    : node.activation_required
+                      ? "активируется при подключении"
+                      : "недоступен"}
                   {node.country ? ` · GEO ${node.country}` : ""}
                 </small>
               </span>

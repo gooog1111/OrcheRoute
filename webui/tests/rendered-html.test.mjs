@@ -588,13 +588,21 @@ test("Call profiles are saved as ordinary vkcall server sources before activatio
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
-  assert.match(api, /beginVkCallProfile\?: \(profile: string\) => void/);
-  assert.match(api, /bridge\.beginVkCallProfile\(profile\)/);
+  const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
+  const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
+  assert.doesNotMatch(api, /beginVkCallProfile/);
   assert.match(settings, /\^orcheroute:\\\/\\\/call\\\//);
   assert.match(settings, /proxyLinkPattern\.test\(value\) \|\| callProfilePattern\.test\(value\)/);
   assert.doesNotMatch(settings, /Подключить профиль/);
   assert.doesNotMatch(settings, /if \(callProfile\) \{\s*setScanError/);
-  assert.match(activity, /public void beginVkCallProfile\(String profile\)/);
+  assert.match(runtime, /"vkcall"\.equals\(proxy\.optString\("type"\)\)/);
+  assert.match(runtime, /requester\.request\(profile\)/);
+  assert.match(runtime, /if \(isVKCallNode\(node\)\)/);
+  assert.match(activity, /requestVpnPermissionForReload/);
+  assert.match(repository, /"activation_required", true/);
+  assert.match(settings, /node\.activation_required/);
+  assert.match(activity, /MainActivity\.this::beginVkCallProfile/);
+  assert.doesNotMatch(activity, /public void beginVkCallProfile\(String profile\)/);
 });
 
 test("call server builds a domainless route automatically and exports profile QR", async () => {

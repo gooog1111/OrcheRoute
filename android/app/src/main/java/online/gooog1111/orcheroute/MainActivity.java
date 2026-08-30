@@ -69,6 +69,7 @@ public final class MainActivity extends ComponentActivity {
     private final ExecutorService callTransportWorker = Executors.newSingleThreadExecutor();
     private String pendingVkChallengeID = "";
     private boolean pendingVkProfileMode;
+    private boolean vpnPermissionReload;
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -119,11 +120,13 @@ public final class MainActivity extends ComponentActivity {
             public void onCancel() {
                 PendingVkChallenge challenge = takePendingVkChallenge();
                 if (!challenge.id.isEmpty()) Mobilecore.cancelVKCallCredentials(challenge.id);
+                if (challenge.profileMode) MobileRuntime.get(MainActivity.this).onCallCarrierError("Подключение VK Call отменено");
                 dispatchVkCall("cancel", "Подтверждение VK отменено.", "");
             }
 
             @Override
             public void onError(String message) {
+                if (peekPendingVkChallenge().profileMode) MobileRuntime.get(MainActivity.this).onCallCarrierError(message);
                 dispatchVkCall("error", message, "");
             }
         });
@@ -224,18 +227,31 @@ public final class MainActivity extends ComponentActivity {
         if (requestCode != VPN_PERMISSION_REQUEST) return;
         if (resultCode == RESULT_OK) {
             MobileRuntime.get(this).onPermissionGranted();
-            OrcheRouteVpnService.start(this);
+            if (vpnPermissionReload) OrcheRouteVpnService.reload(this);
+            else OrcheRouteVpnService.start(this);
         } else {
             MobileRuntime.get(this).onPermissionDenied();
         }
+        vpnPermissionReload = false;
     }
 
     private void requestVpnPermission() {
+        requestVpnPermission(false);
+    }
+
+    private void requestVpnPermissionForReload() {
+        requestVpnPermission(true);
+    }
+
+    private void requestVpnPermission(boolean reload) {
         runOnUiThread(() -> {
+            vpnPermissionReload = reload;
             Intent permission = VpnService.prepare(this);
             if (permission == null) {
                 MobileRuntime.get(this).onPermissionGranted();
-                OrcheRouteVpnService.start(this);
+                if (vpnPermissionReload) OrcheRouteVpnService.reload(this);
+                else OrcheRouteVpnService.start(this);
+                vpnPermissionReload = false;
                 return;
             }
             MobileRuntime.get(this).onPermissionRequired();
@@ -411,10 +427,6 @@ public final class MainActivity extends ComponentActivity {
         pendingVkProfileMode = profileMode;
     }
 
-    private void beginVkCall(String invitation) {
-        callTransportWorker.execute(() -> handleVkCallResult(Mobilecore.beginVKCallCredentials(invitation), false));
-    }
-
     private void beginVkCallProfile(String profile) {
         callTransportWorker.execute(() -> handleVkCallResult(Mobilecore.beginVKCallProfile(profile), true));
     }
@@ -437,6 +449,7 @@ public final class MainActivity extends ComponentActivity {
                 JSONObject error = envelope.optJSONObject("error");
                 String message = error == null ? "Не удалось подключиться к VK звонку." : error.optString("error", "Ошибка VK");
                 if (vkCaptchaDialog != null && vkCaptchaDialog.isOpen()) vkCaptchaDialog.submissionFailed(message);
+                if (profileMode) MobileRuntime.get(this).onCallCarrierError(message);
                 dispatchVkCall("error", message, "");
                 return;
             }
@@ -450,6 +463,7 @@ public final class MainActivity extends ComponentActivity {
                     if (vkCaptchaDialog == null || !vkCaptchaDialog.open(redirectURL)) {
                         PendingVkChallenge stale = takePendingVkChallenge();
                         if (!stale.id.isEmpty()) Mobilecore.cancelVKCallCredentials(stale.id);
+                        if (stale.profileMode) MobileRuntime.get(this).onCallCarrierError("Получен недопустимый адрес VK CAPTCHA");
                         dispatchVkCall("error", "Получен недопустимый адрес VK CAPTCHA.", "");
                     } else {
                         dispatchVkCall("captcha_required", "Подтвердите, что вы не робот.", "");
@@ -468,8 +482,10 @@ public final class MainActivity extends ComponentActivity {
                 }
                 return;
             }
+            if (profileMode) MobileRuntime.get(this).onCallCarrierError("VK вернул неизвестное состояние");
             dispatchVkCall("error", "VK вернул неизвестное состояние.", "");
         } catch (JSONException error) {
+            if (profileMode) MobileRuntime.get(this).onCallCarrierError("Некорректный ответ VK Call");
             dispatchVkCall("error", "Некорректный ответ VK транспорта.", "");
         }
     }
@@ -479,13 +495,17 @@ public final class MainActivity extends ComponentActivity {
             JSONObject envelope = new JSONObject(raw);
             if (!envelope.optBoolean("ok")) {
                 JSONObject error = envelope.optJSONObject("error");
-                dispatchVkCall("error", error == null ? "Не удалось запустить транспорт." : error.optString("error", "Ошибка транспорта"), "");
+                String message = error == null ? "Не удалось запустить VK Call." : error.optString("error", "Ошибка VK Call");
+                MobileRuntime.get(this).onCallCarrierError(message);
+                dispatchVkCall("error", message, "");
                 return;
             }
             String endpoint = envelope.getJSONObject("result").optString("local_endpoint");
 			MobileRuntime.get(this).onCallCarrierReady();
+            requestVpnPermissionForReload();
             dispatchVkCall("carrier_ready", "VK транспорт подключён.", endpoint);
         } catch (JSONException error) {
+            MobileRuntime.get(this).onCallCarrierError("Некорректный ответ VK Call");
             dispatchVkCall("error", "Некорректный ответ транспорта.", "");
         }
     }
@@ -543,7 +563,8 @@ public final class MainActivity extends ComponentActivity {
                     method,
                     path,
                     body,
-                    MainActivity.this::requestVpnPermission
+                    MainActivity.this::requestVpnPermission,
+                    MainActivity.this::beginVkCallProfile
             );
         }
 
@@ -565,16 +586,6 @@ public final class MainActivity extends ComponentActivity {
         @JavascriptInterface
         public void hideKeyboard() {
             MainActivity.this.hideKeyboard();
-        }
-
-        @JavascriptInterface
-        public void beginVkCall(String invitation) {
-            MainActivity.this.beginVkCall(invitation);
-        }
-
-        @JavascriptInterface
-        public void beginVkCallProfile(String profile) {
-            MainActivity.this.beginVkCallProfile(profile);
         }
 
         @JavascriptInterface

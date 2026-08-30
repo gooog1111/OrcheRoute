@@ -52,6 +52,7 @@ export type Node = {
   pool: "primary" | "emergency" | "whitelist";
   priority: number;
   alive: boolean;
+  activation_required?: boolean;
   delay_ms: number | null;
   speed_mbps?: number;
   stability_ratio?: number;
@@ -340,7 +341,6 @@ type AndroidRuntimeBridge = {
   openTextFile?: () => void;
   saveTextFile?: (filename: string, content: string) => void;
   hideKeyboard?: () => void;
-  beginVkCallProfile?: (profile: string) => void;
   appUpdateStatus?: () => string;
   checkAppUpdate?: () => boolean;
   installAppUpdate?: () => boolean;
@@ -389,17 +389,6 @@ export function openTextFile() {
   const bridge = androidBridge();
   if (typeof bridge?.openTextFile !== "function") return false;
   bridge.openTextFile();
-  return true;
-}
-
-export function canImportCallProfile() {
-  return typeof androidBridge()?.beginVkCallProfile === "function";
-}
-
-export function importCallProfile(profile: string) {
-  const bridge = androidBridge();
-  if (typeof bridge?.beginVkCallProfile !== "function") return false;
-  bridge.beginVkCallProfile(profile);
   return true;
 }
 
