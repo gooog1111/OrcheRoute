@@ -55,7 +55,16 @@ func engineInit(home string, protector SocketProtector) string {
 		// flow they serve. Apple has no VpnService.protect equivalent.
 		dialer.DefaultSocketHook = nil
 	} else {
-		dialer.DefaultSocketHook = func(_ string, _ string, conn syscall.RawConn) error {
+		dialer.DefaultSocketHook = func(_ string, address string, conn syscall.RawConn) error {
+			// VKCall exposes a process-local VLESS listener. Binding that
+			// loopback socket to the selected physical Android Network makes
+			// otherwise valid 127.0.0.1 connections time out. Loopback never
+			// enters the VPN TUN, so it neither needs VpnService.protect nor a
+			// physical-network bind. The external TURN/DTLS carrier still uses
+			// protectedSocketControl below and remains protected and bound.
+			if isLoopbackSocketAddress(address) {
+				return nil
+			}
 			var protected bool
 			if err := conn.Control(func(fd uintptr) {
 				protected = protector.Protect(int(fd))
