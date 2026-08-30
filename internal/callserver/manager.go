@@ -73,7 +73,8 @@ func Open(path string) (*Manager, error) {
 	if err := manager.data.Validate(); err != nil {
 		return nil, fmt.Errorf("call_server_config_invalid: %w", err)
 	}
-	if identityChanged {
+	nameChanged := manager.migrateTechnicalClientNamesLocked()
+	if identityChanged || nameChanged {
 		if err := manager.saveLocked(manager.data); err != nil {
 			return nil, err
 		}
@@ -244,15 +245,25 @@ func (manager *Manager) UpdateClient(id string, input UpdateClientInput) (Client
 	return Client{}, fmt.Errorf("call_server_client_not_found")
 }
 
-func defaultClientName(id string) string {
-	id = strings.TrimSpace(id)
-	if len(id) > 6 {
-		id = id[:6]
+func defaultClientName(_ string) string {
+	return "OrcheRoute"
+}
+
+func (manager *Manager) migrateTechnicalClientNamesLocked() bool {
+	changed := false
+	for index := range manager.data.Clients {
+		client := &manager.data.Clients[index]
+		id := strings.TrimSpace(client.ID)
+		if len(id) > 6 {
+			id = id[:6]
+		}
+		legacy := "OrcheRoute " + id
+		if id != "" && client.Name == legacy && client.Profile.Name == legacy {
+			client.Name, client.Profile.Name = "OrcheRoute", "OrcheRoute"
+			changed = true
+		}
 	}
-	if id == "" {
-		return "OrcheRoute"
-	}
-	return "OrcheRoute " + id
+	return changed
 }
 
 func (manager *Manager) DeleteClient(id string) error {

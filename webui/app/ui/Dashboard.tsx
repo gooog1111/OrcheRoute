@@ -159,7 +159,7 @@ export function Dashboard() {
     ?? data?.pools.find((pool) => pool.selected);
   const activeNode = data?.nodes.find((node) =>
     node.selected && (!data?.status.proxy.active_pool || node.pool === data.status.proxy.active_pool));
-  const activeServerName = data?.status.proxy.active_node || activeNode?.display_name;
+  const activeServerName = activeNode?.display_name || data?.status.proxy.active_node;
   const allAliveNodes = data?.pools.reduce((sum, pool) => sum + pool.alive, 0) ?? 0;
   const allTotalNodes = data?.pools.reduce((sum, pool) => sum + pool.total, 0) ?? 0;
   const aliveNodes = activePool?.alive ?? allAliveNodes;

@@ -1208,6 +1208,9 @@ final class MobileRepository {
         if (proxy == null) return "Сервер " + index;
         String internal = proxy.optString("name", "").trim();
         String label = internal.replaceFirst("^[A-Z0-9-]+-[0-9a-fA-F]{12}\\s*", "").trim();
+		boolean generatedClient = label.matches("(?i)^OrcheRoute\\s+[0-9a-f]{6}(?:\\s*·.*)?$");
+		label = label.replaceFirst("(?i)^OrcheRoute\\s+[0-9a-f]{6}\\s*(?:·\\s*)?", "").trim();
+		if (generatedClient && label.isEmpty()) return "OrcheRoute";
         if (!label.isEmpty() && !label.equals(internal)) return label;
         if (!internal.isEmpty() && label.equals(internal)) return internal;
         String type = proxy.optString("type", "VPN").toUpperCase(java.util.Locale.ROOT);

@@ -61,6 +61,11 @@ func TestManagerPersistsClientsWithoutLeakingSecrets(t *testing.T) {
 	if len(converted.Proxies) != 4 || len(converted.Errors) != 0 {
 		t.Fatalf("generated subscription is not accepted by the shared parser: proxies=%d errors=%#v", len(converted.Proxies), converted.Errors)
 	}
+	for _, proxy := range converted.Proxies[1:] {
+		if proxy["server"] != "vpn.example" {
+			t.Fatalf("ordinary protocol ignored public DNS name: %#v", proxy)
+		}
+	}
 	decoded, err := callprofile.Decode(profiles[0], now)
 	if err != nil || decoded.VLESSUUID != client.Profile.VLESSUUID {
 		t.Fatalf("unexpected persisted profile: %#v, %v", decoded.Public(), err)
@@ -81,12 +86,32 @@ func TestManagerAcceptsHostnameAndGeneratesOptionalClientName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(client.Name, "OrcheRoute ") || client.Profile.PeerAddress != "vpn.example:4443" {
+	if client.Name != "OrcheRoute" || client.Profile.PeerAddress != "vpn.example:4443" {
 		t.Fatalf("unexpected generated client: %#v", client.PublicAt(manager.now()))
 	}
 	profiles, err := manager.ClientProfile(client.ID)
 	if err != nil || !strings.Contains(profiles, "vpn.example") {
 		t.Fatalf("hostname missing from subscription: %q, %v", profiles, err)
+	}
+}
+
+func TestManagerMigratesLegacyGeneratedClientName(t *testing.T) {
+	manager, _ := configuredManager(t)
+	client, err := manager.CreateClient(CreateClientInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager.data.Clients[0].Name = "OrcheRoute " + client.ID[:6]
+	manager.data.Clients[0].Profile.Name = manager.data.Clients[0].Name
+	if err := manager.saveLocked(manager.data); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(manager.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.data.Clients[0].Name != "OrcheRoute" || reopened.data.Clients[0].Profile.Name != "OrcheRoute" {
+		t.Fatalf("legacy technical name survived migration: %#v", reopened.data.Clients[0])
 	}
 }
 

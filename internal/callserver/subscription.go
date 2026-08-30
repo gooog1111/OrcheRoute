@@ -24,6 +24,14 @@ func (manager *Manager) encodeSubscriptionLocked(client Client) (string, error) 
 	if err != nil || host == "" {
 		return "", fmt.Errorf("call_server_invalid_public_endpoint")
 	}
+	// A configured HTTPS subscription address is also the user's public DNS
+	// identity. Prefer its hostname for ordinary protocols while keeping the
+	// literal Call endpoint intact for allowlist reliability.
+	if manager.data.SubscriptionBaseURL != "" {
+		if publicURL, parseErr := url.Parse(manager.data.SubscriptionBaseURL); parseErr == nil && publicURL.Hostname() != "" {
+			host = publicURL.Hostname()
+		}
+	}
 	name := client.Name
 	vlessPort := endpointPort(manager.data.VLESSListenAddress)
 	trojanPort := endpointPort(manager.data.TrojanListenAddress)
