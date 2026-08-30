@@ -68,7 +68,12 @@ export function Dashboard() {
   const [stoppingWhitelist, setStoppingWhitelist] = useState(false);
   const [appUpdate, setAppUpdate] = useState<AndroidAppUpdateStatus | null>(null);
   const [dismissedUpdate, setDismissedUpdate] = useState("");
-  const [theme, setTheme] = useState<ThemeID>(defaultTheme);
+  const [theme, setTheme] = useState<ThemeID>(() => {
+    if (typeof document === "undefined") return defaultTheme;
+    const stored = window.localStorage.getItem(themeStorageKey);
+    const bootstrapped = document.documentElement.dataset.theme;
+    return isThemeID(stored) ? stored : isThemeID(bootstrapped) ? bootstrapped : defaultTheme;
+  });
   const [themeReady, setThemeReady] = useState(false);
   const dataRef = useRef<DashboardData | null>(null);
   const refreshInFlight = useRef(false);
@@ -76,17 +81,10 @@ export function Dashboard() {
   useEffect(() => { dataRef.current = data; }, [data]);
 
   useLayoutEffect(() => {
-    const stored = window.localStorage.getItem(themeStorageKey);
-    const bootstrapped = document.documentElement.dataset.theme;
-    const initial = isThemeID(stored)
-      ? stored
-      : isThemeID(bootstrapped)
-        ? bootstrapped
-        : defaultTheme;
-    document.documentElement.dataset.theme = initial;
-    setTheme(initial);
-    setThemeReady(true);
-  }, []);
+    document.documentElement.dataset.theme = theme;
+    const timer = window.setTimeout(() => setThemeReady(true), 0);
+    return () => window.clearTimeout(timer);
+  }, [theme]);
 
   useEffect(() => {
     if (!themeReady) return;
