@@ -6,7 +6,7 @@ test("exports the OrcheRoute dashboard", async () => {
   const html = await readFile(new URL("../out/index.html", import.meta.url), "utf8");
   assert.match(html, /<html lang="ru" data-release-channel="(?:stable|beta)" data-theme="matrix">/i);
   assert.match(html, /<title>OrcheRoute<\/title>/i);
-  assert.match(html, /class="matrix-rain"/i);
+  assert.match(html, /orcheroute\.ui\.theme/i);
   assert.doesNotMatch(html, />\s*WebUI\s*</i);
   assert.match(html, /Управление маршрутизацией и VPN на сервере/i);
 });
@@ -581,7 +581,7 @@ test("inbound VPN uses the managed Call Server instead of external WireGuard too
   const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");
   const backend = await readFile(new URL("../../internal/callserver/backend_xray_linux.go", import.meta.url), "utf8");
   assert.match(panel, /callServerError\(state\.status\.last_error\)/);
-  assert.match(panel, /OrcheRoute Call Server/);
+  assert.match(panel, /OrcheRoute VPN Server/);
   assert.doesNotMatch(panel, /wireguard-tools|iptables/);
   assert.match(backend, /xraycore\.StartInstance/);
 });
@@ -625,6 +625,6 @@ test("call server builds a domainless route automatically and exports profile QR
   assert.match(panel, /Построить тракт/);
   assert.match(panel, /Домен не требуется/);
   assert.match(panel, /Файл и QR работают без домена/);
-  assert.match(panel, /QRCode\.toDataURL\(value\.profile/);
+  assert.match(panel, /QRCode\.toDataURL\(address/);
   assert.match(panel, /Показать QR/);
 });

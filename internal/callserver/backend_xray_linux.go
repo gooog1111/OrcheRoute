@@ -26,15 +26,34 @@ import (
 	_ "github.com/xtls/xray-core/transport/internet/tcp"
 )
 
-type EmbeddedXrayBackend struct{}
+type EmbeddedXrayBackend struct {
+	MihomoBinary   string
+	StateDirectory string
+}
 
 type embeddedXrayRuntime struct {
 	instance *xraycore.Instance
 	stats    xraystats.Manager
 	clients  []string
+	ordinary io.Closer
 }
 
-func (runtime *embeddedXrayRuntime) Close() error { return runtime.instance.Close() }
+func (runtime *embeddedXrayRuntime) Close() error {
+	if runtime.ordinary != nil {
+		_ = runtime.ordinary.Close()
+	}
+	return runtime.instance.Close()
+}
+
+func (runtime *embeddedXrayRuntime) Alive() error {
+	if runtime.ordinary == nil {
+		return nil
+	}
+	if reporter, ok := runtime.ordinary.(healthReporter); ok {
+		return reporter.Alive()
+	}
+	return nil
+}
 
 func (runtime *embeddedXrayRuntime) DrainTraffic() map[string]Traffic {
 	result := make(map[string]Traffic, len(runtime.clients))
@@ -62,7 +81,8 @@ func positiveBytes(value int64) uint64 {
 	return uint64(value)
 }
 
-func (EmbeddedXrayBackend) Start(_ context.Context, address string, clients []callxray.Client) (io.Closer, error) {
+func (backend EmbeddedXrayBackend) Start(ctx context.Context, snapshot RuntimeSnapshot) (io.Closer, error) {
+	address, clients := snapshot.BackendAddress, snapshot.Clients
 	host, portValue, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, fmt.Errorf("call_server_invalid_backend_address")
@@ -88,5 +108,18 @@ func (EmbeddedXrayBackend) Start(_ context.Context, address string, clients []ca
 	for _, client := range clients {
 		ids = append(ids, client.Email)
 	}
-	return &embeddedXrayRuntime{instance: instance, stats: manager, clients: ids}, nil
+	running := &embeddedXrayRuntime{instance: instance, stats: manager, clients: ids}
+	if snapshot.Ordinary.Enabled {
+		if backend.MihomoBinary == "" || backend.StateDirectory == "" {
+			_ = running.Close()
+			return nil, fmt.Errorf("call_server_mihomo_unavailable")
+		}
+		ordinary, err := (ordinaryMihomoBackend{Binary: backend.MihomoBinary, StateDirectory: backend.StateDirectory}).Start(ctx, snapshot.Ordinary)
+		if err != nil {
+			_ = running.Close()
+			return nil, err
+		}
+		running.ordinary = ordinary
+	}
+	return running, nil
 }

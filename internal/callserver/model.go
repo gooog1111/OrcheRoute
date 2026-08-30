@@ -13,17 +13,27 @@ import (
 	callvk "github.com/gooog1111/orcheroute/internal/calltransport/vk"
 )
 
-const CurrentVersion = 1
+const CurrentVersion = 2
 
 type Config struct {
-	Version             int      `json:"version"`
-	Enabled             bool     `json:"enabled"`
-	ListenAddress       string   `json:"listen_address"`
-	PublicEndpoint      string   `json:"public_endpoint,omitempty"`
-	BackendAddress      string   `json:"backend_address"`
-	InvitationURL       string   `json:"invitation_url,omitempty"`
-	SubscriptionBaseURL string   `json:"subscription_base_url,omitempty"`
-	Clients             []Client `json:"clients"`
+	Version               int      `json:"version"`
+	Enabled               bool     `json:"enabled"`
+	ListenAddress         string   `json:"listen_address"`
+	PublicEndpoint        string   `json:"public_endpoint,omitempty"`
+	BackendAddress        string   `json:"backend_address"`
+	InvitationURL         string   `json:"invitation_url,omitempty"`
+	SubscriptionBaseURL   string   `json:"subscription_base_url,omitempty"`
+	OrdinaryEnabled       bool     `json:"ordinary_enabled"`
+	VLESSListenAddress    string   `json:"vless_listen_address"`
+	TrojanListenAddress   string   `json:"trojan_listen_address"`
+	HysteriaListenAddress string   `json:"hysteria2_listen_address"`
+	FakeSNI               string   `json:"fake_sni"`
+	RealityPrivateKey     string   `json:"reality_private_key,omitempty"`
+	RealityPublicKey      string   `json:"reality_public_key,omitempty"`
+	RealityShortID        string   `json:"reality_short_id,omitempty"`
+	TLSCertificate        string   `json:"tls_certificate,omitempty"`
+	TLSPrivateKey         string   `json:"tls_private_key,omitempty"`
+	Clients               []Client `json:"clients"`
 }
 
 type Client struct {
@@ -39,14 +49,19 @@ type Client struct {
 }
 
 type PublicConfig struct {
-	Version              int            `json:"version"`
-	Enabled              bool           `json:"enabled"`
-	ListenAddress        string         `json:"listen_address"`
-	PublicEndpoint       string         `json:"public_endpoint,omitempty"`
-	BackendAddress       string         `json:"backend_address"`
-	InvitationConfigured bool           `json:"invitation_configured"`
-	SubscriptionBaseURL  string         `json:"subscription_base_url,omitempty"`
-	Clients              []PublicClient `json:"clients"`
+	Version               int            `json:"version"`
+	Enabled               bool           `json:"enabled"`
+	ListenAddress         string         `json:"listen_address"`
+	PublicEndpoint        string         `json:"public_endpoint,omitempty"`
+	BackendAddress        string         `json:"backend_address"`
+	InvitationConfigured  bool           `json:"invitation_configured"`
+	SubscriptionBaseURL   string         `json:"subscription_base_url,omitempty"`
+	OrdinaryEnabled       bool           `json:"ordinary_enabled"`
+	VLESSListenAddress    string         `json:"vless_listen_address"`
+	TrojanListenAddress   string         `json:"trojan_listen_address"`
+	HysteriaListenAddress string         `json:"hysteria2_listen_address"`
+	FakeSNI               string         `json:"fake_sni"`
+	Clients               []PublicClient `json:"clients"`
 }
 
 type PublicClient struct {
@@ -64,17 +79,40 @@ type PublicClient struct {
 }
 
 func DefaultConfig() Config {
-	return Config{Version: CurrentVersion, ListenAddress: "0.0.0.0:4443", BackendAddress: "127.0.0.1:18443", Clients: []Client{}}
+	return Config{Version: CurrentVersion, ListenAddress: "0.0.0.0:4443", BackendAddress: "127.0.0.1:18443",
+		OrdinaryEnabled: true, VLESSListenAddress: "0.0.0.0:24443", TrojanListenAddress: "0.0.0.0:24444",
+		HysteriaListenAddress: "0.0.0.0:24445", FakeSNI: "m.vk.ru", Clients: []Client{}}
 }
 
 func (config *Config) Normalize() error {
 	if config.Version == 0 {
 		config.Version = CurrentVersion
 	}
+	if config.Version == 1 {
+		config.Version = CurrentVersion
+		config.OrdinaryEnabled = true
+	}
 	config.ListenAddress = strings.TrimSpace(config.ListenAddress)
 	config.PublicEndpoint = strings.TrimSpace(config.PublicEndpoint)
 	config.BackendAddress = strings.TrimSpace(config.BackendAddress)
 	config.SubscriptionBaseURL = strings.TrimRight(strings.TrimSpace(config.SubscriptionBaseURL), "/")
+	defaults := DefaultConfig()
+	if config.VLESSListenAddress == "" {
+		config.VLESSListenAddress = defaults.VLESSListenAddress
+	}
+	if config.TrojanListenAddress == "" {
+		config.TrojanListenAddress = defaults.TrojanListenAddress
+	}
+	if config.HysteriaListenAddress == "" {
+		config.HysteriaListenAddress = defaults.HysteriaListenAddress
+	}
+	if config.FakeSNI == "" {
+		config.FakeSNI = defaults.FakeSNI
+	}
+	config.VLESSListenAddress = strings.TrimSpace(config.VLESSListenAddress)
+	config.TrojanListenAddress = strings.TrimSpace(config.TrojanListenAddress)
+	config.HysteriaListenAddress = strings.TrimSpace(config.HysteriaListenAddress)
+	config.FakeSNI = strings.ToLower(strings.TrimSpace(config.FakeSNI))
 	if config.InvitationURL != "" {
 		invitation, err := callvk.ParseInvitation(config.InvitationURL)
 		if err != nil {
@@ -110,6 +148,19 @@ func (config Config) Validate() error {
 		host, _, _ := net.SplitHostPort(config.PublicEndpoint)
 		if _, err := netip.ParseAddr(host); err != nil {
 			return fmt.Errorf("call_server_public_endpoint_must_be_ip")
+		}
+	}
+	if config.OrdinaryEnabled {
+		for _, endpoint := range []string{config.VLESSListenAddress, config.TrojanListenAddress, config.HysteriaListenAddress} {
+			if err := validEndpoint(endpoint, false); err != nil {
+				return fmt.Errorf("call_server_invalid_protocol_address")
+			}
+		}
+		if config.FakeSNI == "" || strings.ContainsAny(config.FakeSNI, "/: ") {
+			return fmt.Errorf("call_server_invalid_fake_sni")
+		}
+		if config.RealityPrivateKey == "" || config.RealityPublicKey == "" || config.RealityShortID == "" || config.TLSCertificate == "" || config.TLSPrivateKey == "" {
+			return fmt.Errorf("call_server_protocol_identity_missing")
 		}
 	}
 	if config.InvitationURL != "" {
@@ -178,5 +229,8 @@ func (config Config) PublicAt(now time.Time) PublicConfig {
 	}
 	return PublicConfig{Version: config.Version, Enabled: config.Enabled, ListenAddress: config.ListenAddress,
 		PublicEndpoint: config.PublicEndpoint, BackendAddress: config.BackendAddress,
-		InvitationConfigured: config.InvitationURL != "", SubscriptionBaseURL: config.SubscriptionBaseURL, Clients: clients}
+		InvitationConfigured: config.InvitationURL != "", SubscriptionBaseURL: config.SubscriptionBaseURL,
+		OrdinaryEnabled: config.OrdinaryEnabled, VLESSListenAddress: config.VLESSListenAddress,
+		TrojanListenAddress: config.TrojanListenAddress, HysteriaListenAddress: config.HysteriaListenAddress,
+		FakeSNI: config.FakeSNI, Clients: clients}
 }

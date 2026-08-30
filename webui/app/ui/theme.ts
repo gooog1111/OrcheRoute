@@ -14,6 +14,6 @@ export const themes: { id: ThemeID; name: string; description: string; glyph: st
 export const defaultTheme: ThemeID = "matrix";
 export const themeStorageKey = "orcheroute.ui.theme";
 
-export function isThemeID(value: string | null): value is ThemeID {
+export function isThemeID(value: string | null | undefined): value is ThemeID {
   return themeIDs.includes(value as ThemeID);
 }

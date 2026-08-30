@@ -48,6 +48,7 @@ type RuntimeSnapshot struct {
 	BackendAddress string
 	Keys           map[string][]byte
 	Clients        []callxray.Client
+	Ordinary       OrdinarySnapshot
 }
 
 func Open(path string) (*Manager, error) {
@@ -65,8 +66,17 @@ func Open(path string) (*Manager, error) {
 	if err := manager.data.Normalize(); err != nil {
 		return nil, fmt.Errorf("call_server_config_invalid: %w", err)
 	}
+	identityChanged, err := manager.ensureServerIdentityLocked(&manager.data)
+	if err != nil {
+		return nil, fmt.Errorf("call_server_identity_invalid: %w", err)
+	}
 	if err := manager.data.Validate(); err != nil {
 		return nil, fmt.Errorf("call_server_config_invalid: %w", err)
+	}
+	if identityChanged {
+		if err := manager.saveLocked(manager.data); err != nil {
+			return nil, err
+		}
 	}
 	return manager, nil
 }
@@ -93,10 +103,15 @@ func (manager *Manager) updateConfig(input Config, invitationProvided bool) (Pub
 	defer manager.mu.Unlock()
 	input.Clients = append([]Client(nil), manager.data.Clients...)
 	input.Enabled = manager.data.Enabled
+	input.RealityPrivateKey, input.RealityPublicKey, input.RealityShortID = manager.data.RealityPrivateKey, manager.data.RealityPublicKey, manager.data.RealityShortID
+	input.TLSCertificate, input.TLSPrivateKey = manager.data.TLSCertificate, manager.data.TLSPrivateKey
 	if !invitationProvided {
 		input.InvitationURL = manager.data.InvitationURL
 	}
 	if err := input.Normalize(); err != nil {
+		return PublicConfig{}, err
+	}
+	if _, err := manager.ensureServerIdentityLocked(&input); err != nil {
 		return PublicConfig{}, err
 	}
 	if err := input.Validate(); err != nil {
@@ -114,6 +129,9 @@ func (manager *Manager) SetEnabled(enabled bool) (PublicConfig, error) {
 	defer manager.mu.Unlock()
 	candidate := manager.data
 	candidate.Enabled = enabled
+	if _, err := manager.ensureServerIdentityLocked(&candidate); err != nil {
+		return PublicConfig{}, err
+	}
 	if err := candidate.Validate(); err != nil {
 		return PublicConfig{}, err
 	}
@@ -137,6 +155,9 @@ func (manager *Manager) CreateClient(input CreateClientInput) (Client, error) {
 	}
 	if manager.data.InvitationURL == "" || manager.data.PublicEndpoint == "" {
 		return Client{}, fmt.Errorf("call_server_not_configured")
+	}
+	if _, err := manager.ensureServerIdentityLocked(&manager.data); err != nil {
+		return Client{}, err
 	}
 	profile, err := callprofile.New(callprofile.NewInput{Name: name, InvitationURL: manager.data.InvitationURL,
 		PeerAddress: manager.data.PublicEndpoint, ExpiresAt: input.ExpiresAt, TrafficLimitBytes: input.TrafficLimitBytes,
@@ -306,7 +327,11 @@ func (manager *Manager) XrayClients() []callxray.Client {
 func (manager *Manager) RuntimeSnapshot() (RuntimeSnapshot, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
-	snapshot := RuntimeSnapshot{Enabled: manager.data.Enabled, ListenAddress: manager.data.ListenAddress, BackendAddress: manager.data.BackendAddress, Keys: map[string][]byte{}, Clients: []callxray.Client{}}
+	snapshot := RuntimeSnapshot{Enabled: manager.data.Enabled, ListenAddress: manager.data.ListenAddress, BackendAddress: manager.data.BackendAddress, Keys: map[string][]byte{}, Clients: []callxray.Client{},
+		Ordinary: OrdinarySnapshot{Enabled: manager.data.OrdinaryEnabled, VLESSListenAddress: manager.data.VLESSListenAddress,
+			TrojanListenAddress: manager.data.TrojanListenAddress, HysteriaListenAddress: manager.data.HysteriaListenAddress,
+			FakeSNI: manager.data.FakeSNI, RealityPrivateKey: manager.data.RealityPrivateKey, RealityShortID: manager.data.RealityShortID,
+			TLSCertificate: manager.data.TLSCertificate, TLSPrivateKey: manager.data.TLSPrivateKey}}
 	for _, client := range manager.data.Clients {
 		if !client.AvailableAt(manager.now()) {
 			continue
@@ -317,6 +342,9 @@ func (manager *Manager) RuntimeSnapshot() (RuntimeSnapshot, error) {
 		}
 		snapshot.Keys[client.Profile.VLESSUUID] = psk
 		snapshot.Clients = append(snapshot.Clients, callxray.Client{ID: client.Profile.VLESSUUID, Email: client.ID})
+		snapshot.Ordinary.Clients = append(snapshot.Ordinary.Clients, OrdinaryClient{ID: client.ID, Name: client.Name,
+			VLESSUUID: client.Profile.VLESSUUID, TrojanPassword: protocolPassword(client.Profile.PSK, "trojan"),
+			HysteriaPassword: protocolPassword(client.Profile.PSK, "hysteria2")})
 	}
 	return snapshot, nil
 }
@@ -349,7 +377,7 @@ func (manager *Manager) encodeClientLocked(client Client) (string, error) {
 	if !client.AvailableAt(manager.now()) {
 		return "", fmt.Errorf("call_server_subscription_inactive")
 	}
-	return callprofile.Encode(client.Profile, manager.now())
+	return manager.encodeSubscriptionLocked(client)
 }
 
 func (manager *Manager) randomString(size int) (string, error) {

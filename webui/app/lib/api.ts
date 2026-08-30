@@ -261,13 +261,18 @@ export type CallServerClient = {
 };
 
 export type CallServerConfig = {
-	version: 1;
+	version: 2;
 	enabled: boolean;
 	listen_address: string;
 	public_endpoint?: string;
 	backend_address: string;
 	invitation_configured: boolean;
 	subscription_base_url?: string;
+	ordinary_enabled: boolean;
+	vless_listen_address: string;
+	trojan_listen_address: string;
+	hysteria2_listen_address: string;
+	fake_sni: string;
 	clients: CallServerClient[];
 };
 

@@ -86,7 +86,7 @@ func (runtime *Runtime) callServerSubscription(writer http.ResponseWriter, reque
 		return
 	}
 	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	writer.Header().Set("Content-Disposition", `inline; filename="orcheroute-call.txt"`)
+	writer.Header().Set("Content-Disposition", `inline; filename="orcheroute-subscription.txt"`)
 	writer.Header().Set("Profile-Title", client.Name)
 	writer.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", client.TrafficRXBytes, client.TrafficTXBytes, client.TrafficLimitBytes, client.ExpiresAt))
 	writer.WriteHeader(http.StatusOK)

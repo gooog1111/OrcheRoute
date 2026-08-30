@@ -127,7 +127,7 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			if runtime.CallTransport != nil {
 				status = runtime.CallTransport.Status()
 			}
-			return 200, map[string]any{"config": runtime.CallServer.PublicConfig(), "status": status, "capabilities": map[string]any{"transport": "vk-call-xray", "profile": "orcheroute-call-v1", "backend": "embedded-xray", "beta": true}}
+			return 200, map[string]any{"config": runtime.CallServer.PublicConfig(), "status": status, "capabilities": map[string]any{"transport": "vkcall-vless-trojan-hysteria2", "profile": "orcheroute-subscription-v2", "backend": "embedded-xray+isolated-mihomo", "beta": true}}
 		}
 	}
 	if method == http.MethodPost {

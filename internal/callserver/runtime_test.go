@@ -5,8 +5,6 @@ import (
 	"io"
 	"net"
 	"testing"
-
-	callxray "github.com/gooog1111/orcheroute/internal/calltransport/xray"
 )
 
 type testBackend struct {
@@ -18,7 +16,10 @@ type testBackend struct {
 type testBackendRun struct {
 	net.Listener
 	traffic map[string]Traffic
+	health  error
 }
+
+func (running *testBackendRun) Alive() error { return running.health }
 
 func (running *testBackendRun) DrainTraffic() map[string]Traffic {
 	result := running.traffic
@@ -26,8 +27,8 @@ func (running *testBackendRun) DrainTraffic() map[string]Traffic {
 	return result
 }
 
-func (backend *testBackend) Start(_ context.Context, address string, _ []callxray.Client) (io.Closer, error) {
-	listener, err := net.Listen("tcp", address)
+func (backend *testBackend) Start(_ context.Context, snapshot RuntimeSnapshot) (io.Closer, error) {
+	listener, err := net.Listen("tcp", snapshot.BackendAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +65,12 @@ func TestRuntimeAppliesAndStopsConfiguredRegistry(t *testing.T) {
 	if err := runtime.Apply(manager); err != nil || backend.starts != 1 {
 		t.Fatalf("unchanged runtime restarted: starts=%d err=%v", backend.starts, err)
 	}
+	backend.run.health = io.EOF
+	if err := runtime.Apply(manager); err != nil || backend.starts != 2 {
+		t.Fatalf("failed backend was not restarted: starts=%d err=%v", backend.starts, err)
+	}
 	backend.run.traffic[client.ID] = Traffic{RXBytes: 60, TXBytes: 40}
-	if err := runtime.Apply(manager); err != nil || backend.starts != 1 {
+	if err := runtime.Apply(manager); err != nil || backend.starts != 2 {
 		t.Fatalf("traffic sync restarted runtime: starts=%d err=%v", backend.starts, err)
 	}
 	public := manager.PublicConfig().Clients[0]

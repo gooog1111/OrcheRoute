@@ -9,6 +9,7 @@ import (
 	"time"
 
 	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
+	"github.com/gooog1111/orcheroute/internal/nodes"
 )
 
 func configuredManager(t *testing.T) (*Manager, time.Time) {
@@ -52,7 +53,15 @@ func TestManagerPersistsClientsWithoutLeakingSecrets(t *testing.T) {
 	if err != nil || exposed.ID != client.ID {
 		t.Fatalf("persisted subscription missing: %v, %#v", err, exposed)
 	}
-	decoded, err := callprofile.Decode(profileURI, now)
+	profiles := strings.Split(profileURI, "\n")
+	if len(profiles) != 4 || !strings.HasPrefix(profiles[1], "vless://") || !strings.HasPrefix(profiles[2], "trojan://") || !strings.HasPrefix(profiles[3], "hysteria2://") {
+		t.Fatalf("ordinary protocols missing from subscription: %q", profileURI)
+	}
+	converted := nodes.ConvertLinks(profiles, "personal")
+	if len(converted.Proxies) != 4 || len(converted.Errors) != 0 {
+		t.Fatalf("generated subscription is not accepted by the shared parser: proxies=%d errors=%#v", len(converted.Proxies), converted.Errors)
+	}
+	decoded, err := callprofile.Decode(profiles[0], now)
 	if err != nil || decoded.VLESSUUID != client.Profile.VLESSUUID {
 		t.Fatalf("unexpected persisted profile: %#v, %v", decoded.Public(), err)
 	}

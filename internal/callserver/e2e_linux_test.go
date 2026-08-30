@@ -36,6 +36,7 @@ func TestCallProfileCarriesVLESSThroughManagedRuntime(t *testing.T) {
 	config := manager.data
 	config.ListenAddress = freeUDPAddress(t)
 	config.BackendAddress = freeTCPAddress(t)
+	config.OrdinaryEnabled = false
 	if _, err := manager.UpdateConfig(config); err != nil {
 		t.Fatal(err)
 	}

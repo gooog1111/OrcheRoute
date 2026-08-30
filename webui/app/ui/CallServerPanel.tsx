@@ -34,6 +34,11 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 			public_endpoint: config.public_endpoint,
 			backend_address: config.backend_address,
 			subscription_base_url: config.subscription_base_url,
+			ordinary_enabled: config.ordinary_enabled,
+			vless_listen_address: config.vless_listen_address,
+			trojan_listen_address: config.trojan_listen_address,
+			hysteria2_listen_address: config.hysteria2_listen_address,
+			fake_sni: config.fake_sni,
 			...(invitation.trim() ? { invitation_url: invitation.trim() } : {}),
 		};
 		if (await run(() => actions.saveCallServer(payload), "Настройки VPN-сервера сохранены.", { title: "Сохраняем VPN-сервер" })) {
@@ -62,10 +67,10 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 	const ready = Boolean(config.public_endpoint && config.invitation_configured && config.clients.some(client => client.available));
 
 	return <div className="settings-section call-server-settings">
-		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>OrcheRoute Call Server</h3><p>Персональные профили Xray/VLESS поверх транспорта звонка VK. Срок и лимит применяются отдельно к каждому клиенту.</p></div><span className={`call-server-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
+		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>OrcheRoute VPN Server</h3><p>Одна персональная подписка содержит VK Call, VLESS, Trojan и Hysteria2. SNI обычных протоколов: {config.fake_sni}.</p></div><span className={`call-server-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
 		{state.status.last_error && <p className="inline-feedback error">{callServerError(state.status.last_error)}</p>}
 		<div className="access-panel call-auto-setup">
-			<div className="access-panel-heading"><div><strong>Автоматическая настройка</strong><small>OrcheRoute определит внешний Direct IP и настроит DTLS и встроенный Xray. Домен не требуется.</small></div></div>
+			<div className="access-panel-heading"><div><strong>Автоматическая настройка</strong><small>OrcheRoute определит внешний Direct IP и настроит VK Call и обычные VPN-протоколы. Домен не требуется.</small></div></div>
 			<div className="action-bar"><button className="primary-button" type="button" disabled={busy || config.enabled} onClick={() => void autoConfigure()}>{config.public_endpoint ? "Перестроить тракт" : "Построить тракт"}</button></div>
 			{config.public_endpoint && <div className="pool-audit"><div><span>Публичный UDP <strong>{config.public_endpoint}</strong></span><span>Передача профиля <strong>{config.subscription_base_url ? "HTTPS-ссылка" : "Файл или QR"}</strong></span></div><small>После запуска этот UDP-порт должен быть разрешён в firewall или проброшен на роутере.</small></div>}
 		</div>
@@ -74,10 +79,15 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 				<label className="form-field form-field-wide"><span>Ссылка-приглашение VK Call</span><input type="url" value={invitation} onChange={event => setInvitation(event.target.value)} placeholder={config.invitation_configured ? "Ссылка уже сохранена; оставьте пустым, чтобы не менять" : "https://vk.com/call/join/..."} disabled={busy}/><small>{config.invitation_configured ? "Действующая ссылка скрыта и не будет очищена при сохранении." : "Используется клиентом для получения краткоживущих TURN-реквизитов."}</small></label>
 			</div>
 			<details className="advanced-settings"><summary>Ручная настройка сети</summary><div className="form-grid two">
+				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.ordinary_enabled} onChange={event => update("ordinary_enabled", event.target.checked)} disabled={busy}/><span><strong>Обычные протоколы</strong><small>Добавлять VLESS, Trojan и Hysteria2 в персональную подписку.</small></span></label>
 				<label className="form-field"><span>Публичный UDP-адрес</span><input value={config.public_endpoint ?? ""} onChange={event => update("public_endpoint", event.target.value)} placeholder="203.0.113.25:4443" disabled={busy}/><small>Внешний IP сервера и проброшенный UDP-порт.</small></label>
 				<label className="form-field"><span>Адрес подписок</span><input type="url" value={config.subscription_base_url ?? ""} onChange={event => update("subscription_base_url", event.target.value)} placeholder="Необязательно" disabled={busy}/><small>Нужен только для обновляемой HTTPS-ссылки. Файл и QR работают без домена.</small></label>
 				<label className="form-field"><span>Слушать DTLS</span><input value={config.listen_address} onChange={event => update("listen_address", event.target.value)} placeholder="0.0.0.0:4443" disabled={busy}/></label>
 				<label className="form-field"><span>Локальный VLESS</span><input value={config.backend_address} onChange={event => update("backend_address", event.target.value)} placeholder="127.0.0.1:18443" disabled={busy}/></label>
+				<label className="form-field"><span>VLESS Reality</span><input value={config.vless_listen_address} onChange={event => update("vless_listen_address", event.target.value)} placeholder="0.0.0.0:24443" disabled={busy}/></label>
+				<label className="form-field"><span>Trojan TLS</span><input value={config.trojan_listen_address} onChange={event => update("trojan_listen_address", event.target.value)} placeholder="0.0.0.0:24444" disabled={busy}/></label>
+				<label className="form-field"><span>Hysteria2 UDP</span><input value={config.hysteria2_listen_address} onChange={event => update("hysteria2_listen_address", event.target.value)} placeholder="0.0.0.0:24445" disabled={busy}/></label>
+				<label className="form-field"><span>Fake SNI</span><input value={config.fake_sni} onChange={event => update("fake_sni", event.target.value)} placeholder="m.vk.ru" disabled={busy}/></label>
 			</div></details>
 			<div className="action-bar"><button className="secondary-button" type="button" disabled={busy || !changed} onClick={() => void save()}>Сохранить настройки</button><button className={config.enabled ? "danger-button" : "primary-button"} type="button" disabled={busy || changed || (!config.enabled && !ready)} onClick={() => void toggle()}>{config.enabled ? "Остановить сервер" : "Запустить сервер"}</button></div>
 		</div>
@@ -132,7 +142,11 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 			window.setTimeout(() => setDownloadStatus("idle"), 3000);
 		}
 	};
-	const showQR = async () => { const value = await actions.callServerProfile(client.id); setProfileQR(await QRCode.toDataURL(value.profile, { width: 320, margin: 2, errorCorrectionLevel: "M" })); };
+	const showQR = async () => {
+		const value = await actions.callServerSubscription(client.id);
+		const address = value.subscription_url.startsWith("https://") ? value.subscription_url : new URL(value.subscription_path, window.location.origin).toString();
+		setProfileQR(await QRCode.toDataURL(address, { width: 320, margin: 2, errorCorrectionLevel: "M" }));
+	};
 	return <details className="call-client-card">
 		<summary><span className={`node-status ${client.available ? "alive" : ""}`}/><span><strong>{client.name}</strong><small>{formatBytes(client.traffic_used_bytes)}{client.traffic_limit_bytes ? ` из ${formatBytes(client.traffic_limit_bytes)}` : ""}</small></span><em>{client.available ? "Доступен" : "Отключён"}</em></summary>
 		<div className="call-client-body">

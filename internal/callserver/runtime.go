@@ -10,11 +10,10 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/calltransport"
-	callxray "github.com/gooog1111/orcheroute/internal/calltransport/xray"
 )
 
 type Backend interface {
-	Start(context.Context, string, []callxray.Client) (io.Closer, error)
+	Start(context.Context, RuntimeSnapshot) (io.Closer, error)
 }
 
 type Traffic struct {
@@ -25,6 +24,8 @@ type Traffic struct {
 type trafficReporter interface {
 	DrainTraffic() map[string]Traffic
 }
+
+type healthReporter interface{ Alive() error }
 
 type RuntimeStatus struct {
 	Active         bool   `json:"active"`
@@ -68,7 +69,9 @@ func (runtime *Runtime) Apply(manager *Manager) error {
 		return err
 	}
 	if reflect.DeepEqual(runtime.snapshot, snapshot) && runtime.status.Active == snapshot.Enabled {
-		return nil
+		if reporter, ok := runtime.backendRun.(healthReporter); !snapshot.Enabled || !ok || reporter.Alive() == nil {
+			return nil
+		}
 	}
 	runtime.stopLocked()
 	if !snapshot.Enabled {
@@ -121,7 +124,7 @@ func (runtime *Runtime) startLocked(snapshot RuntimeSnapshot) error {
 		return fmt.Errorf("call_server_no_active_clients")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	backendRun, err := runtime.backend.Start(ctx, snapshot.BackendAddress, snapshot.Clients)
+	backendRun, err := runtime.backend.Start(ctx, snapshot)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("call_server_backend_start: %w", err)

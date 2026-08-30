@@ -45,6 +45,9 @@ func (runtime *Runtime) autoConfigureCallServer(body map[string]any) (int, any) 
 		PublicEndpoint:      publicEndpoint,
 		BackendAddress:      "127.0.0.1:18443",
 		SubscriptionBaseURL: subscriptionBaseURL,
+		OrdinaryEnabled:     current.OrdinaryEnabled, VLESSListenAddress: current.VLESSListenAddress,
+		TrojanListenAddress: current.TrojanListenAddress, HysteriaListenAddress: current.HysteriaListenAddress,
+		FakeSNI: current.FakeSNI,
 	}
 	updated, err := runtime.CallServer.UpdatePublicConfig(config, false)
 	if err != nil {

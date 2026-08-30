@@ -110,7 +110,7 @@ func New(config Config) (*Runtime, error) {
 		runtime.callServerError = callErr.Error()
 	} else {
 		runtime.CallServer = callManager
-		runtime.CallTransport = platformCallServerRuntime()
+		runtime.CallTransport = platformCallServerRuntime(config)
 	}
 	if err := runtime.bootstrap(context.Background(), freshState); err != nil {
 		_ = store.Close()

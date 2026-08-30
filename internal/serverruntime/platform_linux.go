@@ -30,8 +30,8 @@ func platformDefaultConfig() Config {
 		RequireAPIAuth: true}
 }
 
-func platformCallServerRuntime() *callserver.Runtime {
-	return callserver.NewRuntime(callserver.EmbeddedXrayBackend{})
+func platformCallServerRuntime(config Config) *callserver.Runtime {
+	return callserver.NewRuntime(callserver.EmbeddedXrayBackend{MihomoBinary: config.MihomoBinary, StateDirectory: config.StateDirectory})
 }
 
 func discoverTopology(ctx context.Context) (network.Topology, error) {

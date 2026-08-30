@@ -36,7 +36,7 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	callServerAPI(t, runtime, http.MethodGet, "/v1/reverse-vpn", nil, http.StatusNotFound)
 
 	settings := map[string]any{
-		"version": 1, "enabled": false, "listen_address": freeServerAddress(t, "udp"),
+		"version": 2, "enabled": false, "ordinary_enabled": false, "listen_address": freeServerAddress(t, "udp"),
 		"public_endpoint": "203.0.113.25:4443", "backend_address": freeServerAddress(t, "tcp"),
 		"invitation_url": "https://vk.com/call/join/test-invite", "subscription_base_url": "https://vpn.example",
 	}
