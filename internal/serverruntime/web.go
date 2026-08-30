@@ -29,8 +29,8 @@ func (runtime *Runtime) WebHandler() http.Handler {
 	files := http.FileServer(http.Dir(runtime.Config.WebRoot))
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		setWebHeaders(writer)
-		if strings.HasPrefix(request.URL.Path, "/subscription/call/") {
-			runtime.callServerSubscription(writer, request)
+		if token, ok := callSubscriptionToken(request.URL.Path); ok {
+			runtime.callServerSubscription(writer, request, token)
 			return
 		}
 		if !runtime.managementAllowed(request.RemoteAddr) {
@@ -66,7 +66,20 @@ func (runtime *Runtime) WebHandler() http.Handler {
 	})
 }
 
-func (runtime *Runtime) callServerSubscription(writer http.ResponseWriter, request *http.Request) {
+func callSubscriptionToken(path string) (string, bool) {
+	for _, prefix := range []string{"/subscription/call/", "/subscription/"} {
+		if !strings.HasPrefix(path, prefix) {
+			continue
+		}
+		token := strings.TrimSpace(strings.TrimPrefix(path, prefix))
+		if token != "" && !strings.Contains(token, "/") {
+			return token, true
+		}
+	}
+	return "", false
+}
+
+func (runtime *Runtime) callServerSubscription(writer http.ResponseWriter, request *http.Request, token string) {
 	if request.Method != http.MethodGet {
 		writeJSON(writer, 405, map[string]any{"error": "method_not_allowed"})
 		return
@@ -75,7 +88,6 @@ func (runtime *Runtime) callServerSubscription(writer http.ResponseWriter, reque
 		writeJSON(writer, 503, map[string]any{"error": "call_server_unavailable"})
 		return
 	}
-	token := strings.TrimSpace(strings.TrimPrefix(request.URL.Path, "/subscription/call/"))
 	profile, client, err := runtime.CallServer.SubscriptionProfile(token)
 	if err != nil {
 		status := http.StatusNotFound

@@ -316,7 +316,7 @@ func (manager *Manager) SubscriptionProfile(token string) (string, PublicClient,
 func (manager *Manager) SubscriptionURL(token string) string {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
-	path := "/subscription/call/" + token
+	path := "/subscription/" + token
 	if manager.data.SubscriptionBaseURL == "" {
 		return path
 	}

@@ -114,7 +114,7 @@ func New(config Config) (*Runtime, error) {
 		runtime.CallServer = callManager
 		runtime.CallTransport = platformCallServerRuntime(config)
 		runtime.callServerProbe = func(ctx context.Context) (callserver.ProviderProbeResult, error) {
-			return callserver.ProbeProvider(ctx, callManager, callvk.Source{Name: "OrcheRoute Server"})
+			return callserver.ProbeProvider(ctx, callManager, defaultCallServerSource())
 		}
 	}
 	if err := runtime.bootstrap(context.Background(), freshState); err != nil {
@@ -122,6 +122,10 @@ func New(config Config) (*Runtime, error) {
 		return nil, err
 	}
 	return runtime, nil
+}
+
+func defaultCallServerSource() callvk.Source {
+	return callvk.Source{Identity: callvk.DefaultIdentity(), Name: "OrcheRoute Server"}
 }
 
 // bootstrap makes a clean installation immediately configurable. It only

@@ -69,7 +69,7 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}
 			}
 			token, err := runtime.CallServer.SubscriptionSecret(id)
-			return result(200, map[string]any{"id": id, "subscription_path": "/subscription/call/" + token, "subscription_url": runtime.CallServer.SubscriptionURL(token)}, err)
+			return result(200, map[string]any{"id": id, "subscription_path": "/subscription/" + token, "subscription_url": runtime.CallServer.SubscriptionURL(token)}, err)
 		}
 		if strings.HasPrefix(path, "/v1/call-server/clients/") && strings.HasSuffix(path, "/profile") {
 			id, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/v1/call-server/clients/"), "/profile"))
@@ -275,7 +275,7 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 					return backendError(err)
 				}
 			}
-			return 201, map[string]any{"client": client.PublicAt(time.Now()), "subscription_path": "/subscription/call/" + client.SubscriptionToken,
+			return 201, map[string]any{"client": client.PublicAt(time.Now()), "subscription_path": "/subscription/" + client.SubscriptionToken,
 				"subscription_url": runtime.CallServer.SubscriptionURL(client.SubscriptionToken), "warning": "subscription_token_is_secret"}
 		case path == "/v1/call-server/auto-configure":
 			return runtime.autoConfigureCallServer(body)
@@ -286,7 +286,13 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			probeContext, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
 			probe, err := runtime.callServerProbe(probeContext)
-			return result(200, map[string]any{"ok": err == nil, "result": probe}, err)
+			if err != nil {
+				// Provider checks return stable, user-facing error codes. Hiding
+				// these behind backend_unavailable makes a configuration error look
+				// like an unavailable server and prevents a useful UI diagnosis.
+				return 503, map[string]any{"error": err.Error()}
+			}
+			return 200, map[string]any{"ok": true, "result": probe}
 		case path == "/v1/call-server/apply":
 			if runtime.CallServer == nil || runtime.CallTransport == nil {
 				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}

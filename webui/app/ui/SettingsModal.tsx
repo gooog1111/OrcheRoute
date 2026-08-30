@@ -196,6 +196,7 @@ function errorText(reason: unknown) {
 	call_server_provider_probe_unavailable: "Проверка VK Call недоступна в этой сборке.",
 	call_server_provider_probe_incomplete: "VK Call не вернул полные TURN-реквизиты.",
 	call_server_invalid_public_endpoint: "Публичный адрес должен иметь формат vpn.example.ru:4443.",
+	call_transport_vk_client_identity_required: "В серверной сборке отсутствует идентификатор VK-приложения.",
 	call_transport_vk_captcha_required: "VK запросил CAPTCHA. Откройте приглашение в Android OrcheRoute и завершите проверку там.",
 	call_transport_vk_anonymous_access_missing_token: "VK не выдал анонимный токен для проверки.",
 	call_transport_vk_anonymous_access: "Не удалось получить анонимный доступ к VK.",

@@ -65,7 +65,7 @@ func TestManagerPersistsClientsWithoutLeakingSecrets(t *testing.T) {
 	if err != nil || decoded.VLESSUUID != client.Profile.VLESSUUID {
 		t.Fatalf("unexpected persisted profile: %#v, %v", decoded.Public(), err)
 	}
-	if !strings.HasSuffix(reopened.SubscriptionURL(client.SubscriptionToken), "/subscription/call/"+client.SubscriptionToken) {
+	if !strings.HasSuffix(reopened.SubscriptionURL(client.SubscriptionToken), "/subscription/"+client.SubscriptionToken) {
 		t.Fatal("unexpected subscription URL")
 	}
 }

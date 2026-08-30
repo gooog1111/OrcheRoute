@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -52,10 +53,17 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	if probe["ok"] != true || probe["result"].(map[string]any)["turn_endpoint"] != "turn.example:3478" {
 		t.Fatalf("provider probe did not return connection evidence: %#v", probe)
 	}
+	runtime.callServerProbe = func(context.Context) (callserver.ProviderProbeResult, error) {
+		return callserver.ProviderProbeResult{}, errors.New("call_transport_vk_client_identity_required")
+	}
+	probeFailure := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/test", map[string]any{}, http.StatusServiceUnavailable)
+	if probeFailure["error"] != "call_transport_vk_client_identity_required" {
+		t.Fatalf("provider error was hidden: %#v", probeFailure)
+	}
 	created := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/clients", map[string]any{"name": "Phone", "traffic_limit_bytes": 1024}, http.StatusCreated)
 	client := created["client"].(map[string]any)
 	path := created["subscription_path"].(string)
-	if !strings.HasPrefix(path, "/subscription/call/") {
+	if !strings.HasPrefix(path, "/subscription/") || strings.HasPrefix(path, "/subscription/call/") {
 		t.Fatalf("unexpected subscription path: %s", path)
 	}
 
@@ -84,12 +92,25 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	if disposition := subscriptionResponse.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "inline") {
 		t.Fatalf("subscription is not browser-readable: %q", disposition)
 	}
+	legacyRequest := httptest.NewRequest(http.MethodGet, strings.Replace(path, "/subscription/", "/subscription/call/", 1), nil)
+	legacyResponse := httptest.NewRecorder()
+	runtime.WebHandler().ServeHTTP(legacyResponse, legacyRequest)
+	if legacyResponse.Code != http.StatusOK || legacyResponse.Body.String() != subscriptionResponse.Body.String() {
+		t.Fatalf("legacy subscription URL is no longer compatible: %d %s", legacyResponse.Code, legacyResponse.Body.String())
+	}
 	callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/apply", map[string]any{}, http.StatusOK)
 	active := callServerAPI(t, runtime, http.MethodGet, "/v1/call-server", nil, http.StatusOK)
 	if !active["status"].(map[string]any)["active"].(bool) {
 		t.Fatal("embedded call server did not become active")
 	}
 	callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/disable", map[string]any{}, http.StatusOK)
+}
+
+func TestDefaultCallServerSourceIncludesVKApplicationIdentity(t *testing.T) {
+	source := defaultCallServerSource()
+	if source.Identity.ID == "" || source.Identity.Secret == "" || source.Name == "" {
+		t.Fatalf("default server VK source is incomplete: %#v", source)
+	}
 }
 
 func TestCallServerAutoConfigureUsesDirectIPAndTreatsDomainAsOptional(t *testing.T) {
