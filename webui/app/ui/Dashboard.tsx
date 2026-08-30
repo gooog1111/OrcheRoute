@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { actions, getAndroidAppUpdateStatus, installAndroidAppUpdate, loadDashboard, loadLiveDashboard, type AndroidAppUpdateStatus, type ConnectionIdentity, type DashboardData, type Node } from "../lib/api";
 import { platformCapabilities } from "../platform/runtime";
 import { releaseBranding } from "../platform/release";
@@ -69,22 +69,30 @@ export function Dashboard() {
   const [appUpdate, setAppUpdate] = useState<AndroidAppUpdateStatus | null>(null);
   const [dismissedUpdate, setDismissedUpdate] = useState("");
   const [theme, setTheme] = useState<ThemeID>(defaultTheme);
+  const [themeReady, setThemeReady] = useState(false);
   const dataRef = useRef<DashboardData | null>(null);
   const refreshInFlight = useRef(false);
 
   useEffect(() => { dataRef.current = data; }, [data]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const stored = window.localStorage.getItem(themeStorageKey);
-    if (!isThemeID(stored)) return;
-    const frame = window.requestAnimationFrame(() => setTheme(stored));
-    return () => window.cancelAnimationFrame(frame);
+    const bootstrapped = document.documentElement.dataset.theme;
+    const initial = isThemeID(stored)
+      ? stored
+      : isThemeID(bootstrapped)
+        ? bootstrapped
+        : defaultTheme;
+    document.documentElement.dataset.theme = initial;
+    setTheme(initial);
+    setThemeReady(true);
   }, []);
 
   useEffect(() => {
+    if (!themeReady) return;
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem(themeStorageKey, theme);
-  }, [theme]);
+  }, [theme, themeReady]);
 
   useEffect(() => {
     if (platform.appUpdater !== "android") return;
@@ -256,7 +264,7 @@ export function Dashboard() {
 
   return (
     <main className="app-shell">
-      {!settingsOpen && <ThemeBackdrop theme={theme} />}
+      {themeReady && !settingsOpen && <ThemeBackdrop theme={theme} />}
       <header className="topbar">
         <a className="brand" href="#" aria-label="OrcheRoute">
           <span className="brand-mark"><span /><span /><span /></span>

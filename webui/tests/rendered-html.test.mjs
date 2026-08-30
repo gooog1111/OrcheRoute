@@ -552,6 +552,19 @@ test("shared UI exposes and persists all six appearance themes", async () => {
   assert.match(backdrop, /<MatrixRain \/>/);
 });
 
+test("theme bootstrap does not flash Matrix and rain resumes without catch-up", async () => {
+  const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
+  const rain = await readFile(new URL("../app/ui/MatrixRain.tsx", import.meta.url), "utf8");
+  assert.match(dashboard, /useLayoutEffect/);
+  assert.match(dashboard, /const \[themeReady, setThemeReady\]/);
+  assert.match(dashboard, /themeReady && !settingsOpen/);
+  assert.match(dashboard, /if \(!themeReady\) return/);
+  assert.doesNotMatch(dashboard, /requestAnimationFrame\(\(\) => setTheme/);
+  assert.match(rain, /if \(document\.hidden\) \{[\s\S]*cancelAnimationFrame\(frame\)/);
+  assert.match(rain, /lastFrame = window\.performance\.now\(\)/);
+  assert.match(rain, /if \(!running\) return/);
+});
+
 test("light skins keep diagnostics and power controls readable", async () => {
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(styles, /\.pool-audit[^}]+background: var\(--surface-soft\)/);

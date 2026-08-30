@@ -17,6 +17,7 @@ export function MatrixRain() {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
     let lastFrame = 0;
+    let running = false;
     let columns = 0;
     let drops: number[] = [];
     const fontSize = window.innerWidth < 640 ? 14 : 17;
@@ -48,8 +49,9 @@ export function MatrixRain() {
     };
 
     const draw = (timestamp: number) => {
+      if (!running) return;
       frame = window.requestAnimationFrame(draw);
-      if (document.hidden || timestamp - lastFrame < (reducedMotion.matches ? 180 : 54)) return;
+      if (timestamp - lastFrame < (reducedMotion.matches ? 180 : 54)) return;
       lastFrame = timestamp;
       context.fillStyle = "rgba(2, 8, 7, 0.115)";
       context.fillRect(0, 0, window.innerWidth, window.innerHeight);
@@ -67,8 +69,12 @@ export function MatrixRain() {
     };
 
     const start = () => {
+      running = false;
       window.cancelAnimationFrame(frame);
+      if (document.hidden) return;
+      lastFrame = window.performance.now();
       paintBackdrop();
+      running = true;
       frame = window.requestAnimationFrame(draw);
     };
     const handleResize = () => {
@@ -76,7 +82,12 @@ export function MatrixRain() {
       start();
     };
     const visibility = () => {
-      if (!document.hidden) start();
+      if (document.hidden) {
+        running = false;
+        window.cancelAnimationFrame(frame);
+        return;
+      }
+      start();
     };
     resize();
     start();
@@ -84,6 +95,7 @@ export function MatrixRain() {
     document.addEventListener("visibilitychange", visibility);
     reducedMotion.addEventListener("change", start);
     return () => {
+      running = false;
       window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", handleResize);
       document.removeEventListener("visibilitychange", visibility);
