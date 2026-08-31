@@ -21,6 +21,12 @@ License: GPL-3.0 and MPL-2.0
  Xray Core component remains available under MPL-2.0; its exact version,
  source URL and license notice are recorded in THIRD_PARTY_NOTICES.md.
 
+Files: opt/orcheroute/bin/orcheroute-freeturn-server
+Copyright: 2026 samosvalishe/free-turn-proxy contributors
+License: HBL
+ The complete Happy Bunny License notice is included in
+ /usr/share/doc/orcheroute/THIRD_PARTY_NOTICES.md.
+
 Comment:
  vk-turn-proxy and olcRTC are credited as design references in
  /usr/share/doc/orcheroute/THIRD_PARTY_NOTICES.md. Their code is not included in

@@ -12,7 +12,7 @@ cleanup() { rm -rf -- "$STAGING"; }
 trap cleanup EXIT HUP INT TERM
 
 dpkg-deb -R "$BASE_DEB" "$STAGING"
-for binary in orcheroute-server orcheroute-components-go orcheroute-network-go orcheroute-update-go orcheroute-self-update; do
+for binary in orcheroute-server orcheroute-components-go orcheroute-network-go orcheroute-update-go orcheroute-self-update orcheroute-freeturn-server; do
     install -m 0755 "$BIN_DIR/$binary" "$STAGING/opt/orcheroute/bin/$binary"
 done
 

@@ -170,6 +170,12 @@ func (b *builder) buildServer() error {
 				return err
 			}
 		}
+		bridgeDir := filepath.Join(b.root, "components", "freeturnbridge")
+		linkerFlags := "-s -w -X main.version=" + freeTURNVersion
+		if err := b.command(bridgeDir, nil, "go", "build", "-trimpath", "-ldflags="+linkerFlags,
+			"-o", filepath.Join(out, "orcheroute-freeturn-server"), "github.com/samosvalishe/free-turn-proxy/cmd/server"); err != nil {
+			return err
+		}
 		if err := replaceDirectory(filepath.Join(b.root, "webui", "out"), filepath.Join(out, "webui")); err != nil {
 			return fmt.Errorf("include shared Server WebUI: %w", err)
 		}

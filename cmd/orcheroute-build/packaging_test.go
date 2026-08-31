@@ -86,6 +86,9 @@ func TestDebianPackageContainsLicenseMetadata(t *testing.T) {
 	if !strings.Contains(string(copyright), "Xray-core contributors") || !strings.Contains(string(copyright), "MPL-2.0") {
 		t.Fatal("Debian copyright does not declare embedded Xray Core and MPL-2.0")
 	}
+	if !strings.Contains(string(copyright), "orcheroute-freeturn-server") || !strings.Contains(string(copyright), "License: HBL") {
+		t.Fatal("Debian copyright does not declare the Free TURN server and HBL")
+	}
 	script, err := os.ReadFile(filepath.Join(root, "scripts", "package-linux-server.sh"))
 	if err != nil {
 		t.Fatal(err)
@@ -94,5 +97,8 @@ func TestDebianPackageContainsLicenseMetadata(t *testing.T) {
 		if !strings.Contains(string(script), name) {
 			t.Fatalf("package script does not include %s", name)
 		}
+	}
+	if !strings.Contains(string(script), "orcheroute-freeturn-server") {
+		t.Fatal("package script does not include the Free TURN server")
 	}
 }
