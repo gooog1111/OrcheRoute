@@ -1,6 +1,6 @@
 module github.com/gooog1111/orcheroute
 
-go 1.25.0
+go 1.26.7
 
 replace github.com/wlynxg/anet => ./third_party/anet
 

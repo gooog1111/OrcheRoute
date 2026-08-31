@@ -182,7 +182,11 @@ func (b *builder) android() error {
 			return err
 		}
 		aar := filepath.Join(out, "mobilecore.aar")
-		if err := b.command(b.root, androidEnv, "gomobile", "bind", "-tags=with_gvisor,cmfa", "-target=android/arm64", "-androidapi", "26", "-o", aar, "./mobilecore"); err != nil {
+		gomobile, err := goToolExecutable("gomobile")
+		if err != nil {
+			return err
+		}
+		if err := b.command(b.root, androidEnv, gomobile, "bind", "-tags=with_gvisor,cmfa", "-target=android/arm64", "-androidapi", "26", "-o", aar, "./mobilecore"); err != nil {
 			return err
 		}
 		gradle := "./gradlew"
@@ -293,7 +297,50 @@ func androidEnvironment() ([]string, error) {
 	if info, err := os.Stat(sdk); err != nil || !info.IsDir() {
 		return nil, fmt.Errorf("Android SDK directory is unavailable: %s", sdk)
 	}
-	return []string{"ANDROID_HOME=" + sdk, "ANDROID_SDK_ROOT=" + sdk}, nil
+	pathValue := os.Getenv("PATH")
+	if goPath, err := output("go", "env", "GOPATH"); err == nil {
+		for _, root := range filepath.SplitList(strings.TrimSpace(goPath)) {
+			if root = strings.TrimSpace(root); root != "" {
+				pathValue = filepath.Join(root, "bin") + string(os.PathListSeparator) + pathValue
+			}
+		}
+	}
+	return []string{
+		"ANDROID_HOME=" + sdk,
+		"ANDROID_SDK_ROOT=" + sdk,
+		"PATH=" + pathValue,
+	}, nil
+}
+
+func goToolExecutable(name string) (string, error) {
+	if resolved, err := exec.LookPath(name); err == nil {
+		return resolved, nil
+	}
+	goPath, err := output("go", "env", "GOPATH")
+	if err != nil {
+		return "", fmt.Errorf("locate %s: %w", name, err)
+	}
+	if resolved, ok := goToolInGOPATH(name, strings.TrimSpace(goPath)); ok {
+		return resolved, nil
+	}
+	return "", fmt.Errorf("%s is unavailable; install the module-pinned golang.org/x/mobile tool", name)
+}
+
+func goToolInGOPATH(name, goPath string) (string, bool) {
+	executable := name
+	if runtime.GOOS == "windows" {
+		executable += ".exe"
+	}
+	for _, root := range filepath.SplitList(goPath) {
+		if root = strings.TrimSpace(root); root == "" {
+			continue
+		}
+		candidate := filepath.Join(root, "bin", executable)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, true
+		}
+	}
+	return "", false
 }
 
 func replaceDirectory(source, destination string) error {

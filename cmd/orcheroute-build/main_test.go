@@ -93,8 +93,10 @@ func TestReplaceDirectoryAllowsVerifiedServerWebUI(t *testing.T) {
 
 func TestAndroidEnvironmentUsesConfiguredSDK(t *testing.T) {
 	sdk := t.TempDir()
+	goPath := t.TempDir()
 	t.Setenv("ANDROID_HOME", sdk)
 	t.Setenv("ANDROID_SDK_ROOT", "")
+	t.Setenv("GOPATH", goPath)
 	values, err := androidEnvironment()
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +104,31 @@ func TestAndroidEnvironmentUsesConfiguredSDK(t *testing.T) {
 	want := "ANDROID_HOME=" + sdk
 	if values[0] != want {
 		t.Fatalf("ANDROID_HOME = %q, want %q", values[0], want)
+	}
+	wantPathPrefix := "PATH=" + filepath.Join(goPath, "bin") + string(os.PathListSeparator)
+	if len(values) < 3 || len(values[2]) < len(wantPathPrefix) || values[2][:len(wantPathPrefix)] != wantPathPrefix {
+		t.Fatalf("Android PATH = %q, want prefix %q", values, wantPathPrefix)
+	}
+}
+
+func TestGoToolInGOPATHFindsInstalledBinary(t *testing.T) {
+	goPath := t.TempDir()
+	name := "gomobile"
+	fileName := name
+	if runtime.GOOS == "windows" {
+		fileName += ".exe"
+	}
+	bin := filepath.Join(goPath, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(bin, fileName)
+	if err := os.WriteFile(want, []byte("tool"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := goToolInGOPATH(name, goPath)
+	if !ok || got != want {
+		t.Fatalf("go tool = %q, %v, want %q", got, ok, want)
 	}
 }
 
