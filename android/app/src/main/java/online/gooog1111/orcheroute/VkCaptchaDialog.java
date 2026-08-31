@@ -2,11 +2,16 @@ package online.gooog1111.orcheroute;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.graphics.Color;
+import android.graphics.PixelFormat;
 import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -66,6 +71,8 @@ final class VkCaptchaDialog {
     private FrameLayout overlay;
     private WebView webView;
     private TextView status;
+    private WindowManager overlayWindowManager;
+    private boolean systemOverlay;
 
     VkCaptchaDialog(Activity activity, FrameLayout parent, Callback callback) {
         this.activity = activity;
@@ -79,6 +86,11 @@ final class VkCaptchaDialog {
 
     @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
     boolean open(String rawURL) {
+        return open(rawURL, false);
+    }
+
+    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
+    boolean open(String rawURL, boolean aboveOtherApps) {
         Uri uri = Uri.parse(rawURL == null ? "" : rawURL.trim());
         if (!allowedCaptchaURL(uri)) return false;
         close(false);
@@ -128,10 +140,36 @@ final class VkCaptchaDialog {
                 Gravity.BOTTOM
         );
         overlay.addView(status, statusLayout);
-        parent.addView(overlay, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
+        systemOverlay = false;
+        overlayWindowManager = null;
+        if (aboveOtherApps && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && Settings.canDrawOverlays(activity)) {
+            WindowManager manager = (WindowManager) activity.getApplicationContext()
+                    .getSystemService(Context.WINDOW_SERVICE);
+            WindowManager.LayoutParams window = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                    PixelFormat.OPAQUE
+            );
+            window.gravity = Gravity.TOP | Gravity.START;
+            window.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+            window.setTitle("OrcheRoute VK CAPTCHA");
+            try {
+                manager.addView(overlay, window);
+                overlayWindowManager = manager;
+                systemOverlay = true;
+            } catch (RuntimeException ignored) {
+                overlayWindowManager = null;
+            }
+        }
+        if (!systemOverlay) {
+            parent.addView(overlay, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+        }
         webView.loadUrl(uri.toString());
         return true;
     }
@@ -143,7 +181,19 @@ final class VkCaptchaDialog {
         overlay = null;
         webView = null;
         status = null;
-        parent.removeView(oldOverlay);
+        WindowManager oldWindowManager = overlayWindowManager;
+        boolean wasSystemOverlay = systemOverlay;
+        overlayWindowManager = null;
+        systemOverlay = false;
+        if (wasSystemOverlay && oldWindowManager != null) {
+            try {
+                oldWindowManager.removeViewImmediate(oldOverlay);
+            } catch (RuntimeException ignored) {
+                // The OS may already have detached the overlay while the activity stopped.
+            }
+        } else {
+            parent.removeView(oldOverlay);
+        }
         if (oldWebView != null) {
             oldWebView.stopLoading();
             oldWebView.removeJavascriptInterface(BRIDGE_NAME);

@@ -620,6 +620,17 @@ test("Call profiles are saved as ordinary vkcall server sources before activatio
   assert.doesNotMatch(activity, /public void beginVkCallProfile\(String profile\)/);
 });
 
+test("android VK CAPTCHA can remain above other applications with explicit permission", async () => {
+  const manifest = await readFile(new URL("../../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+  const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
+  const captcha = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/VkCaptchaDialog.java", import.meta.url), "utf8");
+  assert.match(manifest, /android\.permission\.SYSTEM_ALERT_WINDOW/);
+  assert.match(activity, /Settings\.ACTION_MANAGE_OVERLAY_PERMISSION/);
+  assert.match(activity, /Settings\.canDrawOverlays\(this\)/);
+  assert.match(captcha, /WindowManager\.LayoutParams\.TYPE_APPLICATION_OVERLAY/);
+  assert.match(captcha, /if \(!systemOverlay\)/);
+});
+
 test("call server accepts a domain, tests VK and exports profile QR", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");

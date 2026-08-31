@@ -60,6 +60,7 @@ public final class MainActivity extends ComponentActivity {
     private static final int MAX_IMPORT_BYTES = 8 * 1024 * 1024;
     private static final String PERMISSION_PREFS = "orcheroute_permission_prompts";
     private static final String BATTERY_PROMPTED = "battery_optimization_prompted";
+    private static final String CAPTCHA_OVERLAY_PROMPTED = "captcha_overlay_prompted";
     private WebView webView;
     private FrameLayout root;
     private WebViewAssetLoader assetLoader;
@@ -70,6 +71,8 @@ public final class MainActivity extends ComponentActivity {
     private String pendingVkChallengeID = "";
     private boolean pendingVkProfileMode;
     private boolean vpnPermissionReload;
+    private volatile String pendingVkCaptchaURL = "";
+    private volatile boolean waitingForCaptchaOverlayPermission;
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
@@ -147,6 +150,16 @@ public final class MainActivity extends ComponentActivity {
     protected void onResume() {
         super.onResume();
         if (appUpdater != null) appUpdater.resumeInstallIfPermitted();
+        if (waitingForCaptchaOverlayPermission) {
+            waitingForCaptchaOverlayPermission = false;
+            String redirectURL = pendingVkCaptchaURL;
+            pendingVkCaptchaURL = "";
+            if (!redirectURL.isEmpty() && Settings.canDrawOverlays(this)
+                    && vkCaptchaDialog != null && vkCaptchaDialog.isOpen()) {
+                vkCaptchaDialog.close(false);
+                vkCaptchaDialog.open(redirectURL, true);
+            }
+        }
     }
 
     @Override
@@ -414,6 +427,8 @@ public final class MainActivity extends ComponentActivity {
         PendingVkChallenge value = new PendingVkChallenge(pendingVkChallengeID, pendingVkProfileMode);
         pendingVkChallengeID = "";
         pendingVkProfileMode = false;
+        pendingVkCaptchaURL = "";
+        waitingForCaptchaOverlayPermission = false;
         return value;
     }
 
@@ -442,6 +457,32 @@ public final class MainActivity extends ComponentActivity {
         ));
     }
 
+    private boolean openVkCaptcha(String redirectURL) {
+        if (vkCaptchaDialog == null) return false;
+        boolean canOverlay = Settings.canDrawOverlays(this);
+        if (!vkCaptchaDialog.open(redirectURL, canOverlay)) return false;
+        if (canOverlay) return true;
+
+        boolean prompted = getSharedPreferences(PERMISSION_PREFS, MODE_PRIVATE)
+                .getBoolean(CAPTCHA_OVERLAY_PROMPTED, false);
+        if (prompted) return true;
+        getSharedPreferences(PERMISSION_PREFS, MODE_PRIVATE).edit()
+                .putBoolean(CAPTCHA_OVERLAY_PROMPTED, true)
+                .apply();
+        pendingVkCaptchaURL = redirectURL;
+        waitingForCaptchaOverlayPermission = true;
+        try {
+            startActivity(new Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName())
+            ));
+        } catch (ActivityNotFoundException error) {
+            waitingForCaptchaOverlayPermission = false;
+            pendingVkCaptchaURL = "";
+        }
+        return true;
+    }
+
     private void handleVkCallResult(String raw, boolean profileMode) {
         try {
             JSONObject envelope = new JSONObject(raw);
@@ -460,7 +501,7 @@ public final class MainActivity extends ComponentActivity {
                 String redirectURL = result.optString("redirect_url");
                 replacePendingVkChallenge(challengeID, profileMode);
                 runOnUiThread(() -> {
-                    if (vkCaptchaDialog == null || !vkCaptchaDialog.open(redirectURL)) {
+                    if (!openVkCaptcha(redirectURL)) {
                         PendingVkChallenge stale = takePendingVkChallenge();
                         if (!stale.id.isEmpty()) Mobilecore.cancelVKCallCredentials(stale.id);
                         if (stale.profileMode) MobileRuntime.get(this).onCallCarrierError("Получен недопустимый адрес VK CAPTCHA");
