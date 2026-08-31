@@ -638,6 +638,16 @@ test("android keeps FreeTURN alive after a retryable CAPTCHA page error", async 
   assert.doesNotMatch(errorHandler[1], /stopWithError|onEngineError/);
 });
 
+test("android coalesces reload while FreeTURN startup or CAPTCHA is active", async () => {
+  const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
+  const reloadHandler = service.match(/if \(ACTION_RELOAD\.equals\(action\)\) \{([\s\S]*?)\n\s*\}/);
+  assert.ok(reloadHandler, "VPN reload handler is missing");
+  assert.match(reloadHandler[1], /if \(starting\)/);
+  assert.match(reloadHandler[1], /reload coalesced while startup is active/);
+  assert.doesNotMatch(reloadHandler[1], /stopping = true/);
+  assert.doesNotMatch(service, /reloadPending/);
+});
+
 test("call server accepts a domain and exports a FreeTURN profile QR", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");

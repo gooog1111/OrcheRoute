@@ -135,6 +135,10 @@ public final class OrcheRouteVpnService extends VpnService {
         createChannel();
         startForeground(NOTIFICATION_ID, notification("Запускаем VPN…"));
         if (ACTION_RELOAD.equals(action)) {
+            if (starting) {
+                Log.i("OrcheRouteEngine", "reload coalesced while startup is active");
+                return START_STICKY;
+            }
             stopping = true;
             worker.execute(() -> {
                 stopTunnel();
