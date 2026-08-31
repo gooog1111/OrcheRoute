@@ -132,6 +132,24 @@ func TestGoToolInGOPATHFindsInstalledBinary(t *testing.T) {
 	}
 }
 
+func TestPrependPathKeepsAndroidEnvironmentAndAddsToolDirectory(t *testing.T) {
+	separator := string(os.PathListSeparator)
+	got := prependPath([]string{"ANDROID_HOME=sdk", "PATH=old"}, "tools")
+	if got[0] != "ANDROID_HOME=sdk" || got[1] != "PATH=tools"+separator+"old" {
+		t.Fatalf("environment = %q", got)
+	}
+}
+
+func TestExecutableNameMatchesHost(t *testing.T) {
+	want := "gomobile"
+	if runtime.GOOS == "windows" {
+		want += ".exe"
+	}
+	if got := executableName("gomobile"); got != want {
+		t.Fatalf("executable = %q, want %q", got, want)
+	}
+}
+
 func TestNPMCommandMatchesHost(t *testing.T) {
 	want := "npm"
 	if runtime.GOOS == "windows" {

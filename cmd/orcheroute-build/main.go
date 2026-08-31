@@ -18,6 +18,11 @@ import (
 	"time"
 )
 
+const (
+	freeTURNMobileVersion = "v0.0.0-20260821190718-4776eadac327"
+	freeTURNVersion       = "v3.2.0"
+)
+
 type builder struct {
 	root      string
 	target    string
@@ -93,7 +98,10 @@ func (b *builder) common() error {
 	return b.once("common-"+runtime.GOOS, func() error {
 		patterns := []string{"./cmd/...", "./internal/...", "./mobilecore/..."}
 		if runtime.GOOS != "windows" {
-			return b.command(b.root, nil, "go", append([]string{"test"}, patterns...)...)
+			if err := b.command(b.root, nil, "go", append([]string{"test"}, patterns...)...); err != nil {
+				return err
+			}
+			return b.testFreeTURNBridge()
 		}
 		listed, err := outputIn(b.root, "go", append([]string{"list"}, patterns...)...)
 		if err != nil {
@@ -106,8 +114,15 @@ func (b *builder) common() error {
 			}
 			packages = append(packages, packagePath)
 		}
-		return b.command(b.root, nil, "go", append([]string{"test"}, packages...)...)
+		if err := b.command(b.root, nil, "go", append([]string{"test"}, packages...)...); err != nil {
+			return err
+		}
+		return b.testFreeTURNBridge()
 	})
+}
+
+func (b *builder) testFreeTURNBridge() error {
+	return b.command(filepath.Join(b.root, "components", "freeturnbridge"), nil, "go", "test", "./...")
 }
 
 func (b *builder) web() error {
@@ -182,11 +197,13 @@ func (b *builder) android() error {
 			return err
 		}
 		aar := filepath.Join(out, "mobilecore.aar")
-		gomobile, err := goToolExecutable("gomobile")
+		bridgeDir := filepath.Join(b.root, "components", "freeturnbridge")
+		gomobile, bridgeEnv, err := b.freeTURNGomobile(androidEnv)
 		if err != nil {
 			return err
 		}
-		if err := b.command(b.root, androidEnv, gomobile, "bind", "-tags=with_gvisor,cmfa", "-target=android/arm64", "-androidapi", "26", "-o", aar, "./mobilecore"); err != nil {
+		linkerFlags := "-s -w -X github.com/samosvalishe/free-turn-proxy/mobile.version=" + freeTURNVersion
+		if err := b.command(bridgeDir, bridgeEnv, gomobile, "bind", "-tags=with_gvisor,cmfa", "-target=android/arm64", "-androidapi", "26", "-ldflags="+linkerFlags, "-o", aar, "github.com/gooog1111/orcheroute/mobilecore", "."); err != nil {
 			return err
 		}
 		gradle := "./gradlew"
@@ -205,6 +222,45 @@ func (b *builder) android() error {
 			filepath.Join(webOut, "index.html"),
 		)
 	})
+}
+
+func (b *builder) freeTURNGomobile(androidEnv []string) (string, []string, error) {
+	toolDir := filepath.Join(b.dist, "tools", "x-mobile-20260821")
+	if err := os.MkdirAll(toolDir, 0o755); err != nil {
+		return "", nil, err
+	}
+	toolEnv := prependPath(androidEnv, toolDir)
+	toolEnv = append(toolEnv, "GOBIN="+toolDir)
+	for _, tool := range []string{"gomobile", "gobind"} {
+		path := filepath.Join(toolDir, executableName(tool))
+		if _, err := os.Stat(path); err == nil {
+			continue
+		}
+		pkg := "golang.org/x/mobile/cmd/" + tool + "@" + freeTURNMobileVersion
+		if err := b.command(filepath.Join(b.root, "components", "freeturnbridge"), toolEnv, "go", "install", pkg); err != nil {
+			return "", nil, err
+		}
+	}
+	return filepath.Join(toolDir, executableName("gomobile")), toolEnv, nil
+}
+
+func prependPath(env []string, directory string) []string {
+	result := append([]string(nil), env...)
+	prefix := "PATH="
+	for i, value := range result {
+		if strings.HasPrefix(strings.ToUpper(value), prefix) {
+			result[i] = value[:len(prefix)] + directory + string(os.PathListSeparator) + value[len(prefix):]
+			return result
+		}
+	}
+	return append(result, prefix+directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func executableName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
 }
 
 func (b *builder) linuxViaWSL() error {
