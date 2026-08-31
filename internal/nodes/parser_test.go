@@ -58,7 +58,7 @@ func TestFreeTURNProfileBecomesCanonicalNode(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	profile, err := callprofile.New(callprofile.NewInput{
 		Name:          "Call test",
-		InvitationURL: "https://vk.com/call/join/mJm6labHtIX06vO54fNKJ0B4TBQI1fsK8jHIND9GBq8",
+		InvitationURL: "https://vk.com/call/join/test-invitation-token",
 		PeerAddress:   "192.0.2.1:4443",
 		Random:        strings.NewReader(strings.Repeat("a", 64)),
 		Now:           now,

@@ -172,4 +172,6 @@ replace github.com/gooog1111/orcheroute => ../..
 
 replace github.com/wlynxg/anet => ../../third_party/anet
 
+replace github.com/samosvalishe/free-turn-proxy => ../../third_party/free-turn-proxy
+
 tool golang.org/x/mobile/cmd/gobind

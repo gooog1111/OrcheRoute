@@ -119,8 +119,8 @@ VPN-серверу: ошибочное правило `block` или `direct` м
 
 - [samosvalishe/free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy)
   используется как единый клиентский и серверный FreeTURN runtime;
-- в сборке зафиксирована проверенная upstream-ревизия, указанная в
-  `components/freeturnbridge/go.mod`.
+- в `third_party/free-turn-proxy` зафиксирована проверенная upstream-ревизия
+  с минимальным патчем изоляции отказов независимых VK Call-провайдеров.
 
 Авторы, лицензия и исходная ревизия указаны в `THIRD_PARTY_NOTICES.md`.
 Прежний собственный VKCall/DTLS/KCP/smux тракт удалён.
