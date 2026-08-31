@@ -287,17 +287,8 @@ export type CallServerAutoConfigResult = {
 	config: CallServerConfig;
 	source: string;
 	public_ip: string;
-	udp_port: string;
+	tcp_port: string;
 	warnings: string[];
-};
-
-export type CallServerProbeResult = {
-	provider: "vk";
-	status: "ready" | "captcha_required";
-	reachable: boolean;
-	turn_endpoint: string;
-	network: string;
-	expires_at: number;
 };
 
 export type OperationSnapshot = {
@@ -542,9 +533,6 @@ export const actions = {
 	},
 	setCallServerEnabled(enabled: boolean) {
 		return request<{ status: CallServerState["status"] }>(`/v1/call-server/${enabled ? "apply" : "disable"}`, { method: "POST", body: "{}" });
-	},
-	testCallServer() {
-		return request<{ ok: boolean; result: CallServerProbeResult }>("/v1/call-server/test", { method: "POST", body: "{}" });
 	},
 	createCallServerClient(payload: { name: string; expires_at?: number; traffic_limit_bytes?: number }) {
 		return request<{ client: CallServerClient; subscription_path: string; subscription_url: string }>("/v1/call-server/clients", { method: "POST", body: JSON.stringify(payload) });

@@ -3,6 +3,7 @@ package online.gooog1111.orcheroute;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.graphics.Color;
 import android.net.Uri;
 import android.net.VpnService;
@@ -46,12 +47,10 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
 import mobilecore.Mobilecore;
 
 public final class MainActivity extends ComponentActivity {
+    private static volatile MainActivity activeInstance;
     private static final String APP_HOST = WebViewAssetLoader.DEFAULT_DOMAIN;
     private static final int VPN_PERMISSION_REQUEST = 1042;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 1043;
@@ -61,23 +60,24 @@ public final class MainActivity extends ComponentActivity {
     private static final String PERMISSION_PREFS = "orcheroute_permission_prompts";
     private static final String BATTERY_PROMPTED = "battery_optimization_prompted";
     private static final String CAPTCHA_OVERLAY_PROMPTED = "captcha_overlay_prompted";
+    private static final String EXTRA_FREETURN_CAPTCHA = "free_turn_captcha_url";
+    private static volatile String pendingFreeTURNCaptchaURL = "";
     private WebView webView;
     private FrameLayout root;
     private WebViewAssetLoader assetLoader;
     private String pendingTextFile = "";
     private AppUpdater appUpdater;
     private VkCaptchaDialog vkCaptchaDialog;
-    private final ExecutorService callTransportWorker = Executors.newSingleThreadExecutor();
-    private String pendingVkChallengeID = "";
-    private boolean pendingVkProfileMode;
     private boolean vpnPermissionReload;
     private volatile String pendingVkCaptchaURL = "";
     private volatile boolean waitingForCaptchaOverlayPermission;
+    private volatile boolean freeTURNCaptchaActive;
 
     @Override
     @SuppressLint("SetJavaScriptEnabled")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        activeInstance = this;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
@@ -116,23 +116,30 @@ public final class MainActivity extends ComponentActivity {
         vkCaptchaDialog = new VkCaptchaDialog(this, root, new VkCaptchaDialog.Callback() {
             @Override
             public void onSuccess(String successToken) {
-                continueVkCall(successToken);
+                // FreeTURN's localhost proxy receives the CAPTCHA response.
             }
 
             @Override
             public void onCancel() {
-                PendingVkChallenge challenge = takePendingVkChallenge();
-                if (!challenge.id.isEmpty()) Mobilecore.cancelVKCallCredentials(challenge.id);
-                if (challenge.profileMode) MobileRuntime.get(MainActivity.this).onCallCarrierError("Подключение VK Call отменено");
-                dispatchVkCall("cancel", "Подтверждение VK отменено.", "");
+                if (freeTURNCaptchaActive) {
+                    freeTURNCaptchaActive = false;
+                    OrcheRouteVpnService.stopWithError(MainActivity.this);
+                    MobileRuntime.get(MainActivity.this).onEngineError("Подключение FreeTURN отменено");
+                    return;
+                }
             }
 
             @Override
             public void onError(String message) {
-                if (peekPendingVkChallenge().profileMode) MobileRuntime.get(MainActivity.this).onCallCarrierError(message);
-                dispatchVkCall("error", message, "");
+                if (freeTURNCaptchaActive) {
+                    freeTURNCaptchaActive = false;
+                    OrcheRouteVpnService.stopWithError(MainActivity.this);
+                    MobileRuntime.get(MainActivity.this).onEngineError(message);
+                    return;
+                }
             }
         });
+        handleFreeTURNCaptcha(getIntent().getStringExtra(EXTRA_FREETURN_CAPTCHA));
         ViewCompat.requestApplyInsets(root);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -164,11 +171,56 @@ public final class MainActivity extends ComponentActivity {
 
     @Override
     protected void onDestroy() {
+        if (activeInstance == this) activeInstance = null;
         if (vkCaptchaDialog != null) vkCaptchaDialog.close(false);
-        PendingVkChallenge challenge = takePendingVkChallenge();
-        if (!challenge.id.isEmpty()) Mobilecore.cancelVKCallCredentials(challenge.id);
-        callTransportWorker.shutdownNow();
         super.onDestroy();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleFreeTURNCaptcha(intent.getStringExtra(EXTRA_FREETURN_CAPTCHA));
+    }
+
+    static void showFreeTURNCaptcha(Context context, String rawURL) {
+        String url = rawURL == null ? "" : rawURL.trim();
+        MainActivity activity = activeInstance;
+        if (activity == null) {
+            pendingFreeTURNCaptchaURL = url;
+            if (url.isEmpty() || context == null) return;
+            Intent intent = new Intent(context, MainActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra(EXTRA_FREETURN_CAPTCHA, url);
+            try {
+                context.startActivity(intent);
+            } catch (RuntimeException error) {
+                pendingFreeTURNCaptchaURL = "";
+                OrcheRouteVpnService.stopWithError(context);
+                MobileRuntime.get(context).onEngineError("Android не разрешил открыть CAPTCHA FreeTURN");
+            }
+            return;
+        }
+        activity.handleFreeTURNCaptcha(url);
+    }
+
+    private void handleFreeTURNCaptcha(String rawURL) {
+        String requested = rawURL == null || rawURL.isBlank() ? pendingFreeTURNCaptchaURL : rawURL.trim();
+        pendingFreeTURNCaptchaURL = "";
+        runOnUiThread(() -> {
+            String url = requested;
+            if (url.isEmpty()) {
+                freeTURNCaptchaActive = false;
+                if (vkCaptchaDialog != null) vkCaptchaDialog.complete();
+                return;
+            }
+            freeTURNCaptchaActive = true;
+            if (!openVkCaptcha(url)) {
+                freeTURNCaptchaActive = false;
+                OrcheRouteVpnService.stopWithError(this);
+                MobileRuntime.get(this).onEngineError("Получен недопустимый адрес CAPTCHA FreeTURN");
+            }
+        });
     }
 
     private void requestOperationalPermissions() {
@@ -404,59 +456,6 @@ public final class MainActivity extends ComponentActivity {
         ));
     }
 
-    private void dispatchVkCall(String status, String message, String credentialID) {
-        runOnUiThread(() -> webView.evaluateJavascript(
-                "window.dispatchEvent(new CustomEvent('orcheroute:vk-call',{detail:{status:"
-                        + JSONObject.quote(status)
-                        + ",message:"
-                        + JSONObject.quote(message == null ? "" : message)
-                        + ",credentialId:"
-                        + JSONObject.quote(credentialID == null ? "" : credentialID)
-                        + "}}));",
-                null
-        ));
-    }
-
-    private static final class PendingVkChallenge {
-        final String id;
-        final boolean profileMode;
-        PendingVkChallenge(String id, boolean profileMode) { this.id = id; this.profileMode = profileMode; }
-    }
-
-    private synchronized PendingVkChallenge takePendingVkChallenge() {
-        PendingVkChallenge value = new PendingVkChallenge(pendingVkChallengeID, pendingVkProfileMode);
-        pendingVkChallengeID = "";
-        pendingVkProfileMode = false;
-        pendingVkCaptchaURL = "";
-        waitingForCaptchaOverlayPermission = false;
-        return value;
-    }
-
-    private synchronized PendingVkChallenge peekPendingVkChallenge() {
-        return new PendingVkChallenge(pendingVkChallengeID, pendingVkProfileMode);
-    }
-
-    private synchronized void replacePendingVkChallenge(String value, boolean profileMode) {
-        if (!pendingVkChallengeID.isEmpty()) Mobilecore.cancelVKCallCredentials(pendingVkChallengeID);
-        pendingVkChallengeID = value == null ? "" : value;
-        pendingVkProfileMode = profileMode;
-    }
-
-    private void beginVkCallProfile(String profile) {
-        callTransportWorker.execute(() -> handleVkCallResult(Mobilecore.beginVKCallProfile(profile), true));
-    }
-
-    private void continueVkCall(String successToken) {
-        PendingVkChallenge challenge = peekPendingVkChallenge();
-        if (challenge.id.isEmpty()) {
-            dispatchVkCall("error", "Сессия VK CAPTCHA уже завершена.", "");
-            return;
-        }
-        callTransportWorker.execute(() -> handleVkCallResult(
-                Mobilecore.continueVKCallCredentials(challenge.id, successToken), challenge.profileMode
-        ));
-    }
-
     private boolean openVkCaptcha(String redirectURL) {
         if (vkCaptchaDialog == null) return false;
         boolean canOverlay = Settings.canDrawOverlays(this);
@@ -481,74 +480,6 @@ public final class MainActivity extends ComponentActivity {
             pendingVkCaptchaURL = "";
         }
         return true;
-    }
-
-    private void handleVkCallResult(String raw, boolean profileMode) {
-        try {
-            JSONObject envelope = new JSONObject(raw);
-            if (!envelope.optBoolean("ok")) {
-                JSONObject error = envelope.optJSONObject("error");
-                String message = error == null ? "Не удалось подключиться к VK звонку." : error.optString("error", "Ошибка VK");
-                if (vkCaptchaDialog != null && vkCaptchaDialog.isOpen()) vkCaptchaDialog.submissionFailed(message);
-                if (profileMode) MobileRuntime.get(this).onCallCarrierError(message);
-                dispatchVkCall("error", message, "");
-                return;
-            }
-            JSONObject result = envelope.getJSONObject("result");
-            String status = result.optString("status");
-            if ("captcha_required".equals(status)) {
-                String challengeID = result.optString("challenge_id");
-                String redirectURL = result.optString("redirect_url");
-                replacePendingVkChallenge(challengeID, profileMode);
-                runOnUiThread(() -> {
-                    if (!openVkCaptcha(redirectURL)) {
-                        PendingVkChallenge stale = takePendingVkChallenge();
-                        if (!stale.id.isEmpty()) Mobilecore.cancelVKCallCredentials(stale.id);
-                        if (stale.profileMode) MobileRuntime.get(this).onCallCarrierError("Получен недопустимый адрес VK CAPTCHA");
-                        dispatchVkCall("error", "Получен недопустимый адрес VK CAPTCHA.", "");
-                    } else {
-                        dispatchVkCall("captcha_required", "Подтвердите, что вы не робот.", "");
-                    }
-                });
-                return;
-            }
-            if ("ready".equals(status)) {
-                takePendingVkChallenge();
-                runOnUiThread(() -> { if (vkCaptchaDialog != null) vkCaptchaDialog.complete(); });
-                String credentialID = result.optString("credential_id");
-                if (profileMode) {
-                    handleVkCarrierResult(Mobilecore.startVKCallProfileCarrier(credentialID, "127.0.0.1:0"));
-                } else {
-                    dispatchVkCall("ready", "VK транспорт готов.", credentialID);
-                }
-                return;
-            }
-            if (profileMode) MobileRuntime.get(this).onCallCarrierError("VK вернул неизвестное состояние");
-            dispatchVkCall("error", "VK вернул неизвестное состояние.", "");
-        } catch (JSONException error) {
-            if (profileMode) MobileRuntime.get(this).onCallCarrierError("Некорректный ответ VK Call");
-            dispatchVkCall("error", "Некорректный ответ VK транспорта.", "");
-        }
-    }
-
-    private void handleVkCarrierResult(String raw) {
-        try {
-            JSONObject envelope = new JSONObject(raw);
-            if (!envelope.optBoolean("ok")) {
-                JSONObject error = envelope.optJSONObject("error");
-                String message = error == null ? "Не удалось запустить VK Call." : error.optString("error", "Ошибка VK Call");
-                MobileRuntime.get(this).onCallCarrierError(message);
-                dispatchVkCall("error", message, "");
-                return;
-            }
-            String endpoint = envelope.getJSONObject("result").optString("local_endpoint");
-			MobileRuntime.get(this).onCallCarrierReady();
-            requestVpnPermissionForReload();
-            dispatchVkCall("carrier_ready", "VK транспорт подключён.", endpoint);
-        } catch (JSONException error) {
-            MobileRuntime.get(this).onCallCarrierError("Некорректный ответ VK Call");
-            dispatchVkCall("error", "Некорректный ответ транспорта.", "");
-        }
     }
 
     private final class EmbeddedClient extends WebViewClientCompat {
@@ -601,11 +532,7 @@ public final class MainActivity extends ComponentActivity {
         @JavascriptInterface
         public String request(String method, String path, String body) {
             return MobileRuntime.get(MainActivity.this).request(
-                    method,
-                    path,
-                    body,
-                    MainActivity.this::requestVpnPermission,
-                    MainActivity.this::beginVkCallProfile
+                    method, path, body, MainActivity.this::requestVpnPermission
             );
         }
 

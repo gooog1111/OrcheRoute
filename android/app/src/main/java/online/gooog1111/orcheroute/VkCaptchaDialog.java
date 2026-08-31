@@ -222,15 +222,24 @@ final class VkCaptchaDialog {
     }
 
     private static boolean allowedCaptchaURL(Uri uri) {
+        if (isLocalCaptchaProxy(uri)) return true;
         return "https".equalsIgnoreCase(uri.getScheme()) && "id.vk.ru".equalsIgnoreCase(uri.getHost())
                 && uri.getPath() != null && uri.getPath().startsWith("/not_robot_captcha");
     }
 
     private static boolean allowedNavigation(Uri uri) {
+        if (isLocalCaptchaProxy(uri)) return true;
         if (!"https".equalsIgnoreCase(uri.getScheme())) return false;
         String host = uri.getHost();
         return "id.vk.ru".equalsIgnoreCase(host) || "api.vk.ru".equalsIgnoreCase(host)
                 || "vk.com".equalsIgnoreCase(host) || "vk.ru".equalsIgnoreCase(host);
+    }
+
+    private static boolean isLocalCaptchaProxy(Uri uri) {
+        if (!"http".equalsIgnoreCase(uri.getScheme())) return false;
+        String host = uri.getHost();
+        return ("localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host))
+                && uri.getPort() == 8765;
     }
 
     private final class CaptchaBridge {

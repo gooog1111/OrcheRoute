@@ -33,7 +33,7 @@ func TestCapabilitiesAreMobileSafe(t *testing.T) {
 		t.Fatalf("invalid capabilities: %s (%v)", Capabilities(), err)
 	}
 	encoded := Capabilities()
-	for _, expected := range []string{"mihomo", "external_tunnel_fd", "embedded_engine", "vless", "vmess", "vkcall"} {
+	for _, expected := range []string{"mihomo", "external_tunnel_fd", "embedded_engine", "vless", "vmess", "freeturn"} {
 		if !strings.Contains(encoded, expected) {
 			t.Fatalf("missing %q in %s", expected, encoded)
 		}

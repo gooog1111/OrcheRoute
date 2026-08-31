@@ -6,7 +6,10 @@ package freeturnbridge
 
 import (
 	"encoding/json"
+	"strings"
+	"time"
 
+	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
 	_ "github.com/gooog1111/orcheroute/mobilecore"
 	upstream "github.com/samosvalishe/free-turn-proxy/mobile"
 )
@@ -26,6 +29,34 @@ func Version() string { return upstream.Version() }
 func DefaultConfigJSON() string { return upstream.DefaultConfigJSON() }
 
 func ValidateConfig(configJSON string) string { return upstream.ValidateConfig(configJSON) }
+
+func ConfigFromOrcheRouteProfile(encodedProfile, listenAddress string) (string, error) {
+	profile, err := callprofile.Decode(encodedProfile, time.Now())
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(listenAddress) == "" {
+		listenAddress = "127.0.0.1:19000"
+	}
+	var config map[string]any
+	if err := json.Unmarshal([]byte(upstream.DefaultConfigJSON()), &config); err != nil {
+		return "", err
+	}
+	config["peer"] = profile.PeerAddress
+	config["clientId"] = profile.VLESSUUID
+	config["provider"] = "vk"
+	config["routes"] = false
+	config["proxy"] = map[string]any{"mode": "tcp", "listen": listenAddress}
+	config["vk"] = map[string]any{
+		"links": []string{profile.InvitationURL}, "manualCaptcha": true,
+		"platform": "mobile", "streamsPerCred": 10,
+	}
+	payload, err := json.Marshal(config)
+	if err != nil {
+		return "", err
+	}
+	return string(payload), nil
+}
 
 func Start(configJSON string) error { return upstream.Start(configJSON) }
 

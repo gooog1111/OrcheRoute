@@ -4,12 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"reflect"
 	"sync"
 	"time"
-
-	"github.com/gooog1111/orcheroute/internal/calltransport"
 )
 
 type Backend interface {
@@ -27,6 +24,10 @@ type trafficReporter interface {
 
 type healthReporter interface{ Alive() error }
 
+type relayStarter interface {
+	Start(context.Context, RuntimeSnapshot) (io.Closer, error)
+}
+
 type RuntimeStatus struct {
 	Active         bool   `json:"active"`
 	ListenAddress  string `json:"listen_address,omitempty"`
@@ -39,15 +40,22 @@ type RuntimeStatus struct {
 type Runtime struct {
 	mu         sync.Mutex
 	backend    Backend
+	freeTURN   relayStarter
 	cancel     context.CancelFunc
-	listener   net.Listener
+	relayRun   io.Closer
 	backendRun io.Closer
 	status     RuntimeStatus
 	snapshot   RuntimeSnapshot
 	generation uint64
 }
 
-func NewRuntime(backend Backend) *Runtime { return &Runtime{backend: backend} }
+func NewFreeTURNRuntime(backend Backend, relay FreeTURNRelay) *Runtime {
+	return newRuntimeWithRelay(backend, relay)
+}
+
+func newRuntimeWithRelay(backend Backend, relay relayStarter) *Runtime {
+	return &Runtime{backend: backend, freeTURN: relay}
+}
 
 func (runtime *Runtime) Status() RuntimeStatus {
 	runtime.mu.Lock()
@@ -69,7 +77,7 @@ func (runtime *Runtime) Apply(manager *Manager) error {
 		return err
 	}
 	if reflect.DeepEqual(runtime.snapshot, snapshot) && runtime.status.Active == snapshot.Enabled {
-		if reporter, ok := runtime.backendRun.(healthReporter); !snapshot.Enabled || !ok || reporter.Alive() == nil {
+		if !snapshot.Enabled || runtime.healthyLocked() {
 			return nil
 		}
 	}
@@ -84,6 +92,15 @@ func (runtime *Runtime) Apply(manager *Manager) error {
 		return err
 	}
 	return nil
+}
+
+func (runtime *Runtime) healthyLocked() bool {
+	for _, running := range []io.Closer{runtime.backendRun, runtime.relayRun} {
+		if reporter, ok := running.(healthReporter); ok && reporter.Alive() != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func (runtime *Runtime) syncTrafficLocked(manager *Manager) error {
@@ -129,40 +146,20 @@ func (runtime *Runtime) startLocked(snapshot RuntimeSnapshot) error {
 		cancel()
 		return fmt.Errorf("call_server_backend_start: %w", err)
 	}
-	listener, err := calltransport.ListenDTLSProfiles(snapshot.ListenAddress, snapshot.Keys)
-	if err != nil {
+	if runtime.freeTURN == nil {
 		cancel()
 		_ = backendRun.Close()
-		return err
+		return fmt.Errorf("call_server_freeturn_unavailable")
+	}
+	relayRun, relayErr := runtime.freeTURN.Start(ctx, snapshot)
+	if relayErr != nil {
+		cancel()
+		_ = backendRun.Close()
+		return fmt.Errorf("call_server_freeturn_start: %w", relayErr)
 	}
 	runtime.generation++
-	generation := runtime.generation
-	runtime.cancel, runtime.listener, runtime.backendRun, runtime.snapshot = cancel, listener, backendRun, snapshot
-	runtime.status = RuntimeStatus{Active: true, ListenAddress: listener.Addr().String(), BackendAddress: snapshot.BackendAddress, Clients: len(snapshot.Clients), StartedAt: time.Now().Unix()}
-	go func() {
-		err := calltransport.ServeDTLS(ctx, listener, snapshot.BackendAddress, nil)
-		runtime.mu.Lock()
-		if runtime.generation != generation {
-			runtime.mu.Unlock()
-			return
-		}
-		cancel, activeListener, activeBackend := runtime.cancel, runtime.listener, runtime.backendRun
-		runtime.cancel, runtime.listener, runtime.backendRun = nil, nil, nil
-		runtime.status.Active = false
-		if err != nil {
-			runtime.status.LastError = err.Error()
-		}
-		runtime.mu.Unlock()
-		if cancel != nil {
-			cancel()
-		}
-		if activeListener != nil {
-			_ = activeListener.Close()
-		}
-		if activeBackend != nil {
-			_ = activeBackend.Close()
-		}
-	}()
+	runtime.cancel, runtime.relayRun, runtime.backendRun, runtime.snapshot = cancel, relayRun, backendRun, snapshot
+	runtime.status = RuntimeStatus{Active: true, ListenAddress: snapshot.ListenAddress, BackendAddress: snapshot.BackendAddress, Clients: len(snapshot.Clients), StartedAt: time.Now().Unix()}
 	return nil
 }
 
@@ -171,12 +168,12 @@ func (runtime *Runtime) stopLocked() {
 	if runtime.cancel != nil {
 		runtime.cancel()
 	}
-	if runtime.listener != nil {
-		_ = runtime.listener.Close()
+	if runtime.relayRun != nil {
+		_ = runtime.relayRun.Close()
 	}
 	if runtime.backendRun != nil {
 		_ = runtime.backendRun.Close()
 	}
-	runtime.cancel, runtime.listener, runtime.backendRun = nil, nil, nil
+	runtime.cancel, runtime.relayRun, runtime.backendRun = nil, nil, nil
 	runtime.status.Active = false
 }

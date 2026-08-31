@@ -127,7 +127,7 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			if runtime.CallTransport != nil {
 				status = runtime.CallTransport.Status()
 			}
-			return 200, map[string]any{"config": runtime.CallServer.PublicConfig(), "status": status, "capabilities": map[string]any{"transport": "vkcall-vless-trojan-hysteria2", "profile": "orcheroute-subscription-v2", "backend": "embedded-xray+isolated-mihomo", "beta": true}}
+			return 200, map[string]any{"config": runtime.CallServer.PublicConfig(), "status": status, "capabilities": map[string]any{"transport": "freeturn-vless-trojan-hysteria2", "profile": "orcheroute-subscription-v2", "backend": "freeturn+embedded-xray+isolated-mihomo", "beta": true}}
 		}
 	}
 	if method == http.MethodPost {
@@ -279,20 +279,6 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 				"subscription_url": runtime.CallServer.SubscriptionURL(client.SubscriptionToken), "warning": "subscription_token_is_secret"}
 		case path == "/v1/call-server/auto-configure":
 			return runtime.autoConfigureCallServer(body)
-		case path == "/v1/call-server/test":
-			if runtime.CallServer == nil || runtime.callServerProbe == nil {
-				return 503, map[string]any{"error": "call_server_provider_probe_unavailable", "message": runtime.callServerError}
-			}
-			probeContext, cancel := context.WithTimeout(ctx, 30*time.Second)
-			defer cancel()
-			probe, err := runtime.callServerProbe(probeContext)
-			if err != nil {
-				// Provider checks return stable, user-facing error codes. Hiding
-				// these behind backend_unavailable makes a configuration error look
-				// like an unavailable server and prevents a useful UI diagnosis.
-				return 503, map[string]any{"error": err.Error()}
-			}
-			return 200, map[string]any{"ok": true, "result": probe}
 		case path == "/v1/call-server/apply":
 			if runtime.CallServer == nil || runtime.CallTransport == nil {
 				return 503, map[string]any{"error": "call_server_unavailable", "message": runtime.callServerError}

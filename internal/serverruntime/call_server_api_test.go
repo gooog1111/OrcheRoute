@@ -4,9 +4,7 @@ package serverruntime
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gooog1111/orcheroute/internal/callserver"
 	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
 	"github.com/gooog1111/orcheroute/internal/core/connectivity"
 )
@@ -31,14 +28,12 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	config.StateDirectory, config.ProductionState = directory, directory
 	config.ConfigDirectory, config.RuntimeEnv = directory, runtimeEnv
 	config.MihomoAPI = "http://127.0.0.1:1"
+	config.FreeTURNBinary = fakeFreeTURNServer(t, directory)
 	runtime, err := New(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer runtime.Close()
-	runtime.callServerProbe = func(context.Context) (callserver.ProviderProbeResult, error) {
-		return callserver.ProviderProbeResult{Provider: "vk", TURNEndpoint: "turn.example:3478", Network: "udp", ExpiresAt: time.Now().Add(8 * time.Minute).Unix()}, nil
-	}
 	callServerAPI(t, runtime, http.MethodGet, "/v1/reverse-vpn", nil, http.StatusNotFound)
 
 	settings := map[string]any{
@@ -49,17 +44,6 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	callServerAPI(t, runtime, http.MethodPut, "/v1/call-server", settings, http.StatusOK)
 	delete(settings, "invitation_url")
 	callServerAPI(t, runtime, http.MethodPut, "/v1/call-server", settings, http.StatusOK)
-	probe := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/test", map[string]any{}, http.StatusOK)
-	if probe["ok"] != true || probe["result"].(map[string]any)["turn_endpoint"] != "turn.example:3478" {
-		t.Fatalf("provider probe did not return connection evidence: %#v", probe)
-	}
-	runtime.callServerProbe = func(context.Context) (callserver.ProviderProbeResult, error) {
-		return callserver.ProviderProbeResult{}, errors.New("call_transport_vk_client_identity_required")
-	}
-	probeFailure := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/test", map[string]any{}, http.StatusServiceUnavailable)
-	if probeFailure["error"] != "call_transport_vk_client_identity_required" {
-		t.Fatalf("provider error was hidden: %#v", probeFailure)
-	}
 	created := callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/clients", map[string]any{"name": "Phone", "traffic_limit_bytes": 1024}, http.StatusCreated)
 	client := created["client"].(map[string]any)
 	path := created["subscription_path"].(string)
@@ -106,11 +90,13 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/disable", map[string]any{}, http.StatusOK)
 }
 
-func TestDefaultCallServerSourceIncludesVKApplicationIdentity(t *testing.T) {
-	source := defaultCallServerSource()
-	if source.Identity.ID == "" || source.Identity.Secret == "" || source.Name == "" {
-		t.Fatalf("default server VK source is incomplete: %#v", source)
+func fakeFreeTURNServer(t *testing.T, directory string) string {
+	t.Helper()
+	path := filepath.Join(directory, "freeturn-test-server")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\ntrap 'exit 0' TERM INT\nwhile :; do sleep 1; done\n"), 0o700); err != nil {
+		t.Fatal(err)
 	}
+	return path
 }
 
 func TestCallServerAutoConfigureUsesDirectIPAndTreatsDomainAsOptional(t *testing.T) {

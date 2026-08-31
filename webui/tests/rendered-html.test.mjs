@@ -599,25 +599,24 @@ test("inbound VPN subscription copy works outside the secure Clipboard API", asy
   assert.match(clipboard, /setSelectionRange\(0, field\.value\.length\)/);
 });
 
-test("Call profiles are saved as ordinary vkcall server sources before activation", async () => {
+test("FreeTURN profiles are saved as ordinary server sources and activated by the VPN service", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
-  assert.doesNotMatch(api, /beginVkCallProfile/);
+  assert.doesNotMatch(api, /beginVkCallProfile|testCallServer/);
   assert.match(settings, /\^orcheroute:\\\/\\\/call\\\//);
   assert.match(settings, /proxyLinkPattern\.test\(value\) \|\| callProfilePattern\.test\(value\)/);
   assert.doesNotMatch(settings, /Подключить профиль/);
   assert.doesNotMatch(settings, /if \(callProfile\) \{\s*setScanError/);
-  assert.match(runtime, /"vkcall"\.equals\(proxy\.optString\("type"\)\)/);
-  assert.match(runtime, /requester\.request\(profile\)/);
-  assert.match(runtime, /if \(isVKCallNode\(node\)\)/);
+  assert.match(runtime, /"freeturn"\.equals\(proxy\.optString\("type"\)\)/);
+  assert.match(runtime, /if \(isFreeTURNNode\(node\)\)/);
   assert.match(activity, /requestVpnPermissionForReload/);
   assert.match(repository, /"activation_required", true/);
   assert.match(settings, /node\.activation_required/);
-  assert.match(activity, /MainActivity\.this::beginVkCallProfile/);
-  assert.doesNotMatch(activity, /public void beginVkCallProfile\(String profile\)/);
+  assert.match(activity, /showFreeTURNCaptcha/);
+  assert.doesNotMatch(activity, /beginVkCallProfile|continueVKCallCredentials/);
 });
 
 test("android VK CAPTCHA can remain above other applications with explicit permission", async () => {
@@ -631,15 +630,15 @@ test("android VK CAPTCHA can remain above other applications with explicit permi
   assert.match(captcha, /if \(!systemOverlay\)/);
 });
 
-test("call server accepts a domain, tests VK and exports profile QR", async () => {
+test("call server accepts a domain and exports a FreeTURN profile QR", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");
   assert.match(api, /call-server\/auto-configure/);
-  assert.match(api, /call-server\/test/);
+  assert.doesNotMatch(api, /call-server\/test/);
   assert.match(panel, /Построить тракт/);
   assert.match(panel, /IP позже можно заменить доменным именем/);
-  assert.match(panel, /Проверить VK Call/);
-  assert.match(panel, /Публичный IP или доменное имя и UDP-порт/);
+  assert.match(panel, /Публичный адрес FreeTURN/);
+  assert.match(panel, /Публичный IP или доменное имя и TCP-порт/);
   assert.match(panel, /placeholder="Необязательно"/);
   assert.match(panel, /Файл и QR работают без домена/);
   assert.match(panel, /QRCode\.toDataURL\(await loadSubscriptionURL\(\)/);

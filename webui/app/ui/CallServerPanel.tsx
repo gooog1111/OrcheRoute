@@ -18,7 +18,6 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 	const [name, setName] = useState("");
 	const [expires, setExpires] = useState("");
 	const [limitGB, setLimitGB] = useState("");
-	const [probeResult, setProbeResult] = useState("");
 	const changed = useMemo(() => Boolean(config && state && (
 		invitation.trim() || JSON.stringify(config) !== JSON.stringify(state.config)
 	)), [config, invitation, state]);
@@ -58,16 +57,6 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 		if (!ok || !detected) return;
 		await onReload();
 	};
-	const testProvider = async () => {
-		let endpoint = "";
-		const ok = await run(async () => {
-			const response = await actions.testCallServer();
-			endpoint = response.result.status === "captcha_required"
-				? "VK доступен · CAPTCHA будет пройдена Android-клиентом при подключении"
-				: `VK Call доступен · ${response.result.turn_endpoint} · ${response.result.network.toUpperCase()}`;
-		}, "Проверка VK Call завершена.", { title: "Проверяем VK Call" });
-		setProbeResult(ok ? endpoint : "");
-	};
 	const create = async () => {
 		const expiresAt = expires ? Math.floor(new Date(expires).getTime() / 1000) : undefined;
 		const limit = limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : undefined;
@@ -78,24 +67,22 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 	const ready = Boolean(config.public_endpoint && config.invitation_configured && config.clients.some(client => client.available));
 
 	return <div className="settings-section call-server-settings">
-		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>OrcheRoute VPN Server</h3><p>Одна персональная подписка содержит VK Call, VLESS, Trojan и Hysteria2. Fake SNI: {config.fake_sni}.</p></div><span className={`call-server-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
+		<div className="section-heading with-action"><div><span>Входящий VPN · beta</span><h3>OrcheRoute VPN Server</h3><p>Одна персональная подписка содержит FreeTURN, VLESS, Trojan и Hysteria2. Fake SNI: {config.fake_sni}.</p></div><span className={`call-server-state ${state.status.active ? "active" : ""}`}>{state.status.active ? "Работает" : config.enabled ? "Не запущен" : "Выключен"}</span></div>
 		{state.status.last_error && <p className="inline-feedback error">{callServerError(state.status.last_error)}</p>}
 		<div className="access-panel call-auto-setup">
-			<div className="access-panel-heading"><div><strong>Автоматическая настройка</strong><small>OrcheRoute определит внешний Direct IP и настроит VK Call, VLESS, Trojan и Hysteria2. IP позже можно заменить доменным именем.</small></div></div>
+			<div className="access-panel-heading"><div><strong>Автоматическая настройка</strong><small>OrcheRoute определит внешний Direct IP и настроит FreeTURN, VLESS, Trojan и Hysteria2. IP позже можно заменить доменным именем.</small></div></div>
 			<div className="action-bar"><button className="primary-button" type="button" disabled={busy || config.enabled} onClick={() => void autoConfigure()}>{config.public_endpoint ? "Перестроить тракт" : "Построить тракт"}</button></div>
-			{config.public_endpoint && <div className="pool-audit"><div><span>Публичный UDP <strong>{config.public_endpoint}</strong></span><span>Передача профиля <strong>{config.subscription_base_url ? "HTTPS-ссылка" : "Файл или QR"}</strong></span></div><small>После запуска этот UDP-порт должен быть разрешён в firewall или проброшен на роутере.</small></div>}
+			{config.public_endpoint && <div className="pool-audit"><div><span>Публичный TCP <strong>{config.public_endpoint}</strong></span><span>Передача профиля <strong>{config.subscription_base_url ? "HTTPS-ссылка" : "Файл или QR"}</strong></span></div><small>После запуска этот TCP-порт должен быть разрешён в firewall или проброшен на роутере.</small></div>}
 		</div>
 		<div className="access-panel">
 			<div className="form-grid two">
-				<label className="form-field form-field-wide"><span>Ссылка-приглашение VK Call</span><input type="url" value={invitation} onChange={event => setInvitation(event.target.value)} placeholder={config.invitation_configured ? "Ссылка уже сохранена; оставьте пустым, чтобы не менять" : "https://vk.com/call/join/..."} disabled={busy}/><small>{config.invitation_configured ? "Действующая ссылка скрыта и не будет очищена при сохранении." : "Используется клиентом для получения краткоживущих TURN-реквизитов."}</small></label>
+				<label className="form-field form-field-wide"><span>Ссылка VK для FreeTURN</span><input type="url" value={invitation} onChange={event => setInvitation(event.target.value)} placeholder={config.invitation_configured ? "Ссылка уже сохранена; оставьте пустым, чтобы не менять" : "https://vk.com/call/join/..."} disabled={busy}/><small>{config.invitation_configured ? "Действующая ссылка скрыта и не будет очищена при сохранении." : "Используется upstream FreeTURN для построения соединения."}</small></label>
 			</div>
-			<div className="action-bar"><button className="secondary-button call-provider-test" type="button" disabled={busy || !config.invitation_configured || Boolean(invitation.trim())} onClick={() => void testProvider()}>Проверить VK Call</button></div>
-			{probeResult && <div className="call-provider-result success"><strong>Проверка выполнена</strong><span>{probeResult}</span></div>}
 			<details className="advanced-settings"><summary>Ручная настройка сети</summary><div className="form-grid two">
 				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.ordinary_enabled} onChange={event => update("ordinary_enabled", event.target.checked)} disabled={busy}/><span><strong>VLESS, Trojan и Hysteria2</strong><small>Добавлять эти серверы в персональную подписку.</small></span></label>
-				<label className="form-field"><span>Публичный адрес VK Call</span><input value={config.public_endpoint ?? ""} onChange={event => update("public_endpoint", event.target.value)} placeholder="vpn.example.ru:4443" disabled={busy}/><small>Публичный IP или доменное имя и UDP-порт.</small></label>
+				<label className="form-field"><span>Публичный адрес FreeTURN</span><input value={config.public_endpoint ?? ""} onChange={event => update("public_endpoint", event.target.value)} placeholder="vpn.example.ru:4443" disabled={busy}/><small>Публичный IP или доменное имя и TCP-порт.</small></label>
 				<label className="form-field"><span>Адрес подписок</span><input type="url" value={config.subscription_base_url ?? ""} onChange={event => update("subscription_base_url", event.target.value)} placeholder="Необязательно" disabled={busy}/><small>Нужен только для обновляемой HTTPS-ссылки. Файл и QR работают без домена.</small></label>
-				<label className="form-field"><span>Слушать DTLS</span><input value={config.listen_address} onChange={event => update("listen_address", event.target.value)} placeholder="0.0.0.0:4443" disabled={busy}/></label>
+				<label className="form-field"><span>Слушать FreeTURN TCP</span><input value={config.listen_address} onChange={event => update("listen_address", event.target.value)} placeholder="0.0.0.0:4443" disabled={busy}/></label>
 				<label className="form-field"><span>Локальный VLESS</span><input value={config.backend_address} onChange={event => update("backend_address", event.target.value)} placeholder="127.0.0.1:18443" disabled={busy}/></label>
 				<label className="form-field"><span>VLESS Reality</span><input value={config.vless_listen_address} onChange={event => update("vless_listen_address", event.target.value)} placeholder="0.0.0.0:24443" disabled={busy}/></label>
 				<label className="form-field"><span>Trojan TLS</span><input value={config.trojan_listen_address} onChange={event => update("trojan_listen_address", event.target.value)} placeholder="0.0.0.0:24444" disabled={busy}/></label>
@@ -196,6 +183,6 @@ const formatBytes = (value: number) => value >= 1024 ** 3 ? `${(value / 1024 ** 
 const safeFilename = (value: string) => value.replace(/[^a-zA-Z0-9а-яА-Я._-]+/g, "-").replace(/^-+|-+$/g, "") || "orcheroute-client";
 const callServerError = (value: string) => ({
 	call_server_no_active_clients: "Нет ни одного активного клиента.",
-	call_server_not_configured: "Сначала сохраните публичный адрес и ссылку-приглашение VK Call.",
+	call_server_not_configured: "Сначала сохраните публичный адрес и ссылку VK для FreeTURN.",
 	call_server_xray_stats_unavailable: "Встроенный Xray запущен без поддержки учёта трафика.",
 }[value] ?? value);

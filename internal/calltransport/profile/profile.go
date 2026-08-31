@@ -60,7 +60,7 @@ type NewInput struct {
 	Now               time.Time
 }
 
-// New generates independent DTLS and VLESS credentials on the trusted server
+// New generates independent subscription and VLESS credentials on the trusted server
 // side. Random is injectable only for deterministic tests.
 func New(input NewInput) (Profile, error) {
 	random := input.Random

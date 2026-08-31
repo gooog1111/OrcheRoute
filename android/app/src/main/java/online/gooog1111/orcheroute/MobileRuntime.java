@@ -28,7 +28,6 @@ import mobilecore.QualificationObserver;
  */
 final class MobileRuntime {
     interface PermissionRequester { void request(); }
-    interface CallProfileRequester { void request(String profile); }
 
     private static volatile MobileRuntime instance;
     private final Context context;
@@ -56,7 +55,6 @@ final class MobileRuntime {
 	private int whitelistHealthSuccesses;
 	private boolean vpnPermissionGranted;
     private String connectedNodeID = "";
-	private String pendingCallPreviousNodeID = "";
 	private boolean controllerQualificationActive;
     private boolean componentActive;
     private String componentStatus = "idle";
@@ -161,7 +159,7 @@ final class MobileRuntime {
     }
 
     synchronized void onEngineError(String detail) {
-        if (restoreCallFallback(true)) return;
+		try { repository.deactivateFreeTURNNodes(); } catch (JSONException error) { refreshError = readable(error); }
         // A node may fail exactly while an allowlist rescan is looking for a
         // replacement. Keep the user's ON intent so the first verified node
         // can restart the service without another tap.
@@ -191,12 +189,15 @@ final class MobileRuntime {
         whitelistConnectPending = false;
         if (!connectedNodeID.equals(nodeID == null ? "" : nodeID)) proxyIdentity = new JSONObject();
         connectedNodeID = nodeID == null ? "" : nodeID;
-        pendingCallPreviousNodeID = "";
         if (allowlistRouteOverride) {
             try { repository.confirmWhitelistNode(connectedNodeID); } catch (JSONException error) { refreshError = readable(error); }
         }
         try { repository.confirmConnectedNode(connectedNodeID, allowlistRouteOverride); }
         catch (JSONException error) { refreshError = readable(error); }
+		try {
+			JSONObject selected = repository.activeNode(allowlistRouteOverride);
+			if (isFreeTURNNode(selected)) repository.confirmFreeTURNNode(connectedNodeID);
+		} catch (JSONException error) { refreshError = readable(error); }
         message = "Подключено через " + nodeName;
         finishNetworkApply();
     }
@@ -212,7 +213,7 @@ final class MobileRuntime {
         whitelistConnectPending = false;
         connectedNodeID = "";
         proxyIdentity = new JSONObject();
-        try { repository.deactivateVKCallNodes(); } catch (JSONException error) { refreshError = readable(error); }
+        try { repository.deactivateFreeTURNNodes(); } catch (JSONException error) { refreshError = readable(error); }
         message = "OrcheRoute выключен";
     }
 
@@ -231,8 +232,7 @@ final class MobileRuntime {
         else if ("proxy".equals(route)) proxyIdentity = value;
     }
 
-    synchronized String request(String method, String path, String body, PermissionRequester permissionRequester,
-                                CallProfileRequester callProfileRequester) {
+    synchronized String request(String method, String path, String body, PermissionRequester permissionRequester) {
         String verb = method == null ? "GET" : method.toUpperCase(Locale.ROOT);
         try {
             if ("GET".equals(verb) && "/v1/status".equals(path)) return response(200, status());
@@ -357,25 +357,25 @@ final class MobileRuntime {
             }
             if ("POST".equals(verb) && "/v1/control/auto".equals(path)) {
                 repository.setAuto();
-                restartSelectedIfEnabled(callProfileRequester);
+                restartSelectedIfEnabled();
                 return response(200, new JSONObject().put("accepted", true));
             }
             if ("POST".equals(verb) && "/v1/control/emergency".equals(path)) {
                 repository.setEmergency();
                 JSONObject check = scheduleRefresh(null, true, "emergency");
-                restartSelectedIfEnabled(callProfileRequester);
+                restartSelectedIfEnabled();
                 return response(200, new JSONObject().put("accepted", true).put("check_scheduled", check.optBoolean("accepted")));
             }
             if ("POST".equals(verb) && "/v1/control/manual".equals(path)) {
                 String nodeId = new JSONObject(emptyObject(body)).optString("node_id");
                 JSONObject selected = repository.select(nodeId);
                 if (selected == null) return error(404, "node_not_found", "Сервер не найден");
-                restartSelectedIfEnabled(callProfileRequester);
+                restartSelectedIfEnabled();
                 return response(200, new JSONObject().put("accepted", true));
             }
             if ("POST".equals(verb) && "/v1/subscriptions".equals(path)) {
                 JSONObject created = repository.create(new JSONObject(emptyObject(body)));
-                materializeVKCallProfiles(created, new JSONObject(emptyObject(body)));
+                materializeFreeTURNProfiles(created, new JSONObject(emptyObject(body)));
                 return response(201, new JSONObject().put("subscription", created)
                         .put("refresh_scheduled", false).put("refresh_required", true));
             }
@@ -387,7 +387,7 @@ final class MobileRuntime {
                     JSONObject candidate = input.getJSONObject(i);
                     try {
                         JSONObject item = repository.create(candidate);
-                        materializeVKCallProfiles(item, candidate);
+                        materializeFreeTURNProfiles(item, candidate);
                         created.put(item);
                     } catch (JSONException error) {
                         if (!"duplicate_subscription".equals(error.getMessage())) throw error;
@@ -444,13 +444,9 @@ final class MobileRuntime {
             }
             if ("POST".equals(verb) && "/v1/service/enable".equals(path)) {
 				setDesiredEnabled(true);
-                JSONObject selected = repository.activeNode(allowlistRouteOverride);
-                if (isVKCallNode(selected)) beginSelectedVKCall(selected, callProfileRequester);
-                else {
-                    state = "permission_required";
-                    message = "Ожидается системное разрешение Android";
-                    permissionRequester.request();
-                }
+                state = "permission_required";
+                message = "Ожидается системное разрешение Android";
+                permissionRequester.request();
                 return response(202, new JSONObject().put("accepted", true).put("enabled", true));
             }
             if ("POST".equals(verb) && "/v1/service/disable".equals(path)) {
@@ -473,22 +469,24 @@ final class MobileRuntime {
             if (allowlistRouteOverride) throw new IllegalStateException("Формируется список серверов для белых списков");
             return new EngineProfile(null, null, null, null);
         }
-		if (isVKCallNode(node)) {
-			JSONObject callBuilt = new JSONObject(Mobilecore.buildVKCallCarrierConfig(
+		if (isFreeTURNNode(node)) {
+			String transportProfile = node.getJSONObject("proxy").optString("profile");
+			JSONObject callBuilt = new JSONObject(Mobilecore.buildFreeTURNProfileConfig(
+					transportProfile, "127.0.0.1:19000",
 					repository.routesForEngine(allowlistRouteOverride), repository.activeDNSForEngine()));
-			if (!callBuilt.optBoolean("ok")) throw new IllegalStateException("VK Call ещё не активирован");
+			if (!callBuilt.optBoolean("ok")) throw new IllegalStateException("FreeTURN ещё не активирован");
 			String config = callBuilt.getJSONObject("result").getString("config");
-			return new EngineProfile(config, node.optString("display_name", "VK Call"),
-					node.optString("id"), node.optString("pool", "primary"));
+			return new EngineProfile(config, node.optString("display_name", "FreeTURN"),
+					node.optString("id"), node.optString("pool", "primary"), transportProfile);
 		}
         JSONObject built = new JSONObject(Mobilecore.buildMobileProxyConfigWithNetwork(
                 node.getJSONObject("proxy").toString(), repository.routesForEngine(allowlistRouteOverride), repository.activeDNSForEngine()));
         if (!built.optBoolean("ok")) throw new IllegalStateException(coreError(built));
         String config = built.getJSONObject("result").getString("config");
-        return new EngineProfile(config, node.optString("display_name"), node.optString("id"), node.optString("pool"));
+        return new EngineProfile(config, node.optString("display_name"), node.optString("id"), node.optString("pool"), "");
     }
 
-    private void materializeVKCallProfiles(JSONObject created, JSONObject payload) throws JSONException {
+    private void materializeFreeTURNProfiles(JSONObject created, JSONObject payload) throws JSONException {
         if (!"inline".equals(payload.optString("parser"))) return;
         JSONObject decoded = new JSONObject(Mobilecore.decodeSubscriptionBody(payload.optString("secret")));
         JSONArray links = decoded.optJSONArray("result");
@@ -496,44 +494,22 @@ final class MobileRuntime {
         JSONObject parsed = new JSONObject(Mobilecore.parseSubscription(links.toString(), sourceKey(created.getString("id"))));
         if (!parsed.optBoolean("ok")) return;
         JSONArray all = parsed.getJSONObject("result").getJSONArray("proxies");
-        JSONArray vkcall = new JSONArray();
+        JSONArray freeturn = new JSONArray();
         for (int i = 0; i < all.length(); i++) {
             JSONObject proxy = all.optJSONObject(i);
-            if (proxy != null && "vkcall".equals(proxy.optString("type"))) vkcall.put(proxy);
+            if (proxy != null && "freeturn".equals(proxy.optString("type"))) freeturn.put(proxy);
         }
-        if (vkcall.length() > 0) repository.materializeVKCallNodes(created.getString("id"), vkcall, links);
+        if (freeturn.length() > 0) repository.materializeFreeTURNNodes(created.getString("id"), freeturn, links);
     }
 
-    private static boolean isVKCallNode(JSONObject node) {
+    private static boolean isFreeTURNNode(JSONObject node) {
         return node != null && node.optJSONObject("proxy") != null
-                && "vkcall".equals(node.optJSONObject("proxy").optString("type"));
+                && "freeturn".equals(node.optJSONObject("proxy").optString("type"));
     }
 
-    private void beginSelectedVKCall(JSONObject node, CallProfileRequester requester) throws JSONException {
-        String profile = node.getJSONObject("proxy").optString("profile");
-        if (profile.isEmpty()) throw new JSONException("vkcall_profile_missing");
-        String selectedID = node.optString("id");
-        pendingCallPreviousNodeID = connectedNodeID.equals(selectedID) ? "" : connectedNodeID;
-        state = "starting";
-        message = "Подключаем выбранный сервер VK Call";
-        requester.request(profile);
-    }
-
-    private void restartSelectedIfEnabled(CallProfileRequester requester) throws JSONException {
+    private void restartSelectedIfEnabled() throws JSONException {
         if (!desiredEnabled) return;
-        JSONObject selected = repository.activeNode(allowlistRouteOverride);
-        if (!isVKCallNode(selected)) {
-            Mobilecore.stopVKCallCarrier();
-            restartIfEnabled();
-            return;
-        }
-        JSONObject carrier = new JSONObject(Mobilecore.vkCallCarrierStatus());
-        JSONObject result = carrier.optJSONObject("result");
-        if (carrier.optBoolean("ok") && result != null && "ready".equals(result.optString("status"))) {
-            restartIfEnabled();
-            return;
-        }
-        beginSelectedVKCall(selected, requester);
+		restartIfEnabled();
     }
 
     static final class EngineProfile {
@@ -541,8 +517,13 @@ final class MobileRuntime {
         final String nodeName;
         final String nodeID;
         final String pool;
-        EngineProfile(String config, String nodeName, String nodeID, String pool) { this.config = config; this.nodeName = nodeName; this.nodeID = nodeID; this.pool = pool; }
+        final String freeTURNProfile;
+        EngineProfile(String config, String nodeName, String nodeID, String pool) { this(config, nodeName, nodeID, pool, ""); }
+        EngineProfile(String config, String nodeName, String nodeID, String pool, String freeTURNProfile) {
+            this.config = config; this.nodeName = nodeName; this.nodeID = nodeID; this.pool = pool; this.freeTURNProfile = freeTURNProfile;
+        }
         boolean proxy() { return config != null; }
+        boolean freeTURN() { return freeTURNProfile != null && !freeTURNProfile.isEmpty(); }
     }
 
     private JSONObject scheduleRefresh(String onlyId, boolean checkOnly, String onlyGroup) throws JSONException {
@@ -636,17 +617,17 @@ final class MobileRuntime {
                     if (!parsed.optBoolean("ok")) throw new IllegalStateException(coreError(parsed));
                     JSONArray proxies = parsed.getJSONObject("result").getJSONArray("proxies");
                     if (proxies.length() == 0) throw new IllegalStateException("Подписка не содержит поддерживаемых серверов");
-					JSONArray vkcall = new JSONArray(), testable = new JSONArray();
+					JSONArray freeturn = new JSONArray(), testable = new JSONArray();
 					for (int index = 0; index < proxies.length(); index++) {
 						JSONObject proxy = proxies.getJSONObject(index);
-						if ("vkcall".equals(proxy.optString("type"))) vkcall.put(proxy);
+						if ("freeturn".equals(proxy.optString("type"))) freeturn.put(proxy);
 						else testable.put(proxy);
 					}
-					if (testable.length() == 0 && vkcall.length() > 0) {
-						repository.materializeVKCallNodes(id, vkcall, links);
-						repository.markVKCallProfilesChecked(id, vkcall.length());
-						updateRefresh("running", "activation", "VK Call проверен и ожидает подключения · «" + item.optString("name") + "»",
-								vkcall.length(), vkcall.length(), "");
+					if (testable.length() == 0 && freeturn.length() > 0) {
+						repository.materializeFreeTURNNodes(id, freeturn, links);
+						repository.markFreeTURNProfilesChecked(id, freeturn.length());
+						updateRefresh("running", "activation", "FreeTURN проверен и ожидает подключения · «" + item.optString("name") + "»",
+								freeturn.length(), freeturn.length(), "");
 						success++;
 						continue;
 					}
@@ -715,7 +696,7 @@ final class MobileRuntime {
                     if (restrictedScan) repository.replaceWhitelistSource(id, qualified, finalTests);
                     else {
 						repository.refreshSucceeded(id, qualified, finalTests, links, proxies.length(), !checkOnly);
-						if (vkcall.length() > 0) repository.materializeVKCallNodes(id, vkcall, links);
+						if (freeturn.length() > 0) repository.materializeFreeTURNNodes(id, freeturn, links);
 					}
                     success++;
                     // Do not start the VPN from a partially built pool. The
@@ -1240,45 +1221,6 @@ final class MobileRuntime {
     }
 
     private void restartIfEnabled() { if (desiredEnabled) OrcheRouteVpnService.reload(context); }
-
-	synchronized void onCallCarrierReady() {
-		try {
-			JSONObject selected = repository.activeNode(allowlistRouteOverride);
-			if (isVKCallNode(selected)) repository.confirmVKCallNode(selected.optString("id"));
-		} catch (JSONException error) {
-			refreshError = readable(error);
-		}
-		state = "starting";
-		message = "VK Call готов, запускается системный VPN";
-	}
-
-	synchronized void onCallCarrierError(String detail) {
-		try { repository.deactivateVKCallNodes(); } catch (JSONException error) { refreshError = readable(error); }
-		if (restoreCallFallback(false)) return;
-		setDesiredEnabled(false);
-		state = "error";
-		message = detail == null || detail.isEmpty() ? "Не удалось подключить VK Call" : detail;
-	}
-
-	private boolean restoreCallFallback(boolean reload) {
-		String previous = pendingCallPreviousNodeID;
-		pendingCallPreviousNodeID = "";
-		if (previous.isEmpty()) return false;
-		try {
-			if (repository.select(previous) == null) repository.setAuto();
-		} catch (JSONException error) {
-			refreshError = readable(error);
-			return false;
-		}
-		Mobilecore.stopVKCallCarrier();
-		setDesiredEnabled(true);
-		state = reload ? "starting" : "connected";
-		message = reload
-				? "VK Call не запустился, восстанавливается предыдущее подключение"
-				: "VK Call недоступен, предыдущее подключение сохранено";
-		if (reload) OrcheRouteVpnService.reload(context);
-		return true;
-	}
 
 	synchronized String onProxyHealth(boolean successful) {
 		try {

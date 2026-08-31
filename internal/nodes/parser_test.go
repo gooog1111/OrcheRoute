@@ -54,7 +54,7 @@ func TestHysteria2Fields(t *testing.T) {
 	}
 }
 
-func TestVKCallProfileBecomesCanonicalNode(t *testing.T) {
+func TestFreeTURNProfileBecomesCanonicalNode(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	profile, err := callprofile.New(callprofile.NewInput{
 		Name:          "Call test",
@@ -74,11 +74,11 @@ func TestVKCallProfileBecomesCanonicalNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if proxy["type"] != "vkcall" || proxy["server"] != "192.0.2.1" || proxy["port"] != 4443 || proxy["profile"] != link {
-		t.Fatalf("unexpected vkcall node: %#v", proxy)
+	if proxy["type"] != "freeturn" || proxy["server"] != "192.0.2.1" || proxy["port"] != 4443 || proxy["profile"] != link {
+		t.Fatalf("unexpected freeturn node: %#v", proxy)
 	}
 	if _, exposed := proxy["psk"]; exposed {
-		t.Fatal("vkcall PSK was exposed as a node field")
+		t.Fatal("FreeTURN legacy PSK was exposed as a node field")
 	}
 }
 

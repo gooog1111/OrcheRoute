@@ -19,7 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gooog1111/orcheroute/internal/calltransport"
 	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/common/utils"
@@ -56,12 +55,12 @@ func engineInit(home string, protector SocketProtector) string {
 		dialer.DefaultSocketHook = nil
 	} else {
 		dialer.DefaultSocketHook = func(_ string, address string, conn syscall.RawConn) error {
-			// VKCall exposes a process-local VLESS listener. Binding that
+			// FreeTURN exposes a process-local VLESS listener. Binding that
 			// loopback socket to the selected physical Android Network makes
 			// otherwise valid 127.0.0.1 connections time out. Loopback never
 			// enters the VPN TUN, so it neither needs VpnService.protect nor a
-			// physical-network bind. The external TURN/DTLS carrier still uses
-			// protectedSocketControl below and remains protected and bound.
+			// physical-network bind. FreeTURN's external sockets are protected
+			// and bound by the isolated mobile bridge.
 			if isLoopbackSocketAddress(address) {
 				return nil
 			}
@@ -584,27 +583,6 @@ func protectedSocketControl(_, _ string, connection syscall.RawConn) error {
 	}
 	return nil
 }
-
-func platformCallHTTPClient(timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second, Control: protectedSocketControl}).DialContext,
-		},
-	}
-}
-
-type protectedCallUnderlay struct{}
-
-func (protectedCallUnderlay) ListenPacket(ctx context.Context, network, address string) (net.PacketConn, error) {
-	return (&net.ListenConfig{Control: protectedSocketControl}).ListenPacket(ctx, network, address)
-}
-
-func (protectedCallUnderlay) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	return (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: protectedSocketControl}).DialContext(ctx, network, address)
-}
-
-func platformCallUnderlay() calltransport.Underlay { return protectedCallUnderlay{} }
 
 func sortInts(values []int) {
 	for i := 1; i < len(values); i++ {

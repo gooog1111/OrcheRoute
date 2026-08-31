@@ -47,12 +47,13 @@ sudo apt install ./OrcheRoute-Linux-Server-0.6.3-amd64.deb
 `/etc/orcheroute/initial-credentials`.
 
 В beta-канале Linux Server также доступен входящий VPN-сервер. Одна персональная
-подписка содержит VK Call, VLESS Reality, Trojan TLS и Hysteria2; по умолчанию
+подписка содержит FreeTURN, VLESS Reality, Trojan TLS и Hysteria2; по умолчанию
 используется SNI `m.vk.ru` и порты TCP 24443, TCP 24444 и UDP 24445.
-VK Call работает через встроенный Xray, VLESS/Trojan/Hysteria2 listeners — через
-изолированный экземпляр комплектного Mihomo и не меняют действующую исходящую
+FreeTURN принимает внешний TCP-трафик и передаёт его во встроенный Xray;
+VLESS/Trojan/Hysteria2 listeners работают через изолированный экземпляр
+комплектного Mihomo и не меняют действующую исходящую
 маршрутизацию. Срок действия применяется ко всей подписке; счётчик трафика beta
-пока учитывает только тракт VK Call.
+пока учитывает только тракт FreeTURN.
 
 `sudo apt remove orcheroute` сохраняет настройки, авторизацию, подписки,
 маршруты и состояние. `sudo apt purge orcheroute` полностью удаляет эти данные
@@ -114,17 +115,15 @@ VPN-серверу: ошибочное правило `block` или `direct` м
   прокси-протоколов, DNS и правил маршрутизации. В Android ядро встроено в APK;
   его версия обновляется вместе с приложением.
 
-### Транспортные исследования
+### Транспорт FreeTURN
 
-- [cacggghp/vk-turn-proxy](https://github.com/cacggghp/vk-turn-proxy) —
-  транспорт WireGuard через VK TURN, GPLv3;
-- [openlibrecommunity/olcrtc](https://github.com/openlibrecommunity/olcrtc) —
-  транспорт TCP через WebRTC, WTFPL.
+- [samosvalishe/free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy)
+  используется как единый клиентский и серверный FreeTURN runtime;
+- в сборке зафиксирована проверенная upstream-ревизия, указанная в
+  `components/freeturnbridge/go.mod`.
 
-Авторы и участники этих проектов указаны также в `THIRD_PARTY_NOTICES.md`.
-Текущая beta входящего VPN использует Xray/VLESS поверх собственного тракта
-TURN → DTLS → KCP → smux, а также штатные VLESS, Trojan и Hysteria2 listeners
-Mihomo в общей системе персональных подписок OrcheRoute.
+Авторы, лицензия и исходная ревизия указаны в `THIRD_PARTY_NOTICES.md`.
+Прежний собственный VKCall/DTLS/KCP/smux тракт удалён.
 
 ### Встроенные аварийные списки серверов
 

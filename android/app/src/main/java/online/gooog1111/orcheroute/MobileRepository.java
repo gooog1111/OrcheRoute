@@ -41,7 +41,7 @@ final class MobileRepository {
         initializedMarker = new File(stateDirectory, ".initialized");
         root = loadState();
         ensure();
-		resetTransientVKCallState();
+		resetTransientFreeTURNState();
 		migrateEmergencyOnlyMode();
         migrateQualificationPolicy();
         migrateDetectedParsers();
@@ -333,7 +333,7 @@ final class MobileRepository {
         return publicSubscription(item);
     }
 
-    synchronized void materializeVKCallNodes(String id, JSONArray proxies, JSONArray links) throws JSONException {
+    synchronized void materializeFreeTURNNodes(String id, JSONArray proxies, JSONArray links) throws JSONException {
         JSONObject subscription = findSubscription(id);
         if (subscription == null) return;
         JSONArray stored = root.getJSONArray("nodes"), nodes = new JSONArray();
@@ -341,14 +341,14 @@ final class MobileRepository {
             JSONObject existing = stored.getJSONObject(i);
             JSONObject proxy = existing.optJSONObject("proxy");
             if (id.equals(existing.optString("source_id")) && proxy != null
-                    && "vkcall".equals(proxy.optString("type"))) continue;
+                    && "freeturn".equals(proxy.optString("type"))) continue;
             nodes.put(existing);
         }
         root.put("nodes", nodes);
         for (int i = 0; i < proxies.length(); i++) {
             JSONObject proxy = proxies.optJSONObject(i);
-            if (proxy == null || !"vkcall".equals(proxy.optString("type"))) continue;
-            String nodeID = proxy.optString("name", id + "-vkcall-" + (i + 1));
+            if (proxy == null || !"freeturn".equals(proxy.optString("type"))) continue;
+            String nodeID = proxy.optString("name", id + "-freeturn-" + (i + 1));
             nodes.put(new JSONObject()
                     .put("id", nodeID)
                     .put("display_name", displayName(proxy, i + 1))
@@ -370,7 +370,7 @@ final class MobileRepository {
         save();
     }
 
-    synchronized void markVKCallProfilesChecked(String id, int count) throws JSONException {
+    synchronized void markFreeTURNProfilesChecked(String id, int count) throws JSONException {
         JSONObject subscription = findSubscription(id);
         if (subscription == null) return;
         subscription.put("last_status", "success").put("last_error", JSONObject.NULL)
@@ -379,26 +379,26 @@ final class MobileRepository {
         save();
     }
 
-    synchronized void confirmVKCallNode(String id) throws JSONException {
+    synchronized void confirmFreeTURNNode(String id) throws JSONException {
         JSONObject node = findNode(id);
-        if (node == null || !"vkcall".equals(node.optJSONObject("proxy") == null
+        if (node == null || !"freeturn".equals(node.optJSONObject("proxy") == null
                 ? "" : node.optJSONObject("proxy").optString("type"))) return;
         node.put("alive", true).put("activation_required", false).put("last_tested_at", now());
         save();
     }
 
-    synchronized void deactivateVKCallNodes() throws JSONException {
-        if (resetTransientVKCallState()) save();
+    synchronized void deactivateFreeTURNNodes() throws JSONException {
+        if (resetTransientFreeTURNState()) save();
     }
 
-    private boolean resetTransientVKCallState() {
+    private boolean resetTransientFreeTURNState() {
         boolean changed = false;
         JSONArray nodes = root.optJSONArray("nodes");
         if (nodes == null) return false;
         for (int i = 0; i < nodes.length(); i++) {
             JSONObject node = nodes.optJSONObject(i);
             JSONObject proxy = node == null ? null : node.optJSONObject("proxy");
-            if (proxy == null || !"vkcall".equals(proxy.optString("type"))) continue;
+            if (proxy == null || !"freeturn".equals(proxy.optString("type"))) continue;
             if (node.optBoolean("alive", false) || !node.optBoolean("activation_required", false)) {
                 try {
                     node.put("alive", false).put("activation_required", true);
@@ -577,9 +577,9 @@ final class MobileRepository {
 
     synchronized JSONObject select(String id) throws JSONException {
         JSONObject node = findNode(id);
-        boolean vkcall = node != null && node.optJSONObject("proxy") != null
-                && "vkcall".equals(node.optJSONObject("proxy").optString("type"));
-        if (node == null || (!node.optBoolean("alive", false) && !vkcall)) return null;
+        boolean freeturn = node != null && node.optJSONObject("proxy") != null
+                && "freeturn".equals(node.optJSONObject("proxy").optString("type"));
+        if (node == null || (!node.optBoolean("alive", false) && !freeturn)) return null;
         root.put("selected_node", id).put("mode", "manual");
         save();
         return new JSONObject(node.toString());
@@ -608,9 +608,9 @@ final class MobileRepository {
     synchronized JSONObject activeNode() throws JSONException {
         JSONObject selected = findNode(root.optString("selected_node", ""));
         if (selected != null && "emergency".equals(mode()) && !"emergency".equals(selected.optString("pool"))) selected = null;
-        boolean selectedVKCall = selected != null && selected.optJSONObject("proxy") != null
-                && "vkcall".equals(selected.optJSONObject("proxy").optString("type"));
-        if (selected != null && !selected.optBoolean("alive", false) && !selectedVKCall) selected = null;
+        boolean selectedFreeTURN = selected != null && selected.optJSONObject("proxy") != null
+                && "freeturn".equals(selected.optJSONObject("proxy").optString("type"));
+        if (selected != null && !selected.optBoolean("alive", false) && !selectedFreeTURN) selected = null;
         if (selected == null) selected = selectBestLocked();
         return selected == null ? null : new JSONObject(selected.toString());
     }
@@ -619,7 +619,7 @@ final class MobileRepository {
         if (!whitelistMode) return activeNode();
 		JSONObject manual = findNode(root.optString("selected_node", ""));
 		if ("manual".equals(mode()) && manual != null && manual.optJSONObject("proxy") != null
-				&& "vkcall".equals(manual.optJSONObject("proxy").optString("type"))) {
+				&& "freeturn".equals(manual.optJSONObject("proxy").optString("type"))) {
 			return new JSONObject(manual.toString());
 		}
         return whitelistTransitionLocked(new JSONObject().put("operation", "active"));
@@ -1156,9 +1156,9 @@ final class MobileRepository {
     private void clearMissingSelectionLocked() throws JSONException {
         String selected = root.optString("selected_node", "");
         JSONObject node = findNode(selected);
-        boolean selectedVKCall = node != null && node.optJSONObject("proxy") != null
-                && "vkcall".equals(node.optJSONObject("proxy").optString("type"));
-        if (!selected.isEmpty() && (node == null || (!node.optBoolean("alive", false) && !selectedVKCall))) root.remove("selected_node");
+        boolean selectedFreeTURN = node != null && node.optJSONObject("proxy") != null
+                && "freeturn".equals(node.optJSONObject("proxy").optString("type"));
+        if (!selected.isEmpty() && (node == null || (!node.optBoolean("alive", false) && !selectedFreeTURN))) root.remove("selected_node");
     }
 
     private static JSONObject publicSubscription(JSONObject source) throws JSONException {

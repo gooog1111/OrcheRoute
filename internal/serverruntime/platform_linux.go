@@ -24,14 +24,18 @@ func platformDefaultConfig() Config {
 		ProductionState: "/var/lib/orcheroute", StateDirectory: "/var/lib/orcheroute",
 		WebRoot: "/opt/orcheroute/webui", RuntimeEnv: "/etc/orcheroute/runtime.env", ConfigDirectory: "/etc/orcheroute",
 		MihomoAPI: "http://127.0.0.1:19090", MihomoBinary: "/opt/orcheroute/bin/mihomo",
-		UpdateBinary: "/opt/orcheroute/bin/orcheroute-update-go", NetworkBinary: "/opt/orcheroute/bin/orcheroute-network-go",
+		FreeTURNBinary: "/opt/orcheroute/bin/orcheroute-freeturn-server",
+		UpdateBinary:   "/opt/orcheroute/bin/orcheroute-update-go", NetworkBinary: "/opt/orcheroute/bin/orcheroute-network-go",
 		ComponentBinary: "/opt/orcheroute/bin/orcheroute-components-go", SelfUpdateBinary: "/opt/orcheroute/bin/orcheroute-self-update", CoreService: "orcheroute-core.service", ControllerEvery: 10 * time.Second,
 		ConnectivityEvery: 10 * time.Second, ConnectivityTimeout: 6 * time.Second,
 		RequireAPIAuth: true}
 }
 
 func platformCallServerRuntime(config Config) *callserver.Runtime {
-	return callserver.NewRuntime(callserver.EmbeddedXrayBackend{MihomoBinary: config.MihomoBinary, StateDirectory: config.StateDirectory})
+	return callserver.NewFreeTURNRuntime(
+		callserver.EmbeddedXrayBackend{MihomoBinary: config.MihomoBinary, StateDirectory: config.StateDirectory},
+		callserver.FreeTURNRelay{Binary: config.FreeTURNBinary, StateDirectory: config.StateDirectory},
+	)
 }
 
 func discoverTopology(ctx context.Context) (network.Topology, error) {

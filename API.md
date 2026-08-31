@@ -1658,14 +1658,14 @@ whitelist-пула, принадлежащая соответствующему 
 
 Модуль отделён от исходящего Mihomo/TUN-профиля и выключен при чистой
 установке. Linux Server запускает встроенный Xray/VLESS на loopback, а внешний
-UDP-тракт использует DTLS → KCP → smux. Клиент получает краткоживущие
-TURN-реквизиты по ссылке-приглашению VK Call.
+TCP-тракт обслуживает upstream FreeTURN. Android запускает тот же FreeTURN
+runtime и передаёт его локальный VLESS hop в общее ядро Mihomo.
 
 - `GET /v1/call-server` — безопасная конфигурация без приглашения, PSK, UUID и
-  токенов, а также фактическое состояние DTLS/Xray runtime;
+  токенов, а также фактическое состояние FreeTURN/Xray runtime;
 - `PUT /v1/call-server` — сохранить адреса и при необходимости заменить
   приглашение; отсутствие `invitation_url` сохраняет действующее значение;
-- `POST /v1/call-server/apply` — запустить встроенный Xray и DTLS-транспорт;
+- `POST /v1/call-server/apply` — запустить встроенный Xray и FreeTURN;
 - `POST /v1/call-server/disable` — остановить только входящий VPN;
 - `POST /v1/call-server/clients` — создать клиента и секретную ссылку;
 - `PATCH /v1/call-server/clients/{id}` — изменить имя, состояние, срок, лимит,
@@ -1673,13 +1673,13 @@ TURN-реквизиты по ссылке-приглашению VK Call.
 - `DELETE /v1/call-server/clients/{id}` — удалить и немедленно отозвать клиента;
 - `GET /v1/call-server/clients/{id}/subscription` — получить персональный URL;
 - `GET /v1/call-server/clients/{id}/profile` — получить профиль
-  `orcheroute-call-v1` для импорта в Android.
+  FreeTURN для импорта в Android.
 
-Публичный `GET /subscription/call/{token}` не требует Basic-авторизации: сам
+Публичный `GET /subscription/{token}` не требует Basic-авторизации: сам
 случайный токен является секретом. Ответ содержит Call-профиль и
 `Subscription-Userinfo` со счётчиками, лимитом и сроком. Публиковать такую
 ссылку следует только через HTTPS. Xray ведёт раздельные счётчики клиента;
-после достижения срока или лимита его DTLS PSK и VLESS UUID исключаются из
+после достижения срока или лимита его FreeTURN client ID и VLESS UUID исключаются из
 активной конфигурации, а накопленные значения сохраняются между перезапусками.
 
 ## Важные эксплуатационные правила

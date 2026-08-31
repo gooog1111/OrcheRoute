@@ -28,6 +28,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import freeturnbridge.EventSink;
+import freeturnbridge.Freeturnbridge;
 import mobilecore.Mobilecore;
 
 /**
@@ -74,6 +76,7 @@ public final class OrcheRouteVpnService extends VpnService {
     private ScheduledFuture<?> trafficMonitor;
     private ScheduledFuture<?> identityMonitor;
     private volatile String notificationNode = "";
+    private volatile boolean freeTURNActive;
 
     static void start(Context context) {
         Intent intent = new Intent(context, OrcheRouteVpnService.class).setAction(ACTION_START);
@@ -107,14 +110,14 @@ public final class OrcheRouteVpnService extends VpnService {
         if (ACTION_STOP.equals(action)) {
             stopping = true;
             stopTunnel();
-			Mobilecore.stopVKCallCarrier();
+			stopFreeTURN();
             MobileRuntime.get(this).onDisabled();
             stopForeground(true);
             stopSelfResult(startId);
             return START_NOT_STICKY;
         }
         if (ACTION_STOP_ERROR.equals(action)) {
-			stopping = true; stopTunnel(); Mobilecore.stopVKCallCarrier(); stopForeground(true); stopSelfResult(startId);
+			stopping = true; stopTunnel(); stopFreeTURN(); stopForeground(true); stopSelfResult(startId);
             return START_NOT_STICKY;
         }
 		if (ACTION_PAUSE_NETWORK.equals(action)) {
@@ -181,6 +184,7 @@ public final class OrcheRouteVpnService extends VpnService {
 			if ("normal".equals(initialNetworkMode)) runtime.leaveAllowlistMode();
             MobileRuntime.EngineProfile profile = runtime.engineProfile();
             Log.i("OrcheRouteEngine", "profile selected proxy=" + profile.proxy() + " node=" + profile.nodeName);
+			if (profile.freeTURN()) startFreeTURN(profile.freeTURNProfile);
             requireOk(Mobilecore.engineInit(home.getAbsolutePath(), fd -> protectAndBind((int) fd)));
             Log.i("OrcheRouteEngine", "native engine initialized");
             requireOk(Mobilecore.engineLoadConfig(profile.proxy() ? profile.config : DIRECT_TEST_CONFIG));
@@ -282,7 +286,7 @@ public final class OrcheRouteVpnService extends VpnService {
     public void onRevoke() {
         stopping = true;
         stopTunnel();
-		Mobilecore.stopVKCallCarrier();
+		stopFreeTURN();
         MobileRuntime.get(this).onDisabled();
         stopSelf();
         super.onRevoke();
@@ -292,7 +296,7 @@ public final class OrcheRouteVpnService extends VpnService {
     public void onDestroy() {
         stopping = true;
         stopTunnel();
-		Mobilecore.stopVKCallCarrier();
+		stopFreeTURN();
         worker.shutdownNow();
         healthWorker.shutdownNow();
         trafficWorker.shutdownNow();
@@ -309,6 +313,7 @@ public final class OrcheRouteVpnService extends VpnService {
         synchronized (tunnelLock) {
             closeVpnInterface();
             Mobilecore.engineStopTun();
+			stopFreeTURN();
             setUnderlyingNetworks(null);
             connected = false;
             consecutiveWhitelistHealthFailures = 0;
@@ -316,6 +321,46 @@ public final class OrcheRouteVpnService extends VpnService {
             notificationNode = "";
         }
     }
+
+	private void startFreeTURN(String encodedProfile) throws Exception {
+		stopFreeTURN();
+		File state = new File(getFilesDir(), "freeturn");
+		if (!state.isDirectory() && !state.mkdirs()) throw new IllegalStateException("Не удалось создать каталог FreeTURN");
+		Freeturnbridge.setStateDir(state.getAbsolutePath());
+		Freeturnbridge.setProtect(fd -> protectAndBind((int) fd));
+		Freeturnbridge.setEventSink(new EventSink() {
+			@Override public void onCaptcha(String url) { MainActivity.showFreeTURNCaptcha(OrcheRouteVpnService.this, url); }
+			@Override public void onLog(String level, String message, long unixMillis) {
+				Log.println("error".equals(level) ? Log.ERROR : Log.INFO, "OrcheRouteFreeTURN", message);
+			}
+			@Override public void onState(String state, long streams, long total, String error) {
+				Log.i("OrcheRouteFreeTURN", "state=" + state + " streams=" + streams + "/" + total + " error=" + error);
+			}
+		});
+		String config = Freeturnbridge.configFromOrcheRouteProfile(encodedProfile, "127.0.0.1:19000");
+		String validation = Freeturnbridge.validateConfig(config);
+		if (validation != null && !validation.isEmpty()) throw new IllegalStateException(validation);
+		Freeturnbridge.start(config);
+		freeTURNActive = true;
+		long deadline = SystemClock.elapsedRealtime() + TimeUnit.MINUTES.toMillis(3);
+		while (!stopping && SystemClock.elapsedRealtime() < deadline) {
+			JSONObject statePayload = new JSONObject(Freeturnbridge.stateJSON());
+			String phase = statePayload.optString("state");
+			if ("connected".equals(phase) && statePayload.optLong("streams") > 0) return;
+			if ("error".equals(phase)) throw new IllegalStateException(statePayload.optString("error", "FreeTURN не подключился"));
+			showWaiting("captcha".equals(phase) ? "Подтвердите CAPTCHA VK…" : "Подключаем FreeTURN…");
+			Thread.sleep(250);
+		}
+		throw new IllegalStateException(stopping ? "Запуск FreeTURN отменён" : "FreeTURN не подключился за отведённое время");
+	}
+
+	private void stopFreeTURN() {
+		try { Freeturnbridge.stop(); } catch (Throwable error) { Log.w("OrcheRouteFreeTURN", "stop failed", error); }
+		try { Freeturnbridge.setEventSink(null); } catch (Throwable ignored) { }
+		try { Freeturnbridge.setProtect(null); } catch (Throwable ignored) { }
+		freeTURNActive = false;
+		MainActivity.showFreeTURNCaptcha(this, "");
+	}
 
     /**
      * Keeps every Mihomo outbound socket outside the Android TUN and on the

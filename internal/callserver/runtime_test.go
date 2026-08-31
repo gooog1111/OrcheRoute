@@ -19,6 +19,25 @@ type testBackendRun struct {
 	health  error
 }
 
+type testRelay struct {
+	starts int
+	run    *testRelayRun
+}
+
+type testRelayRun struct {
+	health error
+	closed bool
+}
+
+func (relay *testRelay) Start(context.Context, RuntimeSnapshot) (io.Closer, error) {
+	relay.starts++
+	relay.run = &testRelayRun{}
+	return relay.run, nil
+}
+
+func (running *testRelayRun) Alive() error { return running.health }
+func (running *testRelayRun) Close() error { running.closed = true; return nil }
+
 func (running *testBackendRun) Alive() error { return running.health }
 
 func (running *testBackendRun) DrainTraffic() map[string]Traffic {
@@ -53,8 +72,8 @@ func TestRuntimeAppliesAndStopsConfiguredRegistry(t *testing.T) {
 	if _, err := manager.SetEnabled(true); err != nil {
 		t.Fatal(err)
 	}
-	backend := &testBackend{}
-	runtime := NewRuntime(backend)
+	backend, relay := &testBackend{}, &testRelay{}
+	runtime := newRuntimeWithRelay(backend, relay)
 	if err := runtime.Apply(manager); err != nil {
 		t.Fatal(err)
 	}
@@ -62,11 +81,11 @@ func TestRuntimeAppliesAndStopsConfiguredRegistry(t *testing.T) {
 	if !status.Active || status.Clients != 1 || backend.listener == nil {
 		t.Fatalf("unexpected runtime status: %#v", status)
 	}
-	if err := runtime.Apply(manager); err != nil || backend.starts != 1 {
+	if err := runtime.Apply(manager); err != nil || backend.starts != 1 || relay.starts != 1 {
 		t.Fatalf("unchanged runtime restarted: starts=%d err=%v", backend.starts, err)
 	}
 	backend.run.health = io.EOF
-	if err := runtime.Apply(manager); err != nil || backend.starts != 2 {
+	if err := runtime.Apply(manager); err != nil || backend.starts != 2 || relay.starts != 2 {
 		t.Fatalf("failed backend was not restarted: starts=%d err=%v", backend.starts, err)
 	}
 	backend.run.traffic[client.ID] = Traffic{RXBytes: 60, TXBytes: 40}
@@ -85,6 +104,40 @@ func TestRuntimeAppliesAndStopsConfiguredRegistry(t *testing.T) {
 	}
 	if runtime.Status().Active {
 		t.Fatal("disabled runtime remained active")
+	}
+}
+
+func TestFreeTURNRuntimeUsesExternalRelayAndRestartsAfterFailure(t *testing.T) {
+	manager, _ := configuredManager(t)
+	config := manager.data
+	config.ListenAddress = freeUDPAddress(t)
+	config.BackendAddress = freeTCPAddress(t)
+	if _, err := manager.UpdateConfig(config); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.CreateClient(CreateClientInput{Name: "Phone"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.SetEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	backend, relay := &testBackend{}, &testRelay{}
+	runtime := newRuntimeWithRelay(backend, relay)
+	if err := runtime.Apply(manager); err != nil {
+		t.Fatal(err)
+	}
+	if relay.starts != 1 || !runtime.Status().Active {
+		t.Fatalf("relay starts=%d status=%#v", relay.starts, runtime.Status())
+	}
+	relay.run.health = io.EOF
+	if err := runtime.Apply(manager); err != nil {
+		t.Fatal(err)
+	}
+	if relay.starts != 2 {
+		t.Fatalf("failed relay was not restarted: %d", relay.starts)
+	}
+	if err := runtime.Close(); err != nil || !relay.run.closed {
+		t.Fatalf("relay was not closed: err=%v run=%#v", err, relay.run)
 	}
 }
 

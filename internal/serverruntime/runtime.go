@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/gooog1111/orcheroute/internal/callserver"
-	callvk "github.com/gooog1111/orcheroute/internal/calltransport/vk"
 	"github.com/gooog1111/orcheroute/internal/controller"
 	"github.com/gooog1111/orcheroute/internal/core/noderank"
 	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
@@ -40,6 +39,7 @@ type Config struct {
 	ConfigDirectory     string
 	MihomoAPI           string
 	MihomoBinary        string
+	FreeTURNBinary      string
 	UpdateBinary        string
 	NetworkBinary       string
 	ComponentBinary     string
@@ -63,7 +63,6 @@ type Runtime struct {
 	CallServer               *callserver.Manager
 	callServerError          string
 	CallTransport            *callserver.Runtime
-	callServerProbe          func(context.Context) (callserver.ProviderProbeResult, error)
 	apiToken                 string
 	controllerSecret         string
 	client                   *http.Client
@@ -113,19 +112,12 @@ func New(config Config) (*Runtime, error) {
 	} else {
 		runtime.CallServer = callManager
 		runtime.CallTransport = platformCallServerRuntime(config)
-		runtime.callServerProbe = func(ctx context.Context) (callserver.ProviderProbeResult, error) {
-			return callserver.ProbeProvider(ctx, callManager, defaultCallServerSource())
-		}
 	}
 	if err := runtime.bootstrap(context.Background(), freshState); err != nil {
 		_ = store.Close()
 		return nil, err
 	}
 	return runtime, nil
-}
-
-func defaultCallServerSource() callvk.Source {
-	return callvk.Source{Identity: callvk.DefaultIdentity(), Name: "OrcheRoute Server"}
 }
 
 // bootstrap makes a clean installation immediately configurable. It only

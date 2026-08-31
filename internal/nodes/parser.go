@@ -89,31 +89,31 @@ func ParseLink(link, source string, index int) (map[string]any, error) {
 	case "wireguard", "wg", "amneziawg", "awg":
 		return parseWireGuard(link, source, index)
 	case "orcheroute":
-		return parseVKCall(link, source, index)
+		return parseFreeTURN(link, source, index)
 	default:
 		return nil, fmt.Errorf("unsupported protocol")
 	}
 }
 
-func parseVKCall(link, source string, index int) (map[string]any, error) {
+func parseFreeTURN(link, source string, index int) (map[string]any, error) {
 	profile, err := callprofile.Decode(link, time.Now())
 	if err != nil {
 		return nil, err
 	}
 	host, portValue, err := net.SplitHostPort(profile.PeerAddress)
 	if err != nil {
-		return nil, fmt.Errorf("invalid vkcall peer")
+		return nil, fmt.Errorf("invalid freeturn peer")
 	}
 	port, err := strconv.Atoi(portValue)
 	if err != nil {
-		return nil, fmt.Errorf("invalid vkcall peer")
+		return nil, fmt.Errorf("invalid freeturn peer")
 	}
 	label := profile.Name
 	if label == "" {
-		label = "VK Call"
+		label = "FreeTURN"
 	}
 	return map[string]any{
-		"name": name(source, index, label), "type": "vkcall",
+		"name": name(source, index, label), "type": "freeturn",
 		"server": host, "port": port, "udp": true, "profile": link,
 	}, nil
 }

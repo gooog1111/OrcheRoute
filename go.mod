@@ -6,17 +6,11 @@ replace github.com/wlynxg/anet => ./third_party/anet
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/metacubex/kcp-go v0.0.0-20260105040817-550693377604
 	github.com/metacubex/mihomo v1.19.30
-	github.com/metacubex/smux v0.0.0-20260105030934-d0c8756d3141
-	github.com/pion/dtls/v3 v3.1.2
-	github.com/pion/logging v0.2.4
-	github.com/pion/turn/v5 v5.0.3
 	github.com/xtls/xray-core v1.251202.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/mod v0.38.0
 	golang.org/x/net v0.57.0
-	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.40.0
 	modernc.org/sqlite v1.54.0
@@ -89,6 +83,7 @@ require (
 	github.com/metacubex/jls-quic-go v0.0.0-20260727080412-732f2fc9a34d // indirect
 	github.com/metacubex/jls-tls v0.0.0-20260723084315-67adc0e2f796 // indirect
 	github.com/metacubex/jsonv2 v0.0.0-20260721082349-16b4998c8f89 // indirect
+	github.com/metacubex/kcp-go v0.0.0-20260105040817-550693377604 // indirect
 	github.com/metacubex/mhurl v0.1.0 // indirect
 	github.com/metacubex/mipstack v0.0.0-20260816065001-b7038299fe13 // indirect
 	github.com/metacubex/mlkem v0.1.0 // indirect
@@ -106,6 +101,7 @@ require (
 	github.com/metacubex/sing-tun v0.4.22 // indirect
 	github.com/metacubex/sing-vmess v0.2.5 // indirect
 	github.com/metacubex/sing-wireguard v0.0.0-20260810013230-110eac03c3f0 // indirect
+	github.com/metacubex/smux v0.0.0-20260105030934-d0c8756d3141 // indirect
 	github.com/metacubex/ssh v0.1.0 // indirect
 	github.com/metacubex/tailscale v0.0.0-20260807072706-a4fb5feabcbb // indirect
 	github.com/metacubex/tailscale-wireguard-go v0.0.0-20260725073821-e61ab99cede2 // indirect
@@ -124,9 +120,6 @@ require (
 	github.com/oschwald/maxminddb-golang v1.12.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pierrec/lz4/v4 v4.1.27 // indirect
-	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/stun/v3 v3.1.1 // indirect
-	github.com/pion/transport/v4 v4.0.1 // indirect
 	github.com/pires/go-proxyproto v0.8.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.57.1 // indirect
@@ -156,7 +149,6 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
-	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xtls/reality v0.0.0-20251014195629-e4eec4520535 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
@@ -166,6 +158,7 @@ require (
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e // indirect
 	golang.org/x/mobile v0.0.0-20260803200217-62cee1672c8e // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect

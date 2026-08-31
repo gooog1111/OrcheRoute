@@ -53,13 +53,13 @@ func (runtime *Runtime) autoConfigureCallServer(body map[string]any) (int, any) 
 	if err != nil {
 		return backendError(err)
 	}
-	warnings := []string{"external_udp_unverified"}
+	warnings := []string{"external_tcp_unverified"}
 	if subscriptionBaseURL == "" {
 		warnings = append(warnings, "subscription_url_optional")
 	}
 	return 200, map[string]any{
 		"configured": true, "config": updated, "source": "direct_identity",
-		"public_ip": address.String(), "udp_port": port, "warnings": warnings,
+		"public_ip": address.String(), "tcp_port": port, "warnings": warnings,
 	}
 }
 
