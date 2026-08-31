@@ -630,6 +630,14 @@ test("android VK CAPTCHA can remain above other applications with explicit permi
   assert.match(captcha, /if \(!systemOverlay\)/);
 });
 
+test("android keeps FreeTURN alive after a retryable CAPTCHA page error", async () => {
+  const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
+  const errorHandler = activity.match(/public void onError\(String message\) \{([\s\S]*?)\n\s*\}\n\s*\}\);/);
+  assert.ok(errorHandler, "CAPTCHA error callback is missing");
+  assert.match(errorHandler[1], /CAPTCHA page error/);
+  assert.doesNotMatch(errorHandler[1], /stopWithError|onEngineError/);
+});
+
 test("call server accepts a domain and exports a FreeTURN profile QR", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");

@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -132,10 +133,11 @@ public final class MainActivity extends ComponentActivity {
             @Override
             public void onError(String message) {
                 if (freeTURNCaptchaActive) {
-                    freeTURNCaptchaActive = false;
-                    OrcheRouteVpnService.stopWithError(MainActivity.this);
-                    MobileRuntime.get(MainActivity.this).onEngineError(message);
-                    return;
+                    // A transient WebView or upstream resource failure must not
+                    // cancel the FreeTURN session. The local CAPTCHA proxy stays
+                    // alive and VkCaptchaDialog shows the retryable error. Only
+                    // an explicit user cancellation stops the VPN startup.
+                    Log.w("OrcheRouteFreeTURN", "CAPTCHA page error: " + message);
                 }
             }
         });
