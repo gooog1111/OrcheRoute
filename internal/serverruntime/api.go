@@ -331,7 +331,8 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 				return 400, map[string]any{"error": "invalid_call_server_config"}
 			}
 			_, invitationProvided := body["invitation_url"]
-			updated, err := runtime.CallServer.UpdatePublicConfig(config, invitationProvided)
+			_, invitationsProvided := body["invitation_urls"]
+			updated, err := runtime.CallServer.UpdatePublicConfig(config, invitationProvided, invitationsProvided)
 			if err == nil && updated.Enabled && runtime.CallTransport != nil {
 				err = runtime.CallTransport.Apply(runtime.CallServer)
 			}

@@ -49,7 +49,7 @@ func (runtime *Runtime) autoConfigureCallServer(body map[string]any) (int, any) 
 		TrojanListenAddress: current.TrojanListenAddress, HysteriaListenAddress: current.HysteriaListenAddress,
 		FakeSNI: current.FakeSNI,
 	}
-	updated, err := runtime.CallServer.UpdatePublicConfig(config, false)
+	updated, err := runtime.CallServer.UpdatePublicConfig(config, false, false)
 	if err != nil {
 		return backendError(err)
 	}

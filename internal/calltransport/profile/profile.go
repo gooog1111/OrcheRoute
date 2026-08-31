@@ -28,16 +28,17 @@ const (
 )
 
 type Profile struct {
-	Version           int    `json:"version"`
-	Transport         string `json:"transport"`
-	Provider          string `json:"provider"`
-	Name              string `json:"name,omitempty"`
-	InvitationURL     string `json:"invitation_url"`
-	PeerAddress       string `json:"peer_address"`
-	PSK               string `json:"psk"`
-	VLESSUUID         string `json:"vless_uuid"`
-	ExpiresAt         int64  `json:"expires_at,omitempty"`
-	TrafficLimitBytes uint64 `json:"traffic_limit_bytes,omitempty"`
+	Version           int      `json:"version"`
+	Transport         string   `json:"transport"`
+	Provider          string   `json:"provider"`
+	Name              string   `json:"name,omitempty"`
+	InvitationURL     string   `json:"invitation_url"`
+	InvitationURLs    []string `json:"invitation_urls,omitempty"`
+	PeerAddress       string   `json:"peer_address"`
+	PSK               string   `json:"psk"`
+	VLESSUUID         string   `json:"vless_uuid"`
+	ExpiresAt         int64    `json:"expires_at,omitempty"`
+	TrafficLimitBytes uint64   `json:"traffic_limit_bytes,omitempty"`
 }
 
 type PublicProfile struct {
@@ -53,6 +54,7 @@ type PublicProfile struct {
 type NewInput struct {
 	Name              string
 	InvitationURL     string
+	InvitationURLs    []string
 	PeerAddress       string
 	ExpiresAt         int64
 	TrafficLimitBytes uint64
@@ -77,7 +79,7 @@ func New(input NewInput) (Profile, error) {
 	}
 	profile := Profile{
 		Version: Version, Transport: Transport, Provider: Provider, Name: input.Name,
-		InvitationURL: input.InvitationURL, PeerAddress: input.PeerAddress,
+		InvitationURL: input.InvitationURL, InvitationURLs: append([]string(nil), input.InvitationURLs...), PeerAddress: input.PeerAddress,
 		PSK: base64.RawURLEncoding.EncodeToString(psk), VLESSUUID: clientID.String(),
 		ExpiresAt: input.ExpiresAt, TrafficLimitBytes: input.TrafficLimitBytes,
 	}
@@ -113,11 +115,28 @@ func (profile *Profile) Normalize() error {
 		profile.Provider = Provider
 	}
 	profile.Name = strings.TrimSpace(profile.Name)
-	invitation, err := callvk.ParseInvitation(profile.InvitationURL)
-	if err != nil {
-		return err
+	invitationValues := append([]string{profile.InvitationURL}, profile.InvitationURLs...)
+	canonicalInvitations := make([]string, 0, len(invitationValues))
+	seenInvitations := make(map[string]struct{}, len(invitationValues))
+	for _, value := range invitationValues {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		invitation, err := callvk.ParseInvitation(value)
+		if err != nil {
+			return err
+		}
+		if _, exists := seenInvitations[invitation.CanonicalURL]; exists {
+			continue
+		}
+		seenInvitations[invitation.CanonicalURL] = struct{}{}
+		canonicalInvitations = append(canonicalInvitations, invitation.CanonicalURL)
 	}
-	profile.InvitationURL = invitation.CanonicalURL
+	if len(canonicalInvitations) == 0 {
+		return fmt.Errorf("call_transport_invitation_missing")
+	}
+	profile.InvitationURL = canonicalInvitations[0]
+	profile.InvitationURLs = append([]string(nil), canonicalInvitations[1:]...)
 	profile.PeerAddress = strings.TrimSpace(profile.PeerAddress)
 	profile.PSK = strings.TrimSpace(profile.PSK)
 	profile.VLESSUUID = strings.ToLower(strings.TrimSpace(profile.VLESSUUID))
@@ -134,6 +153,11 @@ func (profile Profile) Validate() error {
 	if _, err := callvk.ParseInvitation(profile.InvitationURL); err != nil {
 		return err
 	}
+	for _, value := range profile.InvitationURLs {
+		if _, err := callvk.ParseInvitation(value); err != nil {
+			return err
+		}
+	}
 	if err := validatePeer(profile.PeerAddress); err != nil {
 		return err
 	}
@@ -144,6 +168,17 @@ func (profile Profile) Validate() error {
 		return fmt.Errorf("call_transport_profile_invalid_vless_uuid")
 	}
 	return nil
+}
+
+// AllInvitationURLs returns the canonical primary and additional VK links.
+// The primary field remains populated for the existing single-link code paths;
+// clients must understand the optional additional-links field to use this profile.
+func (profile Profile) AllInvitationURLs() []string {
+	result := make([]string, 0, 1+len(profile.InvitationURLs))
+	if profile.InvitationURL != "" {
+		result = append(result, profile.InvitationURL)
+	}
+	return append(result, profile.InvitationURLs...)
 }
 
 func (profile Profile) ValidateAt(now time.Time) error {

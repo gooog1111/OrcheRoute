@@ -22,6 +22,7 @@ type Config struct {
 	PublicEndpoint        string   `json:"public_endpoint,omitempty"`
 	BackendAddress        string   `json:"backend_address"`
 	InvitationURL         string   `json:"invitation_url,omitempty"`
+	InvitationURLs        []string `json:"invitation_urls,omitempty"`
 	SubscriptionBaseURL   string   `json:"subscription_base_url,omitempty"`
 	OrdinaryEnabled       bool     `json:"ordinary_enabled"`
 	VLESSListenAddress    string   `json:"vless_listen_address"`
@@ -55,6 +56,7 @@ type PublicConfig struct {
 	PublicEndpoint        string         `json:"public_endpoint,omitempty"`
 	BackendAddress        string         `json:"backend_address"`
 	InvitationConfigured  bool           `json:"invitation_configured"`
+	InvitationCount       int            `json:"invitation_count"`
 	SubscriptionBaseURL   string         `json:"subscription_base_url,omitempty"`
 	OrdinaryEnabled       bool           `json:"ordinary_enabled"`
 	VLESSListenAddress    string         `json:"vless_listen_address"`
@@ -120,6 +122,26 @@ func (config *Config) Normalize() error {
 		}
 		config.InvitationURL = invitation.CanonicalURL
 	}
+	seenInvitations := map[string]struct{}{}
+	if config.InvitationURL != "" {
+		seenInvitations[config.InvitationURL] = struct{}{}
+	}
+	additionalInvitations := make([]string, 0, len(config.InvitationURLs))
+	for _, value := range config.InvitationURLs {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		invitation, err := callvk.ParseInvitation(value)
+		if err != nil {
+			return err
+		}
+		if _, exists := seenInvitations[invitation.CanonicalURL]; exists {
+			continue
+		}
+		seenInvitations[invitation.CanonicalURL] = struct{}{}
+		additionalInvitations = append(additionalInvitations, invitation.CanonicalURL)
+	}
+	config.InvitationURLs = additionalInvitations
 	for index := range config.Clients {
 		config.Clients[index].ID = strings.TrimSpace(config.Clients[index].ID)
 		config.Clients[index].Name = strings.TrimSpace(config.Clients[index].Name)
@@ -161,6 +183,11 @@ func (config Config) Validate() error {
 	}
 	if config.InvitationURL != "" {
 		if _, err := callvk.ParseInvitation(config.InvitationURL); err != nil {
+			return err
+		}
+	}
+	for _, value := range config.InvitationURLs {
+		if _, err := callvk.ParseInvitation(value); err != nil {
 			return err
 		}
 	}
@@ -261,8 +288,15 @@ func (config Config) PublicAt(now time.Time) PublicConfig {
 	}
 	return PublicConfig{Version: config.Version, Enabled: config.Enabled, ListenAddress: config.ListenAddress,
 		PublicEndpoint: config.PublicEndpoint, BackendAddress: config.BackendAddress,
-		InvitationConfigured: config.InvitationURL != "", SubscriptionBaseURL: config.SubscriptionBaseURL,
+		InvitationConfigured: config.InvitationURL != "", InvitationCount: boolInt(config.InvitationURL != "") + len(config.InvitationURLs), SubscriptionBaseURL: config.SubscriptionBaseURL,
 		OrdinaryEnabled: config.OrdinaryEnabled, VLESSListenAddress: config.VLESSListenAddress,
 		TrojanListenAddress: config.TrojanListenAddress, HysteriaListenAddress: config.HysteriaListenAddress,
 		FakeSNI: config.FakeSNI, Clients: clients}
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }

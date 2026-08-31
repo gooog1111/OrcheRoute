@@ -15,12 +15,13 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 }) {
 	const [config, setConfig] = useState<CallServerConfig | null>(state?.config ?? null);
 	const [invitation, setInvitation] = useState("");
+	const [additionalInvitations, setAdditionalInvitations] = useState("");
 	const [name, setName] = useState("");
 	const [expires, setExpires] = useState("");
 	const [limitGB, setLimitGB] = useState("");
 	const changed = useMemo(() => Boolean(config && state && (
-		invitation.trim() || JSON.stringify(config) !== JSON.stringify(state.config)
-	)), [config, invitation, state]);
+		invitation.trim() || additionalInvitations.trim() || JSON.stringify(config) !== JSON.stringify(state.config)
+	)), [additionalInvitations, config, invitation, state]);
 
 	if (!config || !state) return <div className="settings-section"><p className="empty-state">Модуль VPN-сервера недоступен в этой сборке.</p></div>;
 
@@ -40,9 +41,11 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 			hysteria2_listen_address: config.hysteria2_listen_address,
 			fake_sni: config.fake_sni,
 			...(invitation.trim() ? { invitation_url: invitation.trim() } : {}),
+			...(additionalInvitations.trim() ? { invitation_urls: additionalInvitations.split(/\s+/).map(value => value.trim()).filter(Boolean) } : {}),
 		};
 		if (await run(() => actions.saveCallServer(payload), "Настройки VPN-сервера сохранены.", { title: "Сохраняем VPN-сервер" })) {
 			setInvitation("");
+			setAdditionalInvitations("");
 			await onReload();
 		}
 	};
@@ -76,7 +79,8 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 		</div>
 		<div className="access-panel">
 			<div className="form-grid two">
-				<label className="form-field form-field-wide"><span>Ссылка VK для FreeTURN</span><input type="url" value={invitation} onChange={event => setInvitation(event.target.value)} placeholder={config.invitation_configured ? "Ссылка уже сохранена; оставьте пустым, чтобы не менять" : "https://vk.com/call/join/..."} disabled={busy}/><small>{config.invitation_configured ? "Действующая ссылка скрыта и не будет очищена при сохранении." : "Используется upstream FreeTURN для построения соединения."}</small></label>
+				<label className="form-field form-field-wide"><span>Основная ссылка VK для FreeTURN</span><input type="url" value={invitation} onChange={event => setInvitation(event.target.value)} placeholder={config.invitation_configured ? "Ссылка уже сохранена; оставьте пустым, чтобы не менять" : "https://vk.com/call/join/..."} disabled={busy}/><small>{config.invitation_configured ? `Сохранено ссылок: ${config.invitation_count || 1}. Основная ссылка скрыта.` : "Используется upstream FreeTURN для построения соединения."}</small></label>
+				<label className="form-field form-field-wide"><span>Дополнительные ссылки VK</span><textarea value={additionalInvitations} onChange={event => setAdditionalInvitations(event.target.value)} placeholder="По одной независимой ссылке на строку" rows={3} disabled={busy}/><small>Каждая ссылка создаёт ещё 10 TURN-сессий. Оставьте пустым, чтобы сохранить действующий список.</small></label>
 			</div>
 			<details className="advanced-settings"><summary>Ручная настройка сети</summary><div className="form-grid two">
 				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.ordinary_enabled} onChange={event => update("ordinary_enabled", event.target.checked)} disabled={busy}/><span><strong>VLESS, Trojan и Hysteria2</strong><small>Добавлять эти серверы в персональную подписку.</small></span></label>

@@ -59,6 +59,27 @@ func TestProfileRoundTripAndCanonicalization(t *testing.T) {
 	}
 }
 
+func TestProfileRoundTripPreservesDistinctInvitationLinks(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	source := validProfile(now)
+	source.InvitationURLs = []string{
+		"https://vk.ru/call/join/second-token",
+		"https://vk.com/call/join/invite-token",
+	}
+	encoded, err := Encode(source, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := Decode(encoded, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"https://vk.com/call/join/invite-token", "https://vk.com/call/join/second-token"}
+	if got := decoded.AllInvitationURLs(); len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("unexpected invitation links: %#v", got)
+	}
+}
+
 func TestProfilePublicViewDoesNotLeakSecrets(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	profile := validProfile(now)

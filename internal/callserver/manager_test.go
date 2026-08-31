@@ -166,7 +166,7 @@ func TestPublicConfigUpdatePreservesOmittedInvitation(t *testing.T) {
 	public := manager.PublicConfig()
 	config := Config{Version: public.Version, ListenAddress: public.ListenAddress, PublicEndpoint: public.PublicEndpoint,
 		BackendAddress: public.BackendAddress, SubscriptionBaseURL: public.SubscriptionBaseURL}
-	if _, err := manager.UpdatePublicConfig(config, false); err != nil {
+	if _, err := manager.UpdatePublicConfig(config, false, false); err != nil {
 		t.Fatal(err)
 	}
 	if !manager.PublicConfig().InvitationConfigured {
@@ -186,12 +186,39 @@ func TestPublicConfigUpdateMovesExistingProfilesToHostnameAndNewInvitation(t *te
 	config := manager.data
 	config.PublicEndpoint = "vpn.example:4443"
 	config.InvitationURL = "https://vk.ru/call/join/new-invite"
-	if _, err := manager.UpdatePublicConfig(config, true); err != nil {
+	if _, err := manager.UpdatePublicConfig(config, true, true); err != nil {
 		t.Fatal(err)
 	}
 	updated := manager.data.Clients[0]
 	if updated.ID != client.ID || updated.Profile.PeerAddress != "vpn.example:4443" || updated.Profile.InvitationURL != "https://vk.com/call/join/new-invite" {
 		t.Fatalf("existing profile kept stale route: %#v", updated.Profile.Public())
+	}
+}
+
+func TestPublicConfigAddsInvitationWithoutReplacingPrimary(t *testing.T) {
+	manager, now := configuredManager(t)
+	client, err := manager.CreateClient(CreateClientInput{Name: "Phone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := manager.data
+	config.InvitationURL = ""
+	config.InvitationURLs = []string{"https://vk.ru/call/join/second-invite"}
+	if _, err := manager.UpdatePublicConfig(config, false, true); err != nil {
+		t.Fatal(err)
+	}
+	updated := manager.data.Clients[0]
+	links := updated.Profile.AllInvitationURLs()
+	if updated.ID != client.ID || len(links) != 2 || links[0] != "https://vk.com/call/join/test-invite" || links[1] != "https://vk.com/call/join/second-invite" {
+		t.Fatalf("existing profile did not receive the additional invitation: %#v", links)
+	}
+	encoded, _, err := manager.SubscriptionProfile(updated.SubscriptionToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := callprofile.Decode(strings.Split(encoded, "\n")[0], now)
+	if err != nil || len(decoded.AllInvitationURLs()) != 2 {
+		t.Fatalf("subscription lost additional invitation: %#v, %v", decoded.AllInvitationURLs(), err)
 	}
 }
 

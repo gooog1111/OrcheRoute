@@ -663,3 +663,12 @@ test("call server accepts a domain and exports a FreeTURN profile QR", async () 
   assert.match(panel, /Показать QR/);
   assert.doesNotMatch(panel, /Обычные протоколы|обычные VPN-протоколы/);
 });
+
+test("call server accepts additional VK links for parallel FreeTURN providers", async () => {
+  const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");
+  assert.match(api, /invitation_count/);
+  assert.match(api, /invitation_urls/);
+  assert.match(panel, /Дополнительные ссылки VK/);
+  assert.match(panel, /Сохранено ссылок/);
+});

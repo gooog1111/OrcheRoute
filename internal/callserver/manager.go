@@ -89,21 +89,22 @@ func (manager *Manager) PublicConfig() PublicConfig {
 }
 
 func (manager *Manager) UpdateConfig(input Config) (PublicConfig, error) {
-	return manager.updateConfig(input, true)
+	return manager.updateConfig(input, true, true)
 }
 
 // UpdatePublicConfig applies settings received from a secret-free API state.
 // Omitting the invitation keeps the existing call credential; an explicitly
 // provided empty value still clears it.
-func (manager *Manager) UpdatePublicConfig(input Config, invitationProvided bool) (PublicConfig, error) {
-	return manager.updateConfig(input, invitationProvided)
+func (manager *Manager) UpdatePublicConfig(input Config, invitationProvided, invitationsProvided bool) (PublicConfig, error) {
+	return manager.updateConfig(input, invitationProvided, invitationsProvided)
 }
 
-func (manager *Manager) updateConfig(input Config, invitationProvided bool) (PublicConfig, error) {
+func (manager *Manager) updateConfig(input Config, invitationProvided, invitationsProvided bool) (PublicConfig, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	previousEndpoint := manager.data.PublicEndpoint
 	previousInvitation := manager.data.InvitationURL
+	previousInvitations := append([]string(nil), manager.data.InvitationURLs...)
 	input.Clients = append([]Client(nil), manager.data.Clients...)
 	input.Enabled = manager.data.Enabled
 	input.RealityPrivateKey, input.RealityPublicKey, input.RealityShortID = manager.data.RealityPrivateKey, manager.data.RealityPublicKey, manager.data.RealityShortID
@@ -111,11 +112,15 @@ func (manager *Manager) updateConfig(input Config, invitationProvided bool) (Pub
 	if !invitationProvided {
 		input.InvitationURL = manager.data.InvitationURL
 	}
+	if !invitationsProvided {
+		input.InvitationURLs = append([]string(nil), manager.data.InvitationURLs...)
+	}
 	if err := input.Normalize(); err != nil {
 		return PublicConfig{}, err
 	}
 	endpointChanged := input.PublicEndpoint != previousEndpoint
-	invitationChanged := invitationProvided && input.InvitationURL != previousInvitation
+	invitationChanged := (invitationProvided && input.InvitationURL != previousInvitation) ||
+		(invitationsProvided && strings.Join(input.InvitationURLs, "\n") != strings.Join(previousInvitations, "\n"))
 	if endpointChanged || invitationChanged {
 		for index := range input.Clients {
 			if endpointChanged {
@@ -123,6 +128,7 @@ func (manager *Manager) updateConfig(input Config, invitationProvided bool) (Pub
 			}
 			if invitationChanged {
 				input.Clients[index].Profile.InvitationURL = input.InvitationURL
+				input.Clients[index].Profile.InvitationURLs = append([]string(nil), input.InvitationURLs...)
 			}
 			if err := input.Clients[index].Profile.Normalize(); err != nil {
 				return PublicConfig{}, err
@@ -186,7 +192,8 @@ func (manager *Manager) CreateClient(input CreateClientInput) (Client, error) {
 		return Client{}, err
 	}
 	profile, err := callprofile.New(callprofile.NewInput{Name: name, InvitationURL: manager.data.InvitationURL,
-		PeerAddress: manager.data.PublicEndpoint, ExpiresAt: input.ExpiresAt, TrafficLimitBytes: input.TrafficLimitBytes,
+		InvitationURLs: append([]string(nil), manager.data.InvitationURLs...),
+		PeerAddress:    manager.data.PublicEndpoint, ExpiresAt: input.ExpiresAt, TrafficLimitBytes: input.TrafficLimitBytes,
 		Random: manager.rand, Now: now})
 	if err != nil {
 		return Client{}, err

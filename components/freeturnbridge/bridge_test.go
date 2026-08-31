@@ -54,3 +54,31 @@ func TestInvalidConfigIsRejectedWithoutStartingTransport(t *testing.T) {
 		t.Fatal("invalid config was accepted")
 	}
 }
+
+func TestOrcheRouteProfilePassesAllInvitationLinksToFreeTURN(t *testing.T) {
+	profile := callprofile.Profile{
+		Version: callprofile.Version, Transport: callprofile.Transport, Provider: callprofile.Provider,
+		InvitationURL: "https://vk.com/call/join/first", InvitationURLs: []string{"https://vk.ru/call/join/second"},
+		PeerAddress: "vpn.example.com:4443", PSK: base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
+		VLESSUUID: "b831381d-6324-4d53-ad4f-8cda48b30811",
+	}
+	encoded, err := callprofile.Encode(profile, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	configJSON, err := ConfigFromOrcheRouteProfile(encoded, "127.0.0.1:19000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		VK struct {
+			Links []string `json:"links"`
+		} `json:"vk"`
+	}
+	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+		t.Fatal(err)
+	}
+	if len(config.VK.Links) != 2 || config.VK.Links[1] != "https://vk.com/call/join/second" {
+		t.Fatalf("unexpected FreeTURN links: %#v", config.VK.Links)
+	}
+}

@@ -267,6 +267,7 @@ export type CallServerConfig = {
 	public_endpoint?: string;
 	backend_address: string;
 	invitation_configured: boolean;
+	invitation_count: number;
 	subscription_base_url?: string;
 	ordinary_enabled: boolean;
 	vless_listen_address: string;
@@ -528,7 +529,7 @@ export const actions = {
 	autoConfigureCallServer(browserOrigin: string) {
 		return request<CallServerAutoConfigResult>("/v1/call-server/auto-configure", { method: "POST", body: JSON.stringify({ browser_origin: browserOrigin }) });
 	},
-	saveCallServer(config: Omit<CallServerConfig, "clients" | "invitation_configured"> & { invitation_url?: string }) {
+	saveCallServer(config: Omit<CallServerConfig, "clients" | "invitation_configured" | "invitation_count"> & { invitation_url?: string; invitation_urls?: string[] }) {
 		return request<{ saved: boolean; config: CallServerConfig }>("/v1/call-server", { method: "PUT", body: JSON.stringify(config) });
 	},
 	setCallServerEnabled(enabled: boolean) {
