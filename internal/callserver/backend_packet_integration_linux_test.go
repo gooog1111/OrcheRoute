@@ -3,10 +3,25 @@
 package callserver
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 )
+
+func TestPacketForwardRulesAreScopedToTunnelInterface(t *testing.T) {
+	rules := packetForwardRules("orchecall0")
+	joined := fmt.Sprint(rules)
+	for _, required := range []string{"-i orchecall0 -j ACCEPT", "-o orchecall0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT"} {
+		if !strings.Contains(joined, required) {
+			t.Fatalf("forward rules %q do not contain %q", joined, required)
+		}
+	}
+	if strings.Contains(joined, "0.0.0.0/0") {
+		t.Fatalf("forward rules must remain interface-scoped: %q", joined)
+	}
+}
 
 // Run inside an isolated network namespace:
 //
