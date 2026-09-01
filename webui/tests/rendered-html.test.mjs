@@ -656,12 +656,21 @@ test("call server accepts a domain and exports a FreeTURN profile QR", async () 
   assert.match(panel, /Построить тракт/);
   assert.match(panel, /IP позже можно заменить доменным именем/);
   assert.match(panel, /Публичный адрес FreeTURN/);
-  assert.match(panel, /Публичный IP или доменное имя и TCP-порт/);
+  assert.match(panel, /Публичный IP или доменное имя и UDP-порт/);
   assert.match(panel, /placeholder="Необязательно"/);
   assert.match(panel, /Файл и QR работают без домена/);
   assert.match(panel, /QRCode\.toDataURL\(await loadSubscriptionURL\(\)/);
   assert.match(panel, /Показать QR/);
   assert.doesNotMatch(panel, /Обычные протоколы|обычные VPN-протоколы/);
+});
+
+test("call server labels the packet path as UDP and embedded AWG", async () => {
+  const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /FreeTURN UDP → встроенный AWG/);
+  assert.match(panel, /Публичный FreeTURN UDP/);
+  assert.match(panel, /Локальный AWG UDP/);
+  assert.doesNotMatch(panel, /Локальный VLESS/);
+  assert.doesNotMatch(panel, /Слушать FreeTURN TCP/);
 });
 
 test("call server accepts additional VK links for parallel FreeTURN providers", async () => {
