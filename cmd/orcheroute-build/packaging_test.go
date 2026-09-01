@@ -71,6 +71,33 @@ func TestDebianMaintainerScriptsUseUnixLineEndings(t *testing.T) {
 	}
 }
 
+func TestDebianUpgradeRetiresOnlyOwnedLegacyReverseVPN(t *testing.T) {
+	root, err := repositoryRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := os.ReadFile(filepath.Join(root, "packaging", "debian", "postinst"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	postinst := string(payload)
+	for _, required := range []string{
+		"/var/lib/orcheroute/reverse-vpn/or-reverse.conf",
+		`[ -f "$legacy_reverse_config" ]`,
+		`wg-quick down "$legacy_reverse_config"`,
+		"ip link delete dev or-reverse",
+	} {
+		if !strings.Contains(postinst, required) {
+			t.Fatalf("postinst is missing guarded legacy migration %q", required)
+		}
+	}
+	for _, forbidden := range []string{"rm -f \"$legacy_reverse_config\"", "rm -rf /var/lib/orcheroute/reverse-vpn"} {
+		if strings.Contains(postinst, forbidden) {
+			t.Fatalf("postinst must preserve legacy rollback data: %s", forbidden)
+		}
+	}
+}
+
 func TestDebianPackageContainsLicenseMetadata(t *testing.T) {
 	root, err := repositoryRoot()
 	if err != nil {

@@ -23,6 +23,22 @@ func TestPacketForwardRulesAreScopedToTunnelInterface(t *testing.T) {
 	}
 }
 
+func TestPacketRouteConflictRejectsLegacyReverseVPN(t *testing.T) {
+	routes := "default via 81.26.129.239 dev ppp0\n10.77.0.0/24 dev or-reverse src 10.77.0.1\n"
+	conflict, found, err := packetRouteConflict(routes, "10.77.0.1/16", "orchecall0")
+	if err != nil || !found || conflict != "10.77.0.0/24:or-reverse" {
+		t.Fatalf("legacy route conflict was not detected: conflict=%q found=%v err=%v", conflict, found, err)
+	}
+}
+
+func TestPacketRouteConflictAllowsOwnAndUnrelatedRoutes(t *testing.T) {
+	routes := "default via 81.26.129.239 dev ppp0\n10.42.0.0/24 dev eth0\n10.77.0.0/16 dev orchecall0 src 10.77.0.1\n"
+	conflict, found, err := packetRouteConflict(routes, "10.77.0.1/16", "orchecall0")
+	if err != nil || found {
+		t.Fatalf("valid route table was rejected: conflict=%q found=%v err=%v", conflict, found, err)
+	}
+}
+
 // Run inside an isolated network namespace:
 //
 //	unshare -n env ORCHEROUTE_PACKET_INTEGRATION=1 go test ./internal/callserver -run TestPacketForwardingLifecycle -v

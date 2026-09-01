@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"os/exec"
 	"strconv"
@@ -96,6 +97,15 @@ func (runtime *embeddedPacketRuntime) configureNetwork(address string) error {
 			return fmt.Errorf("call_server_dependency_missing:%s", binary)
 		}
 	}
+	routes, err := exec.Command("ip", "-4", "route", "show", "table", "main").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("call_server_packet_routes_read: %w: %s", err, strings.TrimSpace(string(routes)))
+	}
+	if conflict, found, err := packetRouteConflict(string(routes), address, runtime.interfaceName); err != nil {
+		return err
+	} else if found {
+		return fmt.Errorf("call_server_packet_route_conflict:%s", conflict)
+	}
 	if err := runPacketCommand("ip", "address", "replace", address, "dev", runtime.interfaceName); err != nil {
 		return err
 	}
@@ -139,6 +149,43 @@ func (runtime *embeddedPacketRuntime) configureNetwork(address string) error {
 		}
 	}
 	return nil
+}
+
+func packetRouteConflict(routeTable, tunnelAddress, tunnelInterface string) (string, bool, error) {
+	tunnelPrefix, err := netip.ParsePrefix(strings.TrimSpace(tunnelAddress))
+	if err != nil || !tunnelPrefix.Addr().Is4() {
+		return "", false, fmt.Errorf("call_server_packet_address_invalid")
+	}
+	tunnelPrefix = tunnelPrefix.Masked()
+	for _, line := range strings.Split(routeTable, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 || fields[0] == "default" {
+			continue
+		}
+		prefix, parseErr := netip.ParsePrefix(fields[0])
+		if parseErr != nil {
+			if address, addressErr := netip.ParseAddr(fields[0]); addressErr == nil && address.Is4() {
+				prefix = netip.PrefixFrom(address, 32)
+			} else {
+				continue
+			}
+		}
+		prefix = prefix.Masked()
+		device := ""
+		for index := 1; index+1 < len(fields); index++ {
+			if fields[index] == "dev" {
+				device = fields[index+1]
+				break
+			}
+		}
+		if device == "" || device == tunnelInterface {
+			continue
+		}
+		if prefix.Contains(tunnelPrefix.Addr()) || tunnelPrefix.Contains(prefix.Addr()) {
+			return prefix.String() + ":" + device, true, nil
+		}
+	}
+	return "", false, nil
 }
 
 func packetForwardRules(interfaceName string) [][]string {

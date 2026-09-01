@@ -10,6 +10,23 @@ install -d -m 0750 /etc/orcheroute
 install -d -m 0700 /var/lib/orcheroute
 install -d -m 0700 /var/backups/orcheroute
 
+# Versions before the embedded AWG backend created this exact WireGuard
+# interface from this package-owned configuration. Its more-specific
+# 10.77.0.0/24 route steals replies from the new orchecall0 network. Leave the
+# legacy configuration and state on disk for rollback, but retire its live
+# interface before starting the current service. Never remove an interface
+# merely because its address overlaps: the config file is the ownership gate.
+legacy_reverse_config=/var/lib/orcheroute/reverse-vpn/or-reverse.conf
+if [ -f "$legacy_reverse_config" ] && ip link show dev or-reverse >/dev/null 2>&1; then
+    echo "Migrating legacy OrcheRoute reverse VPN interface..."
+    if command -v wg-quick >/dev/null 2>&1; then
+        wg-quick down "$legacy_reverse_config" >/dev/null 2>&1 || true
+    fi
+    if ip link show dev or-reverse >/dev/null 2>&1; then
+        ip link delete dev or-reverse
+    fi
+fi
+
 preserved_mihomo=/var/lib/orcheroute/packages/mihomo-before-package
 packaged_mihomo=/opt/orcheroute/bin/mihomo
 if [ -x "$preserved_mihomo" ] && [ -x "$packaged_mihomo" ]; then
