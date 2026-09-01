@@ -49,6 +49,7 @@ type RuntimeSnapshot struct {
 	Keys           map[string][]byte
 	Clients        []callxray.Client
 	Ordinary       OrdinarySnapshot
+	Packet         PacketSnapshot
 }
 
 func Open(path string) (*Manager, error) {
@@ -109,6 +110,7 @@ func (manager *Manager) updateConfig(input Config, invitationProvided, invitatio
 	input.Enabled = manager.data.Enabled
 	input.RealityPrivateKey, input.RealityPublicKey, input.RealityShortID = manager.data.RealityPrivateKey, manager.data.RealityPublicKey, manager.data.RealityShortID
 	input.TLSCertificate, input.TLSPrivateKey = manager.data.TLSCertificate, manager.data.TLSPrivateKey
+	input.PacketPrivateKey, input.PacketObfuscationKey = manager.data.PacketPrivateKey, manager.data.PacketObfuscationKey
 	if !invitationProvided {
 		input.InvitationURL = manager.data.InvitationURL
 	}
@@ -380,7 +382,18 @@ func (manager *Manager) RuntimeSnapshot() (RuntimeSnapshot, error) {
 		Ordinary: OrdinarySnapshot{Enabled: manager.data.OrdinaryEnabled, VLESSListenAddress: manager.data.VLESSListenAddress,
 			TrojanListenAddress: manager.data.TrojanListenAddress, HysteriaListenAddress: manager.data.HysteriaListenAddress,
 			FakeSNI: manager.data.FakeSNI, RealityPrivateKey: manager.data.RealityPrivateKey, RealityShortID: manager.data.RealityShortID,
-			TLSCertificate: manager.data.TLSCertificate, TLSPrivateKey: manager.data.TLSPrivateKey}}
+			TLSCertificate: manager.data.TLSCertificate, TLSPrivateKey: manager.data.TLSPrivateKey},
+		Packet: PacketSnapshot{InterfaceName: "orchecall0", InterfaceAddress: "10.77.0.1/16", ListenAddress: manager.data.BackendAddress}}
+	privateKey, err := decode32ByteKey(manager.data.PacketPrivateKey)
+	if err != nil {
+		return RuntimeSnapshot{}, err
+	}
+	snapshot.Packet.PrivateKey = append([]byte(nil), privateKey...)
+	obfuscationKey, err := decode32ByteKey(manager.data.PacketObfuscationKey)
+	if err != nil {
+		return RuntimeSnapshot{}, err
+	}
+	snapshot.Packet.ObfuscationKey = append([]byte(nil), obfuscationKey...)
 	for _, client := range manager.data.Clients {
 		if !client.AvailableAt(manager.now()) {
 			continue
@@ -391,6 +404,11 @@ func (manager *Manager) RuntimeSnapshot() (RuntimeSnapshot, error) {
 		}
 		snapshot.Keys[client.Profile.VLESSUUID] = psk
 		snapshot.Clients = append(snapshot.Clients, callxray.Client{ID: client.Profile.VLESSUUID, Email: client.ID})
+		peer, err := packetPeer(client)
+		if err != nil {
+			return RuntimeSnapshot{}, err
+		}
+		snapshot.Packet.Peers = append(snapshot.Packet.Peers, peer)
 		snapshot.Ordinary.Clients = append(snapshot.Ordinary.Clients, OrdinaryClient{ID: client.ID, Name: client.Name,
 			VLESSUUID: client.Profile.VLESSUUID, TrojanPassword: protocolPassword(client.Profile.PSK, "trojan"),
 			HysteriaPassword: protocolPassword(client.Profile.PSK, "hysteria2")})

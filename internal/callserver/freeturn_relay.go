@@ -2,6 +2,7 @@ package callserver
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -45,12 +46,13 @@ func (relay FreeTURNRelay) Start(parent context.Context, snapshot RuntimeSnapsho
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(parent)
-	command := exec.CommandContext(ctx, relay.Binary,
-		"-listen", snapshot.ListenAddress,
-		"-connect", snapshot.BackendAddress,
-		"-mode", "tcp",
-		"-clients-file", clientsPath,
-	)
+	arguments, err := freeTURNServerArgs(snapshot, clientsPath)
+	if err != nil {
+		cancel()
+		_ = logFile.Close()
+		return nil, err
+	}
+	command := exec.CommandContext(ctx, relay.Binary, arguments...)
 	command.Stdout, command.Stderr = logFile, logFile
 	if err := command.Start(); err != nil {
 		cancel()
@@ -78,6 +80,20 @@ func (relay FreeTURNRelay) Start(parent context.Context, snapshot RuntimeSnapsho
 	case <-time.After(250 * time.Millisecond):
 		return running, nil
 	}
+}
+
+func freeTURNServerArgs(snapshot RuntimeSnapshot, clientsPath string) ([]string, error) {
+	if len(snapshot.Packet.ObfuscationKey) != 32 {
+		return nil, fmt.Errorf("call_server_packet_obfuscation_missing")
+	}
+	return []string{
+		"-listen", snapshot.ListenAddress,
+		"-connect", snapshot.BackendAddress,
+		"-mode", "udp",
+		"-obf-profile", "rtpopus3",
+		"-obf-key", hex.EncodeToString(snapshot.Packet.ObfuscationKey),
+		"-clients-file", clientsPath,
+	}, nil
 }
 
 func writeFreeTURNClients(path string, snapshot RuntimeSnapshot) error {

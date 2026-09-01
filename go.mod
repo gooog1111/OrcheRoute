@@ -5,6 +5,7 @@ go 1.26.7
 replace github.com/wlynxg/anet => ./third_party/anet
 
 require (
+	github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20260814
 	github.com/google/uuid v1.6.0
 	github.com/metacubex/mihomo v1.19.30
 	github.com/xtls/xray-core v1.251202.0

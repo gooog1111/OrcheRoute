@@ -33,7 +33,7 @@ func platformDefaultConfig() Config {
 
 func platformCallServerRuntime(config Config) *callserver.Runtime {
 	return callserver.NewFreeTURNRuntime(
-		callserver.EmbeddedXrayBackend{MihomoBinary: config.MihomoBinary, StateDirectory: config.StateDirectory},
+		callserver.EmbeddedPacketBackend{MihomoBinary: config.MihomoBinary, StateDirectory: config.StateDirectory},
 		callserver.FreeTURNRelay{Binary: config.FreeTURNBinary, StateDirectory: config.StateDirectory},
 	)
 }

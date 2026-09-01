@@ -213,6 +213,8 @@ func TestPublicConfigUpdateMovesExistingProfilesToHostnameAndNewInvitation(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
+	packetPrivateKey, packetObfuscationKey := manager.data.PacketPrivateKey, manager.data.PacketObfuscationKey
+	packetConfig := client.Profile.PacketTunnel.Config
 	config := manager.data
 	config.PublicEndpoint = "vpn.example:4443"
 	config.InvitationURL = "https://vk.ru/call/join/new-invite"
@@ -222,6 +224,9 @@ func TestPublicConfigUpdateMovesExistingProfilesToHostnameAndNewInvitation(t *te
 	updated := manager.data.Clients[0]
 	if updated.ID != client.ID || updated.Profile.PeerAddress != "vpn.example:4443" || updated.Profile.InvitationURL != "https://vk.com/call/join/new-invite" {
 		t.Fatalf("existing profile kept stale route: %#v", updated.Profile.Public())
+	}
+	if manager.data.PacketPrivateKey != packetPrivateKey || manager.data.PacketObfuscationKey != packetObfuscationKey || updated.Profile.PacketTunnel.Config != packetConfig {
+		t.Fatal("public settings update rotated the packet tunnel identity")
 	}
 }
 

@@ -32,6 +32,19 @@ func TestWriteFreeTURNClientsUsesVLESSIdentityAndNoSecrets(t *testing.T) {
 	}
 }
 
+func TestFreeTURNServerUsesUDPWithAuthenticatedRTPObfuscation(t *testing.T) {
+	snapshot := RuntimeSnapshot{ListenAddress: "0.0.0.0:4443", BackendAddress: "127.0.0.1:18443",
+		Packet: PacketSnapshot{ObfuscationKey: make([]byte, 32)}}
+	arguments, err := freeTURNServerArgs(snapshot, "/run/orcheroute/clients.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(arguments, " ")
+	if !containsAll(joined, "-mode udp", "-obf-profile rtpopus3", "-obf-key ", "-connect 127.0.0.1:18443") || strings.Contains(joined, "-mode tcp") {
+		t.Fatalf("unexpected FreeTURN arguments: %s", joined)
+	}
+}
+
 func containsAll(value string, values ...string) bool {
 	for _, item := range values {
 		if !strings.Contains(value, item) {
