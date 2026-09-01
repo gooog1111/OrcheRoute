@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import freeturnbridge.Freeturnbridge;
 import mobilecore.Mobilecore;
 import mobilecore.QualificationObserver;
 
@@ -524,6 +525,7 @@ final class MobileRuntime {
         }
         boolean proxy() { return config != null; }
         boolean freeTURN() { return freeTURNProfile != null && !freeTURNProfile.isEmpty(); }
+        boolean packetTunnel() { return freeTURN() && Freeturnbridge.usesPacketTunnel(freeTURNProfile); }
     }
 
     private JSONObject scheduleRefresh(String onlyId, boolean checkOnly, String onlyGroup) throws JSONException {

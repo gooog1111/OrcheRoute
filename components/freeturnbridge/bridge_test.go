@@ -127,6 +127,35 @@ func TestPacketProfileBecomesObfuscatedAWGTunnelConfig(t *testing.T) {
 	}
 }
 
+func TestUsesPacketTunnelKeepsLegacyProfilesSeparate(t *testing.T) {
+	packet := encodedProfile(t, &callprofile.PacketTunnel{
+		Carrier: "vk-turn", Mode: "awg",
+		Config:             "[Interface]\nPrivateKey = " + base64.StdEncoding.EncodeToString(bytesOf(0x01, 32)) + "\nAddress = 10.77.0.2/32\n\n[Peer]\nPublicKey = " + base64.StdEncoding.EncodeToString(bytesOf(0x02, 32)) + "\nAllowedIPs = 0.0.0.0/0\n",
+		ObfuscationProfile: "rtpopus3", ObfuscationKey: base64.RawURLEncoding.EncodeToString(bytesOf(0x31, 32)),
+	})
+	if !UsesPacketTunnel(packet) {
+		t.Fatal("packet profile was not detected")
+	}
+	legacy := encodedProfile(t, nil)
+	if UsesPacketTunnel(legacy) {
+		t.Fatal("legacy profile was detected as a packet tunnel")
+	}
+}
+
+func encodedProfile(t *testing.T, packet *callprofile.PacketTunnel) string {
+	t.Helper()
+	encoded, err := callprofile.Encode(callprofile.Profile{
+		Version: callprofile.Version, Transport: callprofile.Transport, Provider: callprofile.Provider,
+		InvitationURL: "https://vk.com/call/join/first", PeerAddress: "vpn.example.com:4443",
+		PSK: base64.RawURLEncoding.EncodeToString(make([]byte, 32)), VLESSUUID: "b831381d-6324-4d53-ad4f-8cda48b30811",
+		PacketTunnel: packet,
+	}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
+}
+
 func bytesOf(value byte, count int) []byte {
 	result := make([]byte, count)
 	for index := range result {

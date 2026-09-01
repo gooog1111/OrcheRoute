@@ -77,6 +77,7 @@ public final class OrcheRouteVpnService extends VpnService {
     private ScheduledFuture<?> identityMonitor;
     private volatile String notificationNode = "";
     private volatile boolean freeTURNActive;
+    private volatile boolean packetTunnelActive;
 
     static void start(Context context) {
         Intent intent = new Intent(context, OrcheRouteVpnService.class).setAction(ACTION_START);
@@ -188,25 +189,30 @@ public final class OrcheRouteVpnService extends VpnService {
 			if ("normal".equals(initialNetworkMode)) runtime.leaveAllowlistMode();
             MobileRuntime.EngineProfile profile = runtime.engineProfile();
             Log.i("OrcheRouteEngine", "profile selected proxy=" + profile.proxy() + " node=" + profile.nodeName);
-			if (profile.freeTURN()) startFreeTURN(profile.freeTURNProfile);
-            requireOk(Mobilecore.engineInit(home.getAbsolutePath(), fd -> protectAndBind((int) fd)));
-            Log.i("OrcheRouteEngine", "native engine initialized");
-            requireOk(Mobilecore.engineLoadConfig(profile.proxy() ? profile.config : DIRECT_TEST_CONFIG));
-            Log.i("OrcheRouteEngine", "configuration loaded");
+            boolean packetTunnel = profile.packetTunnel();
+			if (profile.freeTURN() && !packetTunnel) startFreeTURN(profile.freeTURNProfile);
+            if (!packetTunnel) {
+                requireOk(Mobilecore.engineInit(home.getAbsolutePath(), fd -> protectAndBind((int) fd)));
+                Log.i("OrcheRouteEngine", "native engine initialized");
+                requireOk(Mobilecore.engineLoadConfig(profile.proxy() ? profile.config : DIRECT_TEST_CONFIG));
+                Log.i("OrcheRouteEngine", "configuration loaded");
+            }
             if (stopping) return;
 
-            Builder builder = new Builder()
+            Builder builder = (packetTunnel ? packetTunnelBuilder(profile.freeTURNProfile) : new Builder())
                     .setSession("OrcheRoute")
-                    .setMtu(9000)
-                    .addAddress("172.19.0.1", 30)
-                    .addRoute("0.0.0.0", 0)
-                    .addDnsServer("172.19.0.2")
                     .setBlocking(false)
                     .setConfigureIntent(contentIntent());
             String tunGateway = "172.19.0.1/30";
-            if (runtime.ipv6Enabled()) {
-                builder.addAddress("fd00:6f72:6368::1", 126).addRoute("::", 0);
-                tunGateway += ",fd00:6f72:6368::1/126";
+            if (!packetTunnel) {
+                builder.setMtu(9000)
+                        .addAddress("172.19.0.1", 30)
+                        .addRoute("0.0.0.0", 0)
+                        .addDnsServer("172.19.0.2");
+                if (runtime.ipv6Enabled()) {
+                    builder.addAddress("fd00:6f72:6368::1", 126).addRoute("::", 0);
+                    tunGateway += ",fd00:6f72:6368::1/126";
+                }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false);
             descriptor = builder.establish();
@@ -220,14 +226,17 @@ public final class OrcheRouteVpnService extends VpnService {
             }
             ParcelFileDescriptor engineDescriptor = ParcelFileDescriptor.dup(descriptor.getFileDescriptor());
             int engineFd = engineDescriptor.detachFd();
+            if (packetTunnel) startFreeTURNTunnel(profile.freeTURNProfile, engineFd);
             synchronized (tunnelLock) {
                 if (stopping) {
-                    ParcelFileDescriptor.adoptFd(engineFd).close();
+                    if (packetTunnel) stopFreeTURN();
+                    else ParcelFileDescriptor.adoptFd(engineFd).close();
                     return;
                 }
                 vpnInterface = descriptor;
                 descriptor = null;
-                requireOk(Mobilecore.engineStartTun(engineFd, "gvisor", tunGateway, "172.19.0.2"));
+                if (!packetTunnel) requireOk(Mobilecore.engineStartTun(engineFd, "gvisor", tunGateway, "172.19.0.2"));
+                packetTunnelActive = packetTunnel;
                 connected = true;
                 consecutiveWhitelistHealthFailures = 0;
                 proxyConnectedAtElapsedMs = SystemClock.elapsedRealtime();
@@ -235,7 +244,7 @@ public final class OrcheRouteVpnService extends VpnService {
             Log.i("OrcheRouteEngine", "TUN started node=" + profile.nodeName);
             if (profile.proxy()) MobileRuntime.get(this).onProxyConnected(profile.nodeName, profile.nodeID);
             else MobileRuntime.get(this).onDirectTestConnected();
-            if (profile.proxy()) startHealthMonitor();
+            if (profile.proxy() && !packetTunnel) startHealthMonitor();
             notificationNode = profile.proxy() ? profile.nodeName : "DIRECT";
             startTrafficMonitor();
             startIdentityMonitor();
@@ -316,17 +325,53 @@ public final class OrcheRouteVpnService extends VpnService {
         stopIdentityMonitor();
         synchronized (tunnelLock) {
             closeVpnInterface();
-            Mobilecore.engineStopTun();
+			if (!packetTunnelActive) Mobilecore.engineStopTun();
 			stopFreeTURN();
             setUnderlyingNetworks(null);
             connected = false;
             consecutiveWhitelistHealthFailures = 0;
             proxyConnectedAtElapsedMs = 0;
             notificationNode = "";
+			packetTunnelActive = false;
+        }
+    }
+
+    private Builder packetTunnelBuilder(String encodedProfile) throws Exception {
+        JSONObject params = new JSONObject(Freeturnbridge.tunnelParamsJSON(encodedProfile));
+        Builder builder = new Builder().setMtu(params.optInt("mtu", 1280));
+        addPrefixes(builder, params.optString("addresses"), false);
+        addPrefixes(builder, params.optString("allowed_ips"), true);
+        for (String dns : params.optString("dns").split(",")) {
+            dns = dns.trim();
+            if (!dns.isEmpty()) builder.addDnsServer(dns);
+        }
+        return builder;
+    }
+
+    private static void addPrefixes(Builder builder, String value, boolean route) {
+        for (String item : value.split(",")) {
+            item = item.trim();
+            if (item.isEmpty()) continue;
+            int separator = item.lastIndexOf('/');
+            if (separator <= 0 || separator == item.length() - 1) {
+                throw new IllegalArgumentException("Некорректный адрес туннеля: " + item);
+            }
+            String address = item.substring(0, separator);
+            int prefix = Integer.parseInt(item.substring(separator + 1));
+            if (route) builder.addRoute(address, prefix);
+            else builder.addAddress(address, prefix);
         }
     }
 
 	private void startFreeTURN(String encodedProfile) throws Exception {
+		startFreeTURN(encodedProfile, 0);
+	}
+
+	private void startFreeTURNTunnel(String encodedProfile, int tunFD) throws Exception {
+		startFreeTURN(encodedProfile, tunFD);
+	}
+
+	private void startFreeTURN(String encodedProfile, int tunFD) throws Exception {
 		stopFreeTURN();
 		File state = new File(getFilesDir(), "freeturn");
 		if (!state.isDirectory() && !state.mkdirs()) throw new IllegalStateException("Не удалось создать каталог FreeTURN");
@@ -344,7 +389,8 @@ public final class OrcheRouteVpnService extends VpnService {
 		String config = Freeturnbridge.configFromOrcheRouteProfile(encodedProfile, "127.0.0.1:19000");
 		String validation = Freeturnbridge.validateConfig(config);
 		if (validation != null && !validation.isEmpty()) throw new IllegalStateException(validation);
-		Freeturnbridge.start(config);
+		if (tunFD > 0) Freeturnbridge.startTunnel(config, tunFD);
+		else Freeturnbridge.start(config);
 		freeTURNActive = true;
 		long deadline = SystemClock.elapsedRealtime() + TimeUnit.MINUTES.toMillis(3);
 		while (!stopping && SystemClock.elapsedRealtime() < deadline) {
@@ -399,11 +445,20 @@ public final class OrcheRouteVpnService extends VpnService {
     private void updateTrafficNotification() {
         if (!connected || stopping) return;
         try {
-            JSONObject payload = new JSONObject(Mobilecore.engineTraffic());
-            if (!payload.optBoolean("ok")) return;
-            JSONObject traffic = payload.getJSONObject("result");
-            String text = "↓ " + formatRate(traffic.optLong("download_bps"))
-                    + " · ↑ " + formatRate(traffic.optLong("upload_bps"));
+            long download;
+            long upload;
+            if (packetTunnelActive) {
+                JSONObject traffic = new JSONObject(Freeturnbridge.stateJSON());
+                download = traffic.optLong("rx_rate");
+                upload = traffic.optLong("tx_rate");
+            } else {
+                JSONObject payload = new JSONObject(Mobilecore.engineTraffic());
+                if (!payload.optBoolean("ok")) return;
+                JSONObject traffic = payload.getJSONObject("result");
+                download = traffic.optLong("download_bps");
+                upload = traffic.optLong("upload_bps");
+            }
+            String text = "↓ " + formatRate(download) + " · ↑ " + formatRate(upload);
             getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, notification(text));
         } catch (Throwable ignored) { }
     }

@@ -79,6 +79,11 @@ func Restart(configJSON string) error { return upstream.Restart(configJSON, 0) }
 
 func RestartTunnel(configJSON string, tunFD int) error { return upstream.Restart(configJSON, tunFD) }
 
+func UsesPacketTunnel(encodedProfile string) bool {
+	profile, err := callprofile.Decode(encodedProfile, time.Now())
+	return err == nil && profile.UsesPacketTunnel()
+}
+
 func TunnelParamsJSON(encodedProfile string) (string, error) {
 	profile, err := callprofile.Decode(encodedProfile, time.Now())
 	if err != nil {
@@ -96,6 +101,18 @@ func TunnelParamsJSON(encodedProfile string) (string, error) {
 		"allowed_ips": params.AllowedIPs, "mtu": params.MTU,
 	})
 	return string(payload), err
+}
+
+func TunnelStatsJSON() string {
+	stats := upstream.TunnelStats()
+	payload, err := json.Marshal(map[string]any{
+		"up": stats.Up, "rx_bytes": stats.RxBytes, "tx_bytes": stats.TxBytes,
+		"handshake_age_sec": stats.HandshakeAgeSec,
+	})
+	if err != nil {
+		return `{"up":false,"handshake_age_sec":-1}`
+	}
+	return string(payload)
 }
 
 func Stop() { upstream.Stop() }
