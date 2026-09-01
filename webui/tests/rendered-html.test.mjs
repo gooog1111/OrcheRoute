@@ -528,13 +528,13 @@ test("subscription cards show actual and next refresh timestamps", async () => {
   assert.match(serverAPI, /subscriptions\.NextUpdate/);
 });
 
-test("shared UI exposes and persists all six appearance themes", async () => {
+test("shared UI exposes and persists all seven appearance themes", async () => {
   const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
   const layout = await readFile(new URL("../app/layout.tsx", import.meta.url), "utf8");
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const theme = await readFile(new URL("../app/ui/theme.ts", import.meta.url), "utf8");
   const backdrop = await readFile(new URL("../app/ui/ThemeBackdrop.tsx", import.meta.url), "utf8");
-  for (const id of ["matrix", "hello-kitty", "liquid-glass", "windows-95", "dark", "light"]) {
+  for (const id of ["matrix", "hello-kitty", "liquid-glass", "windows-95", "rick-morty", "dark", "light"]) {
     assert.match(theme, new RegExp(`id: "${id}"`));
   }
   assert.match(theme, /name: "Матрица"/);
@@ -549,7 +549,8 @@ test("shared UI exposes and persists all six appearance themes", async () => {
   assert.match(settings, /label="Оформление"/);
   assert.match(settings, /activeTab === "appearance"/);
   assert.match(settings, /onTheme\(item\.id\)/);
-  assert.match(backdrop, /<MatrixRain \/>/);
+  assert.match(backdrop, /<MatrixRain(?: key=\{visibleEpoch\})? \/>/);
+  assert.match(backdrop, /theme === "rick-morty"/);
 });
 
 test("theme bootstrap does not flash Matrix and rain resumes without catch-up", async () => {
@@ -563,6 +564,10 @@ test("theme bootstrap does not flash Matrix and rain resumes without catch-up", 
   assert.match(rain, /if \(document\.hidden\) \{[\s\S]*cancelAnimationFrame\(frame\)/);
   assert.match(rain, /lastFrame = window\.performance\.now\(\)/);
   assert.match(rain, /if \(!running\) return/);
+  const backdrop = await readFile(new URL("../app/ui/ThemeBackdrop.tsx", import.meta.url), "utf8");
+  assert.match(backdrop, /document\.addEventListener\("visibilitychange"/);
+  assert.match(backdrop, /setVisibleEpoch\(\(value\) => value \+ 1\)/);
+  assert.match(backdrop, /if \(!visible\) return/);
 });
 
 test("light skins keep diagnostics and power controls readable", async () => {
@@ -571,6 +576,11 @@ test("light skins keep diagnostics and power controls readable", async () => {
   assert.match(styles, /data-theme="light"[^}]+\.power-button\.is-on/);
   assert.match(styles, /data-theme="windows-95"[^}]+\.power-halo::before,[\s\S]+display: none/);
   assert.match(styles, /data-theme="windows-95"[^}]+\.hero-copy[\s\S]+color: #fff/);
+  assert.match(styles, /data-theme="rick-morty"/);
+  assert.match(styles, /\.portal-one/);
+  assert.match(styles, /\.operation-panel[^}]+background: var\(--surface\)/);
+  assert.match(styles, /\.picker-dialog[^}]+background: var\(--surface\)/);
+  assert.doesNotMatch(styles, /\.form-field > span[^}]+color: #c6cbce/);
   for (const asset of ["flowers.svg", "standing.svg", "sitting.svg", "logo.svg"]) {
     assert.match(styles, new RegExp(`/themes/hello-kitty/${asset.replace(".", "\\.")}`));
     await readFile(new URL(`../public/themes/hello-kitty/${asset}`, import.meta.url));
