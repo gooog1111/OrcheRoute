@@ -46,6 +46,7 @@ type ProxyOpts struct {
 	Listen  string
 	Connect string
 	Peer    string
+	Bond    bool
 }
 
 type Platform string

@@ -483,6 +483,7 @@ func (s *Session) relayTCP(ctx context.Context, prov provider.Provider, getCreds
 		KCPProfile:   s.cfg.KCP.Profile,
 		ClientID:     s.cfg.ClientID,
 		TrafficStats: s.trafficStats(),
+		Bond:         s.cfg.Proxy.Bond,
 	}
 	return tcprelay.Run(ctx, deps, params, peer, s.cfg.Proxy.Listen, s.total)
 }

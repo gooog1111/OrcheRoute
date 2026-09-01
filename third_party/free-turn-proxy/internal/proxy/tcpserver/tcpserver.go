@@ -4,6 +4,8 @@ package tcpserver
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -11,13 +13,17 @@ import (
 	"github.com/samosvalishe/free-turn-proxy/internal/logx"
 	"github.com/samosvalishe/free-turn-proxy/internal/netconn"
 	"github.com/samosvalishe/free-turn-proxy/internal/transport/kcpmux"
+	"github.com/samosvalishe/free-turn-proxy/internal/wire/bondframe"
 	"github.com/xtaci/smux"
 )
 
 const backendDialTimeout = 10 * time.Second
 
 // Handle блокирует вызывающую горутину до закрытия сессии клиентом или ctx.
-func Handle(ctx context.Context, logger logx.Logger, dtlsConn net.Conn, connectAddr string, profile kcpmux.Profile) {
+func Handle(ctx context.Context, logger logx.Logger, registry *Registry, clientID string, dtlsConn net.Conn, connectAddr string, profile kcpmux.Profile) {
+	if registry == nil {
+		registry = NewRegistry(logger)
+	}
 	kcpSess, err := kcpmux.Accept(dtlsConn, profile)
 	if err != nil {
 		logger.Errorf("tcpserver: %s", err)
@@ -54,12 +60,24 @@ func Handle(ctx context.Context, logger logx.Logger, dtlsConn net.Conn, connectA
 			}
 			break
 		}
-		wg.Go(func() { handleStream(ctx, logger, stream, connectAddr) })
+		wg.Go(func() { handleStream(ctx, logger, registry, clientID, stream, connectAddr) })
 	}
 	wg.Wait()
 }
 
-func handleStream(ctx context.Context, logger logx.Logger, s *smux.Stream, connectAddr string) {
+func handleStream(ctx context.Context, logger logx.Logger, registry *Registry, clientID string, s *smux.Stream, connectAddr string) {
+	var prefix [4]byte
+	if _, err := io.ReadFull(s, prefix[:]); err != nil {
+		if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+			logger.Debugf("tcpserver: stream prefix: %v", err)
+		}
+		_ = s.Close()
+		return
+	}
+	if string(prefix[:]) == bondframe.Magic {
+		registry.HandleLane(ctx, clientID, s, connectAddr, prefix)
+		return
+	}
 	defer func() {
 		if err := s.Close(); err != nil && err != smux.ErrGoAway {
 			logger.Warnf("tcpserver: close smux stream: %v", err)
@@ -77,5 +95,19 @@ func handleStream(ctx context.Context, logger logx.Logger, s *smux.Stream, conne
 		}
 	}()
 
-	netconn.BiCopy(ctx, s, backend, logger.Debugf)
+	netconn.BiCopy(ctx, &prefixedConn{Conn: s, prefix: prefix[:]}, backend, logger.Debugf)
+}
+
+type prefixedConn struct {
+	net.Conn
+	prefix []byte
+}
+
+func (c *prefixedConn) Read(p []byte) (int, error) {
+	if len(c.prefix) > 0 {
+		n := copy(p, c.prefix)
+		c.prefix = c.prefix[n:]
+		return n, nil
+	}
+	return c.Conn.Read(p)
 }

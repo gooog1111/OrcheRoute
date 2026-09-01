@@ -47,6 +47,9 @@ func Validate(c *Client) error {
 	if err := validateProxyMode(c.Proxy.Mode); err != nil {
 		return err
 	}
+	if c.Proxy.Bond && c.Proxy.Mode != ProxyModeTCP {
+		return errors.New("-bond requires -mode tcp")
+	}
 	if err := validateTunnel(c.Tunnel, c.Proxy.Mode); err != nil {
 		return err
 	}

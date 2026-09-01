@@ -11,6 +11,7 @@ import (
 	"github.com/samosvalishe/free-turn-proxy/internal/logx"
 	"github.com/samosvalishe/free-turn-proxy/internal/provider"
 	"github.com/samosvalishe/free-turn-proxy/internal/proxy/allocpace"
+	"github.com/samosvalishe/free-turn-proxy/internal/proxy/tcpserver"
 	"github.com/samosvalishe/free-turn-proxy/internal/stats"
 )
 
@@ -260,7 +261,7 @@ func TestProxyConnCountsApplicationBytes(t *testing.T) {
 	backendAddr := echoBackend(t)
 	traffic := stats.New(true)
 	pool := newSessionPool(nil)
-	ps := pool.Add(1, pairedSession(t, ctx, backendAddr), traffic)
+	ps := pool.Add(1, pairedSession(t, ctx, tcpserver.NewRegistry(logx.Nop()), backendAddr), traffic)
 
 	local, remote := net.Pipe()
 	defer func() { _ = local.Close() }()

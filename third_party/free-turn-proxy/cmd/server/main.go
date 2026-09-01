@@ -42,6 +42,7 @@ func main() {
 	}
 	logger := logx.New(cfg.Log.Debug)
 	logger.Infof("Free Turn Proxy server version=%s", version)
+	bondRegistry := tcpserver.NewRegistry(logger)
 
 	if cfg.Obf.GenKey {
 		key, gerr := rtpopus.GenKeyHex()
@@ -157,7 +158,7 @@ func main() {
 		}
 		backoff = 0
 		wg.Go(func() {
-			handleAccepted(ctx, logger, db, conn, cfg)
+			handleAccepted(ctx, logger, bondRegistry, db, conn, cfg)
 		})
 	}
 }
@@ -191,7 +192,7 @@ func modeName(b byte) string {
 	return string(config.ProxyModeUDP)
 }
 
-func handleAccepted(ctx context.Context, logger logx.Logger, db *clientsdb.DB, conn net.Conn, cfg *config.Server) {
+func handleAccepted(ctx context.Context, logger logx.Logger, bondRegistry *tcpserver.Registry, db *clientsdb.DB, conn net.Conn, cfg *config.Server) {
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil {
 			logger.Warnf("failed to close incoming connection: %s", closeErr)
@@ -243,7 +244,7 @@ func handleAccepted(ctx context.Context, logger logx.Logger, db *clientsdb.DB, c
 
 	logger.Infof("Session up: client=%s from=%s", clientID, conn.RemoteAddr())
 	if cfg.Proxy.Mode == config.ProxyModeTCP {
-		tcpserver.Handle(ctx, logger, dtlsConn, cfg.Proxy.Connect, cfg.KCP.Profile)
+		tcpserver.Handle(ctx, logger, bondRegistry, clientID, dtlsConn, cfg.Proxy.Connect, cfg.KCP.Profile)
 	} else {
 		udpserver.Handle(ctx, logger, conn, cfg.Proxy.Connect)
 	}

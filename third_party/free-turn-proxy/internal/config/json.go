@@ -45,6 +45,7 @@ type turnJSON struct {
 type proxyJSON struct {
 	Mode   string `json:"mode"`
 	Listen string `json:"listen"`
+	Bond   bool   `json:"bond"`
 }
 
 type vkJSON struct {
@@ -131,7 +132,7 @@ func defaultClientJSON() ClientJSON {
 			Host:      r.Turn,
 			Port:      r.Port,
 		},
-		Proxy: proxyJSON{Mode: r.Mode, Listen: r.Listen},
+		Proxy: proxyJSON{Mode: r.Mode, Listen: r.Listen, Bond: r.Bond},
 		KCP:   kcpJSONFrom(r.KCP),
 		VK: vkJSON{
 			StreamsPerCred: r.StreamsPerCred,
@@ -167,6 +168,7 @@ func (j ClientJSON) toRaw() raw {
 		StreamsPerCred: j.VK.StreamsPerCred,
 		Transport:      j.TURN.Transport,
 		Mode:           j.Proxy.Mode,
+		Bond:           j.Proxy.Bond,
 
 		ObfProfile: j.Obf.Profile,
 		ObfKey:     j.Obf.Key,

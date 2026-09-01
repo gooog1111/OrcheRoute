@@ -41,7 +41,7 @@ func TestOrcheRouteProfileBecomesTCPFreeTURNConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	proxy := config["proxy"].(map[string]any)
-	if config["peer"] != "vpn.example.com:4443" || config["clientId"] != profile.VLESSUUID || proxy["mode"] != "tcp" {
+	if config["peer"] != "vpn.example.com:4443" || config["clientId"] != profile.VLESSUUID || proxy["mode"] != "tcp" || proxy["bond"] != true {
 		t.Fatalf("unexpected config: %#v", config)
 	}
 	if got := ValidateConfig(configJSON); got != "" {

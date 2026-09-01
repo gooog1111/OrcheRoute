@@ -56,6 +56,7 @@ type Params struct {
 	KCPProfile   kcpmux.Profile
 	ClientID     string
 	TrafficStats *stats.Stats
+	Bond         bool
 }
 
 type Deps struct {
@@ -111,7 +112,11 @@ func Run(ctx context.Context, deps *Deps, params *Params, peer *net.UDPAddr, lis
 	}
 	stopCloser := context.AfterFunc(runCtx, func() { _ = listener.Close() })
 	defer stopCloser()
-	log.Infof("TCP mode: listening on %s (round-robin across %d sessions)", listenAddr, numSessions)
+	if params.Bond {
+		log.Infof("TCP mode: listening on %s (bond across %d sessions)", listenAddr, numSessions)
+	} else {
+		log.Infof("TCP mode: listening on %s (connection balancing across %d sessions)", listenAddr, numSessions)
+	}
 
 	fatalCh := make(chan error, 1)
 	fatal := func(err error) {
@@ -149,7 +154,7 @@ func Run(ctx context.Context, deps *Deps, params *Params, peer *net.UDPAddr, lis
 		}
 	}()
 
-	acceptLoop(runCtx, deps, listener, pool)
+	acceptLoop(runCtx, deps, params, listener, pool)
 	cancel()
 	wgBG.Wait()
 	<-watcherDone
@@ -193,7 +198,7 @@ func watchRecycle(ctx context.Context, log logx.Logger, pool *sessionPool, recyc
 	}
 }
 
-func acceptLoop(ctx context.Context, deps *Deps, listener net.Listener, pool *sessionPool) {
+func acceptLoop(ctx context.Context, deps *Deps, params *Params, listener net.Listener, pool *sessionPool) {
 	log := deps.log()
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -214,6 +219,20 @@ func acceptLoop(ctx context.Context, deps *Deps, listener net.Listener, pool *se
 			continue
 		}
 		backoff = 0
+
+		if params.Bond {
+			lanes := pool.Snapshot()
+			if len(lanes) == 0 {
+				log.Errorf("No active sessions, rejecting connection from %s", conn.RemoteAddr())
+				_ = conn.Close()
+				continue
+			}
+			connID := pool.NextConnID()
+			wg.Go(func() {
+				_ = safego.Run(log, func() { proxyBondConn(ctx, log, conn, lanes, connID) })
+			})
+			continue
+		}
 
 		ps := pool.Pick()
 		if ps == nil {

@@ -46,7 +46,7 @@ func ConfigFromOrcheRouteProfile(encodedProfile, listenAddress string) (string, 
 	config["clientId"] = profile.VLESSUUID
 	config["provider"] = "vk"
 	config["routes"] = false
-	config["proxy"] = map[string]any{"mode": "tcp", "listen": listenAddress}
+	config["proxy"] = map[string]any{"mode": "tcp", "listen": listenAddress, "bond": true}
 	config["vk"] = map[string]any{
 		"links": profile.AllInvitationURLs(), "manualCaptcha": true,
 		"platform": "mobile", "streamsPerCred": 10,

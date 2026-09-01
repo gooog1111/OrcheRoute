@@ -107,6 +107,20 @@ func (p *sessionPool) Count() int {
 	return len(p.sessions)
 }
 
+// Snapshot returns every currently live session. Bonded connections use the
+// snapshot as independent lanes for the lifetime of one local TCP connection.
+func (p *sessionPool) Snapshot() []*pooledSession {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	out := make([]*pooledSession, 0, len(p.sessions))
+	for _, ps := range p.sessions {
+		if !ps.sess.IsClosed() {
+			out = append(out, ps)
+		}
+	}
+	return out
+}
+
 // CloseAll рвёт сессии, не трогая listener: рецикл не должен ронять локальный порт.
 func (p *sessionPool) CloseAll() {
 	p.mu.RLock()

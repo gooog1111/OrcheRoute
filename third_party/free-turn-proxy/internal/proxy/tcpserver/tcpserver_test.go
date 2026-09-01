@@ -49,7 +49,7 @@ func TestHandleForwardsStreamToBackend(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		Handle(ctx, logx.Nop(), serverConn, backendAddr, kcpmux.DefaultProfile())
+		Handle(ctx, logx.Nop(), NewRegistry(logx.Nop()), "test-client", serverConn, backendAddr, kcpmux.DefaultProfile())
 	}()
 
 	kcpSess, err := kcpmux.Dial(clientConn, kcpmux.DefaultProfile())

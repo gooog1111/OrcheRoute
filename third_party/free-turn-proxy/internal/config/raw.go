@@ -26,6 +26,7 @@ type raw struct {
 	StreamsPerCred int
 	Transport      string
 	Mode           string
+	Bond           bool
 
 	ObfProfile string
 	ObfKey     string
@@ -145,6 +146,7 @@ func assemble(r raw) (*Client, error) {
 			Mode:   ProxyMode(r.Mode),
 			Listen: r.Listen,
 			Peer:   r.Peer,
+			Bond:   r.Bond,
 		},
 		Provider: ProviderOpts{Name: r.Provider},
 		VK: VKOpts{
