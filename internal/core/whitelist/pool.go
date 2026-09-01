@@ -16,21 +16,22 @@ import (
 const Pool = "whitelist"
 
 type Node struct {
-	ID              string         `json:"id"`
-	DisplayName     string         `json:"display_name"`
-	Pool            string         `json:"pool"`
-	OriginPool      string         `json:"origin_pool,omitempty"`
-	Priority        int            `json:"priority"`
-	Alive           bool           `json:"alive"`
-	DelayMS         int            `json:"delay_ms,omitempty"`
-	SpeedMbps       float64        `json:"speed_mbps,omitempty"`
-	StabilityRatio  float64        `json:"stability_ratio,omitempty"`
-	HealthSuccesses int            `json:"health_successes,omitempty"`
-	HealthFailures  int            `json:"health_failures,omitempty"`
-	Score           float64        `json:"score,omitempty"`
-	SourceID        string         `json:"source_id"`
-	SourceName      string         `json:"source_name,omitempty"`
-	Proxy           map[string]any `json:"proxy"`
+	ID                 string         `json:"id"`
+	DisplayName        string         `json:"display_name"`
+	Pool               string         `json:"pool"`
+	OriginPool         string         `json:"origin_pool,omitempty"`
+	Priority           int            `json:"priority"`
+	Alive              bool           `json:"alive"`
+	ActivationRequired bool           `json:"activation_required,omitempty"`
+	DelayMS            int            `json:"delay_ms,omitempty"`
+	SpeedMbps          float64        `json:"speed_mbps,omitempty"`
+	StabilityRatio     float64        `json:"stability_ratio,omitempty"`
+	HealthSuccesses    int            `json:"health_successes,omitempty"`
+	HealthFailures     int            `json:"health_failures,omitempty"`
+	Score              float64        `json:"score,omitempty"`
+	SourceID           string         `json:"source_id"`
+	SourceName         string         `json:"source_name,omitempty"`
+	Proxy              map[string]any `json:"proxy"`
 }
 
 type State struct {
@@ -75,7 +76,7 @@ func Transition(input State, command Command) (Result, error) {
 			removeSource(&state, command.SourceID)
 		}
 		for _, node := range command.Nodes {
-			if !node.Alive {
+			if !available(node) {
 				continue
 			}
 			node.SourceID, node.Pool = command.SourceID, Pool
@@ -107,7 +108,7 @@ func Transition(input State, command Command) (Result, error) {
 			return Result{}, errors.New("node_id_required")
 		}
 		selected := find(state.Nodes, command.NodeID)
-		if selected == nil || !selected.Alive {
+		if selected == nil || !available(*selected) {
 			return Result{}, errors.New("node_unavailable")
 		}
 		state.SelectedNode, state.PendingNode = selected.ID, ""
@@ -190,11 +191,11 @@ func selectCandidate(state *State, markPending bool) *Node {
 		return find(state.Nodes, state.PendingNode)
 	}
 	selected := find(state.Nodes, state.SelectedNode)
-	if selected == nil || !selected.Alive {
+	if selected == nil || !available(*selected) {
 		state.SelectedNode = ""
 		selected = nil
 		for index := range state.Nodes {
-			if state.Nodes[index].Alive {
+			if available(state.Nodes[index]) {
 				state.SelectedNode = state.Nodes[index].ID
 				selected = &state.Nodes[index]
 				break
@@ -210,6 +211,8 @@ func selectCandidate(state *State, markPending bool) *Node {
 	copy := *selected
 	return &copy
 }
+
+func available(node Node) bool { return node.Alive || node.ActivationRequired }
 
 func validateSelection(state *State) {
 	if find(state.Nodes, state.SelectedNode) == nil {

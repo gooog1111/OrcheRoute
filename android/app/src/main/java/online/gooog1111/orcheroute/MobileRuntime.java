@@ -626,9 +626,10 @@ final class MobileRuntime {
 						else testable.put(proxy);
 					}
 					if (testable.length() == 0 && freeturn.length() > 0) {
-						repository.materializeFreeTURNNodes(id, freeturn, links);
+						if (restrictedScan) repository.replaceWhitelistSource(id, new JSONArray(), new JSONArray(), freeturn);
+						else repository.materializeFreeTURNNodes(id, freeturn, links);
 						repository.markFreeTURNProfilesChecked(id, freeturn.length());
-						updateRefresh("running", "activation", "FreeTURN проверен и ожидает подключения · «" + item.optString("name") + "»",
+						updateRefresh("running", "activation", "Call ожидает проверки подключением · «" + item.optString("name") + "»",
 								freeturn.length(), freeturn.length(), "");
 						success++;
 						continue;
@@ -673,6 +674,14 @@ final class MobileRuntime {
 					JSONArray finalTests = qualificationResult.getJSONArray("tests");
 					JSONObject report = qualificationResult.getJSONObject("report");
 					if (qualified.length() == 0) {
+						if (restrictedScan && freeturn.length() > 0) {
+							repository.replaceWhitelistSource(id, new JSONArray(), new JSONArray(), freeturn);
+							repository.markFreeTURNProfilesChecked(id, freeturn.length());
+							updateRefresh("running", "activation", "Обычные серверы недоступны; Call ожидает проверки подключением · «" + sourceName + "»",
+									freeturn.length(), freeturn.length(), "");
+							success++;
+							continue;
+						}
 						JSONObject failures = qualificationResult.optJSONObject("failures");
 						if (failures != null) {
 							int logged = 0;
@@ -695,7 +704,7 @@ final class MobileRuntime {
 						continue;
 					}
                     ensureRefreshContinues(allowlistScan);
-                    if (restrictedScan) repository.replaceWhitelistSource(id, qualified, finalTests);
+                    if (restrictedScan) repository.replaceWhitelistSource(id, qualified, finalTests, freeturn);
                     else {
 						repository.refreshSucceeded(id, qualified, finalTests, links, proxies.length(), !checkOnly);
 						if (freeturn.length() > 0) repository.materializeFreeTURNNodes(id, freeturn, links);

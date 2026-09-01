@@ -619,7 +619,7 @@ test("inbound VPN subscription copy works outside the secure Clipboard API", asy
   assert.match(clipboard, /setSelectionRange\(0, field\.value\.length\)/);
 });
 
-test("FreeTURN profiles are saved as ordinary server sources and activated by the VPN service", async () => {
+test("FreeTURN profiles join normal and restricted server lists and are qualified by activation", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const activity = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MainActivity.java", import.meta.url), "utf8");
@@ -631,6 +631,8 @@ test("FreeTURN profiles are saved as ordinary server sources and activated by th
   assert.doesNotMatch(settings, /Подключить профиль/);
   assert.doesNotMatch(settings, /if \(callProfile\) \{\s*setScanError/);
   assert.match(runtime, /"freeturn"\.equals\(proxy\.optString\("type"\)\)/);
+  assert.match(runtime, /restrictedScan\) repository\.replaceWhitelistSource\(id, new JSONArray\(\), new JSONArray\(\), freeturn\)/);
+  assert.match(runtime, /replaceWhitelistSource\(id, qualified, finalTests, freeturn\)/);
   assert.match(runtime, /if \(isFreeTURNNode\(node\)\)/);
   assert.match(activity, /requestVpnPermissionForReload/);
   assert.match(repository, /"activation_required", true/);

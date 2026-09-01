@@ -61,6 +61,22 @@ func TestManualSelectionPinsRequestedAliveNode(t *testing.T) {
 		t.Fatal("missing node was selected")
 	}
 }
+
+func TestActivationRequiredNodeCanBeSelectedAndRequested(t *testing.T) {
+	activation := Node{ID: "call", SourceID: "source", ActivationRequired: true, Proxy: map[string]any{"type": "freeturn"}}
+	added, err := Transition(State{}, Command{Operation: "replace_source", SourceID: "source", Nodes: []Node{activation}})
+	if err != nil || len(added.State.Nodes) != 1 {
+		t.Fatalf("activation node was discarded: %#v %v", added, err)
+	}
+	requested, err := Transition(added.State, Command{Operation: "request"})
+	if err != nil || requested.Candidate == nil || requested.Candidate.ID != "call" {
+		t.Fatalf("activation node was not requested: %#v %v", requested, err)
+	}
+	selected, err := Transition(added.State, Command{Operation: "select", NodeID: "call"})
+	if err != nil || selected.Candidate == nil || selected.Candidate.ID != "call" {
+		t.Fatalf("activation node was not selected: %#v %v", selected, err)
+	}
+}
 func TestFailureSelectsNext(t *testing.T) {
 	requested, _ := Transition(State{Nodes: []Node{testNode("one", "a", 1), testNode("two", "a", 2)}}, Command{Operation: "request"})
 	failed, _ := Transition(requested.State, Command{Operation: "fail", NodeID: "one"})

@@ -381,6 +381,7 @@ final class MobileRepository {
 
     synchronized void confirmFreeTURNNode(String id) throws JSONException {
         JSONObject node = findNode(id);
+        if (node == null) node = findWhitelistNode(id);
         if (node == null || !"freeturn".equals(node.optJSONObject("proxy") == null
                 ? "" : node.optJSONObject("proxy").optString("type"))) return;
         node.put("alive", true).put("activation_required", false).put("last_tested_at", now());
@@ -393,17 +394,19 @@ final class MobileRepository {
 
     private boolean resetTransientFreeTURNState() {
         boolean changed = false;
-        JSONArray nodes = root.optJSONArray("nodes");
-        if (nodes == null) return false;
-        for (int i = 0; i < nodes.length(); i++) {
-            JSONObject node = nodes.optJSONObject(i);
-            JSONObject proxy = node == null ? null : node.optJSONObject("proxy");
-            if (proxy == null || !"freeturn".equals(proxy.optString("type"))) continue;
-            if (node.optBoolean("alive", false) || !node.optBoolean("activation_required", false)) {
-                try {
-                    node.put("alive", false).put("activation_required", true);
-                    changed = true;
-                } catch (JSONException ignored) { }
+        for (String key : new String[]{"nodes", "whitelist_nodes"}) {
+            JSONArray nodes = root.optJSONArray(key);
+            if (nodes == null) continue;
+            for (int i = 0; i < nodes.length(); i++) {
+                JSONObject node = nodes.optJSONObject(i);
+                JSONObject proxy = node == null ? null : node.optJSONObject("proxy");
+                if (proxy == null || !"freeturn".equals(proxy.optString("type"))) continue;
+                if (node.optBoolean("alive", false) || !node.optBoolean("activation_required", false)) {
+                    try {
+                        node.put("alive", false).put("activation_required", true);
+                        changed = true;
+                    } catch (JSONException ignored) { }
+                }
             }
         }
         return changed;
@@ -585,7 +588,8 @@ final class MobileRepository {
             return new JSONObject(node.toString());
         }
         JSONObject whitelistNode = findWhitelistNode(id);
-        if (whitelistNode == null || !whitelistNode.optBoolean("alive", false)) return null;
+        if (whitelistNode == null || (!whitelistNode.optBoolean("alive", false)
+                && !whitelistNode.optBoolean("activation_required", false))) return null;
         JSONObject selected = whitelistTransitionLocked(new JSONObject()
                 .put("operation", "select").put("node_id", id));
         // This pin belongs only to the derived restricted-network list. Keep
@@ -712,6 +716,11 @@ final class MobileRepository {
     }
 
     synchronized void replaceWhitelistSource(String sourceId, JSONArray proxies, JSONArray tests) throws JSONException {
+        replaceWhitelistSource(sourceId, proxies, tests, new JSONArray());
+    }
+
+    synchronized void replaceWhitelistSource(String sourceId, JSONArray proxies, JSONArray tests,
+                                               JSONArray activationProxies) throws JSONException {
         JSONObject subscription = findSubscription(sourceId);
 		JSONObject history = whitelistHistoryForSourceLocked(sourceId);
         JSONArray nodes = new JSONArray();
@@ -730,6 +739,19 @@ final class MobileRepository {
 			if (previous != null) node.put("health_successes", previous.optInt("health_successes", 0))
 					.put("health_failures", previous.optInt("health_failures", 0));
 			nodes.put(node);
+        }
+        if (subscription != null) for (int i = 0; i < activationProxies.length(); i++) {
+            JSONObject proxy = activationProxies.optJSONObject(i);
+            if (proxy == null || !"freeturn".equals(proxy.optString("type"))) continue;
+            JSONObject node = new JSONObject().put("display_name", displayName(proxy, nodes.length() + 1))
+                    .put("origin_pool", subscription.optString("group", "primary"))
+                    .put("priority", nodes.length() + 1).put("alive", false).put("activation_required", true)
+                    .put("source_id", sourceId).put("source_name", subscription.optString("name"))
+                    .put("proxy", new JSONObject(proxy.toString()));
+            JSONObject previous = history.optJSONObject(proxy.optString("name"));
+            if (previous != null) node.put("health_successes", previous.optInt("health_successes", 0))
+                    .put("health_failures", previous.optInt("health_failures", 0));
+            nodes.put(node);
         }
         whitelistTransitionLocked(new JSONObject().put("operation", "replace_source").put("source_id", sourceId).put("nodes", nodes));
     }
