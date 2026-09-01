@@ -19,7 +19,8 @@ type pooledSession struct {
 	active  atomic.Int32
 }
 
-// sessionPool - конкурентно-безопасный round-robin пул живых сессий.
+// sessionPool - конкурентно-безопасный пул живых сессий. Среди одинаково
+// загруженных сессий выбор остаётся round-robin.
 type sessionPool struct {
 	mu       sync.RWMutex
 	sessions []*pooledSession
@@ -70,7 +71,9 @@ func (p *sessionPool) Remove(ps *pooledSession) {
 	p.mu.Unlock()
 }
 
-// Pick - nil, если живых сессий нет.
+// Pick выбирает наименее занятую живую сессию. Это не отправляет новый TCP
+// поток в KCP/smux-сессию, чей send queue уже занят длительной передачей.
+// nil возвращается, если живых сессий нет.
 func (p *sessionPool) Pick() *pooledSession {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -78,13 +81,22 @@ func (p *sessionPool) Pick() *pooledSession {
 	if n == 0 {
 		return nil
 	}
-	for range n {
-		ps := p.sessions[(p.counter.Add(1)-1)%uint64(n)]
+	start := p.counter.Add(1) - 1
+	var best *pooledSession
+	var bestActive int32
+	for offset := range n {
+		ps := p.sessions[(start+uint64(offset))%uint64(n)]
 		if !ps.sess.IsClosed() {
-			return ps
+			active := ps.active.Load()
+			if best == nil || active < bestActive {
+				best, bestActive = ps, active
+				if active == 0 {
+					break
+				}
+			}
 		}
 	}
-	return nil
+	return best
 }
 
 func (p *sessionPool) NextConnID() uint64 { return p.connID.Add(1) }

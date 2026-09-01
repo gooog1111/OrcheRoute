@@ -77,6 +77,22 @@ func TestPoolPickSkipsClosed(t *testing.T) {
 	}
 }
 
+func TestPoolPickPrefersLeastLoadedSession(t *testing.T) {
+	t.Parallel()
+
+	pool := newSessionPool(nil)
+	busy := pool.Add(1, fakeSession(t), nil)
+	idle := pool.Add(2, fakeSession(t), nil)
+	busy.active.Store(3)
+	idle.active.Store(1)
+
+	for range 4 {
+		if got := pool.Pick(); got != idle {
+			t.Fatalf("Pick() = session %d, want least loaded session %d", got.id, idle.id)
+		}
+	}
+}
+
 func TestPoolReadyAndCloseAll(t *testing.T) {
 	t.Parallel()
 
