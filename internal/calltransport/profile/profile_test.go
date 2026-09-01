@@ -80,6 +80,34 @@ func TestProfileRoundTripPreservesDistinctInvitationLinks(t *testing.T) {
 	}
 }
 
+func TestProfileRoundTripPreservesPacketTunnelWithoutPublicLeak(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	source := validProfile(now)
+	source.PacketTunnel = &PacketTunnel{
+		Carrier: " VK-TURN ", Mode: " AWG ", Config: " [Interface]\nPrivateKey = secret ",
+		ObfuscationProfile: " RTPOpus3 ",
+		ObfuscationKey:     base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x31}, 32)),
+	}
+	encoded, err := Encode(source, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := Decode(encoded, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decoded.UsesPacketTunnel() || decoded.PacketTunnel.Carrier != "vk-turn" || decoded.PacketTunnel.Mode != "awg" {
+		t.Fatalf("unexpected packet tunnel: %#v", decoded.PacketTunnel)
+	}
+	public, err := json.Marshal(decoded.Public())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(public), "PrivateKey") || strings.Contains(string(public), decoded.PacketTunnel.ObfuscationKey) {
+		t.Fatalf("public profile leaked packet tunnel: %s", public)
+	}
+}
+
 func TestProfilePublicViewDoesNotLeakSecrets(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	profile := validProfile(now)
@@ -103,6 +131,12 @@ func TestProfileRejectsUnsafeOrExpiredValues(t *testing.T) {
 		"invalid psk":           func(value *Profile) { value.PSK = "short" },
 		"invalid uuid":          func(value *Profile) { value.VLESSUUID = "not-a-uuid" },
 		"expired":               func(value *Profile) { value.ExpiresAt = now.Add(-time.Second).Unix() },
+		"unsupported carrier": func(value *Profile) {
+			value.PacketTunnel = &PacketTunnel{Carrier: "unknown", Mode: "awg", Config: "config", ObfuscationProfile: "rtpopus3", ObfuscationKey: base64.RawURLEncoding.EncodeToString(make([]byte, 32))}
+		},
+		"incomplete packet tunnel": func(value *Profile) {
+			value.PacketTunnel = &PacketTunnel{Carrier: "vk-turn", Mode: "awg"}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			profile := validProfile(now)

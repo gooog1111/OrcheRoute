@@ -5,7 +5,10 @@
 package freeturnbridge
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -46,7 +49,17 @@ func ConfigFromOrcheRouteProfile(encodedProfile, listenAddress string) (string, 
 	config["clientId"] = profile.VLESSUUID
 	config["provider"] = "vk"
 	config["routes"] = false
-	config["proxy"] = map[string]any{"mode": "tcp", "listen": listenAddress, "bond": true}
+	if profile.UsesPacketTunnel() {
+		key, decodeErr := base64.RawURLEncoding.DecodeString(profile.PacketTunnel.ObfuscationKey)
+		if decodeErr != nil {
+			return "", fmt.Errorf("packet tunnel obfuscation key: %w", decodeErr)
+		}
+		config["proxy"] = map[string]any{"mode": "udp", "listen": listenAddress, "bond": false}
+		config["obf"] = map[string]any{"profile": profile.PacketTunnel.ObfuscationProfile, "key": hex.EncodeToString(key)}
+		config["tunnel"] = map[string]any{"mode": profile.PacketTunnel.Mode, "config": profile.PacketTunnel.Config, "mtu": 1280}
+	} else {
+		config["proxy"] = map[string]any{"mode": "tcp", "listen": listenAddress, "bond": true}
+	}
 	config["vk"] = map[string]any{
 		"links": profile.AllInvitationURLs(), "manualCaptcha": true,
 		"platform": "mobile", "streamsPerCred": 10,
@@ -60,7 +73,30 @@ func ConfigFromOrcheRouteProfile(encodedProfile, listenAddress string) (string, 
 
 func Start(configJSON string) error { return upstream.Start(configJSON) }
 
+func StartTunnel(configJSON string, tunFD int) error { return upstream.StartTunnel(configJSON, tunFD) }
+
 func Restart(configJSON string) error { return upstream.Restart(configJSON, 0) }
+
+func RestartTunnel(configJSON string, tunFD int) error { return upstream.Restart(configJSON, tunFD) }
+
+func TunnelParamsJSON(encodedProfile string) (string, error) {
+	profile, err := callprofile.Decode(encodedProfile, time.Now())
+	if err != nil {
+		return "", err
+	}
+	if !profile.UsesPacketTunnel() {
+		return "", fmt.Errorf("packet tunnel is not configured")
+	}
+	params, err := upstream.ParseTunnelConfig(profile.PacketTunnel.Config, 1280)
+	if err != nil {
+		return "", err
+	}
+	payload, err := json.Marshal(map[string]any{
+		"addresses": params.Addresses, "dns": params.DNS,
+		"allowed_ips": params.AllowedIPs, "mtu": params.MTU,
+	})
+	return string(payload), err
+}
 
 func Stop() { upstream.Stop() }
 

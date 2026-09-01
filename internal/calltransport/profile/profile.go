@@ -28,17 +28,29 @@ const (
 )
 
 type Profile struct {
-	Version           int      `json:"version"`
-	Transport         string   `json:"transport"`
-	Provider          string   `json:"provider"`
-	Name              string   `json:"name,omitempty"`
-	InvitationURL     string   `json:"invitation_url"`
-	InvitationURLs    []string `json:"invitation_urls,omitempty"`
-	PeerAddress       string   `json:"peer_address"`
-	PSK               string   `json:"psk"`
-	VLESSUUID         string   `json:"vless_uuid"`
-	ExpiresAt         int64    `json:"expires_at,omitempty"`
-	TrafficLimitBytes uint64   `json:"traffic_limit_bytes,omitempty"`
+	Version           int           `json:"version"`
+	Transport         string        `json:"transport"`
+	Provider          string        `json:"provider"`
+	Name              string        `json:"name,omitempty"`
+	InvitationURL     string        `json:"invitation_url"`
+	InvitationURLs    []string      `json:"invitation_urls,omitempty"`
+	PeerAddress       string        `json:"peer_address"`
+	PSK               string        `json:"psk"`
+	VLESSUUID         string        `json:"vless_uuid"`
+	ExpiresAt         int64         `json:"expires_at,omitempty"`
+	TrafficLimitBytes uint64        `json:"traffic_limit_bytes,omitempty"`
+	PacketTunnel      *PacketTunnel `json:"packet_tunnel,omitempty"`
+}
+
+// PacketTunnel describes the optional packet-oriented carrier used instead of
+// the legacy local VLESS/TCP hop. Keeping it nested makes the profile extensible
+// to SFU carriers without coupling the common profile to one platform runtime.
+type PacketTunnel struct {
+	Carrier            string `json:"carrier"`
+	Mode               string `json:"mode"`
+	Config             string `json:"config"`
+	ObfuscationProfile string `json:"obfuscation_profile,omitempty"`
+	ObfuscationKey     string `json:"obfuscation_key,omitempty"`
 }
 
 type PublicProfile struct {
@@ -140,6 +152,13 @@ func (profile *Profile) Normalize() error {
 	profile.PeerAddress = strings.TrimSpace(profile.PeerAddress)
 	profile.PSK = strings.TrimSpace(profile.PSK)
 	profile.VLESSUUID = strings.ToLower(strings.TrimSpace(profile.VLESSUUID))
+	if profile.PacketTunnel != nil {
+		profile.PacketTunnel.Carrier = strings.ToLower(strings.TrimSpace(profile.PacketTunnel.Carrier))
+		profile.PacketTunnel.Mode = strings.ToLower(strings.TrimSpace(profile.PacketTunnel.Mode))
+		profile.PacketTunnel.Config = strings.TrimSpace(profile.PacketTunnel.Config)
+		profile.PacketTunnel.ObfuscationProfile = strings.ToLower(strings.TrimSpace(profile.PacketTunnel.ObfuscationProfile))
+		profile.PacketTunnel.ObfuscationKey = strings.TrimSpace(profile.PacketTunnel.ObfuscationKey)
+	}
 	return nil
 }
 
@@ -167,8 +186,33 @@ func (profile Profile) Validate() error {
 	if _, err := uuid.Parse(profile.VLESSUUID); err != nil {
 		return fmt.Errorf("call_transport_profile_invalid_vless_uuid")
 	}
+	if err := profile.PacketTunnel.validate(); err != nil {
+		return err
+	}
 	return nil
 }
+
+func (tunnel *PacketTunnel) validate() error {
+	if tunnel == nil {
+		return nil
+	}
+	if tunnel.Carrier != "vk-turn" {
+		return fmt.Errorf("call_transport_packet_carrier_unsupported")
+	}
+	if tunnel.Mode != "awg" || tunnel.Config == "" {
+		return fmt.Errorf("call_transport_packet_tunnel_invalid")
+	}
+	if tunnel.ObfuscationProfile != "rtpopus3" {
+		return fmt.Errorf("call_transport_obfuscation_unsupported")
+	}
+	key, err := base64.RawURLEncoding.DecodeString(tunnel.ObfuscationKey)
+	if err != nil || len(key) != 32 {
+		return fmt.Errorf("call_transport_obfuscation_key_invalid")
+	}
+	return nil
+}
+
+func (profile Profile) UsesPacketTunnel() bool { return profile.PacketTunnel != nil }
 
 // AllInvitationURLs returns the canonical primary and additional VK links.
 // The primary field remains populated for the existing single-link code paths;
