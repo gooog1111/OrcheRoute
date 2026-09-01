@@ -78,4 +78,7 @@ fi
 if ! command -v nft >/dev/null 2>&1; then
     echo "WARNING: nftables is not installed. WebUI is available, but VPN routing requires: apt install nftables"
 fi
+if ! command -v iptables >/dev/null 2>&1; then
+    echo "WARNING: iptables is not installed. WebUI is available, but the inbound AWG server requires: apt install iptables"
+fi
 exit 0

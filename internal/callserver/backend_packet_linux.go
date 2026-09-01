@@ -35,6 +35,7 @@ type embeddedPacketRuntime struct {
 	ordinary          io.Closer
 	interfaceName     string
 	forwardingChanged bool
+	forwardRules      [][]string
 	peerClients       map[string]string
 	lastTraffic       map[string]Traffic
 }
@@ -90,7 +91,7 @@ func (backend EmbeddedPacketBackend) Start(ctx context.Context, snapshot Runtime
 }
 
 func (runtime *embeddedPacketRuntime) configureNetwork(address string) error {
-	for _, binary := range []string{"ip", "nft"} {
+	for _, binary := range []string{"ip", "nft", "iptables"} {
 		if _, err := exec.LookPath(binary); err != nil {
 			return fmt.Errorf("call_server_dependency_missing:%s", binary)
 		}
@@ -111,6 +112,21 @@ func (runtime *embeddedPacketRuntime) configureNetwork(address string) error {
 		}
 		runtime.forwardingChanged = true
 	}
+	// NAT alone is insufficient on hosts where Docker, UFW or the system
+	// firewall leaves FORWARD at DROP. Insert only the two interface-scoped
+	// rules required by this tunnel. Rules that already existed remain owned by
+	// the administrator and are not removed on shutdown.
+	for _, rule := range packetForwardRules(runtime.interfaceName) {
+		check := append([]string{"-w", "5", "-C", "FORWARD"}, rule...)
+		if exec.Command("iptables", check...).Run() == nil {
+			continue
+		}
+		insert := append([]string{"-w", "5", "-I", "FORWARD", "1"}, rule...)
+		if err := runPacketCommand("iptables", insert...); err != nil {
+			return err
+		}
+		runtime.forwardRules = append(runtime.forwardRules, append([]string(nil), rule...))
+	}
 	_ = exec.Command("nft", "delete", "table", "inet", packetNATTable).Run()
 	commands := [][]string{
 		{"add", "table", "inet", packetNATTable},
@@ -123,6 +139,13 @@ func (runtime *embeddedPacketRuntime) configureNetwork(address string) error {
 		}
 	}
 	return nil
+}
+
+func packetForwardRules(interfaceName string) [][]string {
+	return [][]string{
+		{"-i", interfaceName, "-j", "ACCEPT"},
+		{"-o", interfaceName, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"},
+	}
 }
 
 func runPacketCommand(name string, arguments ...string) error {
@@ -202,6 +225,11 @@ func (runtime *embeddedPacketRuntime) Close() error {
 			_ = runtime.ordinary.Close()
 		}
 		_ = exec.Command("nft", "delete", "table", "inet", packetNATTable).Run()
+		for index := len(runtime.forwardRules) - 1; index >= 0; index-- {
+			arguments := append([]string{"-w", "5", "-D", "FORWARD"}, runtime.forwardRules[index]...)
+			_ = exec.Command("iptables", arguments...).Run()
+		}
+		runtime.forwardRules = nil
 		if runtime.forwardingChanged {
 			_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("0\n"), 0o644)
 		}

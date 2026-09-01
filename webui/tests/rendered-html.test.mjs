@@ -648,6 +648,14 @@ test("android coalesces reload while FreeTURN startup or CAPTCHA is active", asy
   assert.doesNotMatch(service, /reloadPending/);
 });
 
+test("android waits for the AWG handshake before reporting a packet tunnel connected", async () => {
+  const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
+  assert.match(service, /Freeturnbridge\.tunnelStatsJSON\(\)/);
+  assert.match(service, /handshakeAge >= 0/);
+  assert.match(service, /FreeTURN подключён · ожидаем AWG/);
+  assert.match(service, /AWG-сервер не отвечает/);
+});
+
 test("call server accepts a domain and exports a FreeTURN profile QR", async () => {
   const api = await readFile(new URL("../app/lib/api.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../app/ui/CallServerPanel.tsx", import.meta.url), "utf8");

@@ -393,10 +393,30 @@ public final class OrcheRouteVpnService extends VpnService {
 		else Freeturnbridge.start(config);
 		freeTURNActive = true;
 		long deadline = SystemClock.elapsedRealtime() + TimeUnit.MINUTES.toMillis(3);
+		long handshakeDeadline = 0;
+		long nextTunnelLog = 0;
 		while (!stopping && SystemClock.elapsedRealtime() < deadline) {
 			JSONObject statePayload = new JSONObject(Freeturnbridge.stateJSON());
 			String phase = statePayload.optString("state");
-			if ("connected".equals(phase) && statePayload.optLong("streams") > 0) return;
+			if ("connected".equals(phase) && statePayload.optLong("streams") > 0) {
+				if (tunFD <= 0) return;
+				long now = SystemClock.elapsedRealtime();
+				if (handshakeDeadline == 0) handshakeDeadline = now + TimeUnit.SECONDS.toMillis(45);
+				JSONObject tunnel = new JSONObject(Freeturnbridge.tunnelStatsJSON());
+				long handshakeAge = tunnel.optLong("handshake_age_sec", -1);
+				if (now >= nextTunnelLog) {
+					Log.i("OrcheRouteFreeTURN", "AWG handshake_age=" + handshakeAge
+							+ " rx=" + tunnel.optLong("rx_bytes") + " tx=" + tunnel.optLong("tx_bytes"));
+					nextTunnelLog = now + TimeUnit.SECONDS.toMillis(2);
+				}
+				if (handshakeAge >= 0) return;
+				if (now >= handshakeDeadline) {
+					throw new IllegalStateException("FreeTURN подключён, но AWG-сервер не отвечает. Проверьте сервер и UDP-порт.");
+				}
+				showWaiting("FreeTURN подключён · ожидаем AWG…");
+				Thread.sleep(250);
+				continue;
+			}
 			if ("error".equals(phase)) throw new IllegalStateException(statePayload.optString("error", "FreeTURN не подключился"));
 			showWaiting("captcha".equals(phase) ? "Подтвердите CAPTCHA VK…" : "Подключаем FreeTURN…");
 			Thread.sleep(250);

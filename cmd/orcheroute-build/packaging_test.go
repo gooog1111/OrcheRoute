@@ -22,10 +22,10 @@ func TestDebianPackageStartsControlPlaneWithoutOptionalNftables(t *testing.T) {
 			t.Fatalf("nftables must not prevent clean WebUI configuration: %s", line)
 		}
 	}
-	if !strings.Contains(control, "Recommends: nftables") {
-		t.Fatal("nftables must remain a recommended VPN routing dependency")
+	if !strings.Contains(control, "Recommends: nftables, iptables") {
+		t.Fatal("nftables and iptables must remain recommended VPN routing dependencies")
 	}
-	for _, obsolete := range []string{"wireguard-tools", "iptables"} {
+	for _, obsolete := range []string{"wireguard-tools"} {
 		if strings.Contains(control, obsolete) {
 			t.Fatalf("embedded Xray call server must not require legacy %s", obsolete)
 		}

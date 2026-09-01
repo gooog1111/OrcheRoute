@@ -6,10 +6,10 @@ are resolved automatically:
 
   sudo apt install ./OrcheRoute-Linux-Server-VERSION-amd64.deb
 
-Direct `dpkg -i` installation still starts the WebUI. If nftables is absent,
-install it before enabling the VPN transport:
+Direct `dpkg -i` installation still starts the WebUI. If nftables or iptables
+is absent, install them before enabling VPN routing or the inbound AWG server:
 
-  sudo apt install nftables
+  sudo apt install nftables iptables
 
 The package installs the unified Go implementation and does not overwrite or
 remove host-specific configuration and state:
