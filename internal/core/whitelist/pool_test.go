@@ -50,6 +50,17 @@ func TestPendingCandidatePreventsRace(t *testing.T) {
 		t.Fatalf("candidate race: %#v %#v", first, second)
 	}
 }
+
+func TestManualSelectionPinsRequestedAliveNode(t *testing.T) {
+	state := State{Nodes: []Node{testNode("one", "a", 1), testNode("two", "a", 2)}, SelectedNode: "one", PendingNode: "one"}
+	selected, err := Transition(state, Command{Operation: "select", NodeID: "two"})
+	if err != nil || selected.Candidate == nil || selected.Candidate.ID != "two" || selected.State.SelectedNode != "two" || selected.State.PendingNode != "" {
+		t.Fatalf("manual select: %#v %v", selected, err)
+	}
+	if _, err := Transition(selected.State, Command{Operation: "select", NodeID: "missing"}); err == nil {
+		t.Fatal("missing node was selected")
+	}
+}
 func TestFailureSelectsNext(t *testing.T) {
 	requested, _ := Transition(State{Nodes: []Node{testNode("one", "a", 1), testNode("two", "a", 2)}}, Command{Operation: "request"})
 	failed, _ := Transition(requested.State, Command{Operation: "fail", NodeID: "one"})

@@ -89,14 +89,18 @@ func TestConfirmRejectsTransientOffline(t *testing.T) {
 	}
 }
 
-func TestConfirmRestrictionNeedsTwoSamplesAndNormalRecoversImmediately(t *testing.T) {
+func TestConfirmRestrictionNeedsThreeSamplesAndNormalRecoversImmediately(t *testing.T) {
 	first, err := Confirm(ConfirmationInput{ConfirmedState: Normal, ObservedState: Allowlist})
 	if err != nil || first.State != Normal || first.CandidateCount != 1 {
 		t.Fatalf("first=%#v err=%v", first, err)
 	}
 	second, err := Confirm(ConfirmationInput{ConfirmedState: first.State, CandidateState: first.CandidateState, CandidateCount: first.CandidateCount, ObservedState: Allowlist})
-	if err != nil || second.State != Allowlist || !second.Changed {
+	if err != nil || second.State != Normal || second.CandidateCount != 2 {
 		t.Fatalf("second=%#v err=%v", second, err)
+	}
+	third, err := Confirm(ConfirmationInput{ConfirmedState: second.State, CandidateState: second.CandidateState, CandidateCount: second.CandidateCount, ObservedState: Allowlist})
+	if err != nil || third.State != Allowlist || !third.Changed {
+		t.Fatalf("third=%#v err=%v", third, err)
 	}
 	recovered, err := Confirm(ConfirmationInput{ConfirmedState: Offline, ObservedState: Normal})
 	if err != nil || recovered.State != Normal || !recovered.Changed {
@@ -105,6 +109,21 @@ func TestConfirmRestrictionNeedsTwoSamplesAndNormalRecoversImmediately(t *testin
 	recovered, err = Confirm(ConfirmationInput{ConfirmedState: Allowlist, ObservedState: Normal})
 	if err != nil || recovered.State != Normal || !recovered.Changed {
 		t.Fatalf("allowlist recovery=%#v err=%v", recovered, err)
+	}
+}
+
+func TestConfirmStartupAllowlistAlsoNeedsThreeSamples(t *testing.T) {
+	result := ConfirmationResult{State: "unknown"}
+	var err error
+	for index := 1; index <= 2; index++ {
+		result, err = Confirm(ConfirmationInput{ConfirmedState: result.State, CandidateState: result.CandidateState, CandidateCount: result.CandidateCount, ObservedState: Allowlist})
+		if err != nil || result.State != "unknown" || result.CandidateCount != index {
+			t.Fatalf("startup sample %d=%#v err=%v", index, result, err)
+		}
+	}
+	result, err = Confirm(ConfirmationInput{ConfirmedState: result.State, CandidateState: result.CandidateState, CandidateCount: result.CandidateCount, ObservedState: Allowlist})
+	if err != nil || result.State != Allowlist || !result.Changed {
+		t.Fatalf("startup confirmation=%#v err=%v", result, err)
 	}
 }
 

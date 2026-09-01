@@ -579,10 +579,19 @@ final class MobileRepository {
         JSONObject node = findNode(id);
         boolean freeturn = node != null && node.optJSONObject("proxy") != null
                 && "freeturn".equals(node.optJSONObject("proxy").optString("type"));
-        if (node == null || (!node.optBoolean("alive", false) && !freeturn)) return null;
-        root.put("selected_node", id).put("mode", "manual");
-        save();
-        return new JSONObject(node.toString());
+        if (node != null && (node.optBoolean("alive", false) || freeturn)) {
+            root.put("selected_node", id).put("mode", "manual");
+            save();
+            return new JSONObject(node.toString());
+        }
+        JSONObject whitelistNode = findWhitelistNode(id);
+        if (whitelistNode == null || !whitelistNode.optBoolean("alive", false)) return null;
+        JSONObject selected = whitelistTransitionLocked(new JSONObject()
+                .put("operation", "select").put("node_id", id));
+        // This pin belongs only to the derived restricted-network list. Keep
+        // the global controller mode unchanged so normal Internet can resume
+        // its primary/emergency policy as soon as the monitor recovers.
+        return selected == null ? null : new JSONObject(selected.toString());
     }
 
     synchronized void setAuto() throws JSONException {

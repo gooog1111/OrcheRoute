@@ -162,9 +162,10 @@ func Classify(observation Observation) Result {
 }
 
 // Confirm applies hysteresis to a raw observation. A working network is not
-// declared offline until three consecutive observations agree. Switching
-// between normal and allowlist requires two observations, while recovery from
-// confirmed offline is immediate.
+// declared offline until three consecutive observations agree. Entering an
+// allowlist requires three observations as well, including during startup, so
+// a slow or lossy open-Internet probe cannot immediately disable a usable VPN.
+// Positive proof of normal Internet still recovers immediately.
 func Confirm(input ConfirmationInput) (ConfirmationResult, error) {
 	if !validObserved(input.ObservedState) {
 		return ConfirmationResult{}, errors.New("invalid_connectivity_observation")
@@ -186,15 +187,16 @@ func Confirm(input ConfirmationInput) (ConfirmationResult, error) {
 	required := 2
 	if confirmed == Offline {
 		required = 1
-	} else if input.ObservedState == Normal {
+	}
+	if input.ObservedState == Normal {
 		// A successful request to the explicitly configured open-Internet
 		// target is positive evidence, so recovery must not wait for another
 		// periodic monitor cycle.
 		required = 1
+	} else if input.ObservedState == Allowlist {
+		required = 3
 	} else if input.ObservedState == Offline && confirmed != "unknown" {
 		required = 3
-	} else if confirmed == "unknown" && input.ObservedState != Offline {
-		required = 1
 	}
 	if count >= required {
 		return ConfirmationResult{State: input.ObservedState, Changed: input.ObservedState != confirmed}, nil

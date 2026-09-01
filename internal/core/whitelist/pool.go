@@ -102,6 +102,16 @@ func Transition(input State, command Command) (Result, error) {
 		candidate = selectCandidate(&state, false)
 	case "request":
 		candidate = selectCandidate(&state, true)
+	case "select":
+		if command.NodeID == "" {
+			return Result{}, errors.New("node_id_required")
+		}
+		selected := find(state.Nodes, command.NodeID)
+		if selected == nil || !selected.Alive {
+			return Result{}, errors.New("node_unavailable")
+		}
+		state.SelectedNode, state.PendingNode = selected.ID, ""
+		candidate = selected
 	case "confirm":
 		id := command.NodeID
 		if id == "" {

@@ -56,6 +56,11 @@ func TestServerConnectivityMonitorUsesDirectInterfaceAndHysteresis(t *testing.T)
 		t.Fatalf("first allowlist observation=%#v", first)
 	}
 	runtime.connectivityCycle(context.Background())
+	second := runtime.connectivitySnapshot()
+	if second.State != mobileconnectivity.Normal || second.CandidateCount != 2 {
+		t.Fatalf("second allowlist observation=%#v", second)
+	}
+	runtime.connectivityCycle(context.Background())
 	restricted := runtime.connectivitySnapshot()
 	if restricted.State != mobileconnectivity.Allowlist || !restricted.Changed {
 		t.Fatalf("confirmed allowlist=%#v", restricted)

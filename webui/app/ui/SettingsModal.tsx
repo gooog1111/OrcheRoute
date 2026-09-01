@@ -1174,11 +1174,13 @@ function PoolNodes({
             <button
               type="button"
               className="node-editor-main"
-              disabled={(!node.alive && !node.activation_required) || busy || pool === "whitelist"}
-              onClick={() => pool !== "whitelist" &&
+              disabled={(!node.alive && !node.activation_required) || busy}
+              onClick={() =>
                 void run(
                   () => actions.setManual(node.id),
-                  `Узел ${node.display_name} закреплён вручную.`,
+                  pool === "whitelist"
+                    ? `Сервер ${node.display_name} выбран для белых списков.`
+                    : `Узел ${node.display_name} закреплён вручную.`,
                 )
               }
             >

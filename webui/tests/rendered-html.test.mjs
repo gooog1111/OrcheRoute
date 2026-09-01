@@ -553,6 +553,16 @@ test("shared UI exposes and persists all seven appearance themes", async () => {
   assert.match(backdrop, /theme === "rick-morty"/);
 });
 
+test("restricted-network server list allows contextual manual selection", async () => {
+  const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const mobileRepository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
+  const serverAPI = await readFile(new URL("../../internal/serverruntime/api.go", import.meta.url), "utf8");
+  assert.doesNotMatch(settings, /disabled=\{[^}]*pool === "whitelist"/);
+  assert.match(settings, /Сервер \$\{node\.display_name\} выбран для белых списков/);
+  assert.match(mobileRepository, /findWhitelistNode\(id\)[\s\S]*"operation", "select"/);
+  assert.match(serverAPI, /selected\.Pool == whitelist\.Pool[\s\S]*Operation: "select"/);
+});
+
 test("theme bootstrap does not flash Matrix and rain resumes without catch-up", async () => {
   const dashboard = await readFile(new URL("../app/ui/Dashboard.tsx", import.meta.url), "utf8");
   const rain = await readFile(new URL("../app/ui/MatrixRain.tsx", import.meta.url), "utf8");

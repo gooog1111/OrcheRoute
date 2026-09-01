@@ -19,6 +19,7 @@ import (
 
 	"github.com/gooog1111/orcheroute/internal/callserver"
 	"github.com/gooog1111/orcheroute/internal/components"
+	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
 	coreparser "github.com/gooog1111/orcheroute/internal/core/parser"
 	"github.com/gooog1111/orcheroute/internal/core/qualification"
 	corerouting "github.com/gooog1111/orcheroute/internal/core/routing"
@@ -923,10 +924,33 @@ func (runtime *Runtime) setManual(ctx context.Context, body map[string]any) (int
 	if err != nil {
 		return backendError(err)
 	}
-	_ = nodes
-	target, ok := mapping[stringValue(body["node_id"])]
+	nodeID := stringValue(body["node_id"])
+	target, ok := mapping[nodeID]
 	if !ok {
 		return 400, map[string]any{"error": "unknown_node"}
+	}
+	var selected *PublicNode
+	for index := range nodes {
+		if nodes[index].ID == nodeID {
+			selected = &nodes[index]
+			break
+		}
+	}
+	if selected != nil && selected.Pool == whitelist.Pool {
+		if runtime.connectivitySnapshot().State != mobileconnectivity.Allowlist {
+			return 409, map[string]any{"error": "whitelist_selection_requires_allowlist_network"}
+		}
+		transition, transitionErr := runtime.whitelistTransition(whitelist.Command{Operation: "select", NodeID: nodeID})
+		if transitionErr != nil {
+			return backendError(transitionErr)
+		}
+		if err := platformSetTransportEnabled(context.Background(), runtime.Config.CoreService, true); err != nil {
+			return backendError(err)
+		}
+		if err := runtime.selectWhitelistCandidate(transition.State); err != nil {
+			return backendError(err)
+		}
+		return 202, map[string]any{"accepted": true, "mode": "auto", "selection": "manual", "node_id": nodeID, "pool": whitelist.Pool, "system_mutated": true}
 	}
 	seconds := intValue(body["lock_seconds"])
 	if seconds != 0 && (seconds < 60 || seconds > 86400) {
