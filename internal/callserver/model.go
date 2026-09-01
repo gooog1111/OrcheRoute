@@ -13,7 +13,7 @@ import (
 	callvk "github.com/gooog1111/orcheroute/internal/calltransport/vk"
 )
 
-const CurrentVersion = 2
+const CurrentVersion = 3
 
 type Config struct {
 	Version               int      `json:"version"`
@@ -34,6 +34,8 @@ type Config struct {
 	RealityShortID        string   `json:"reality_short_id,omitempty"`
 	TLSCertificate        string   `json:"tls_certificate,omitempty"`
 	TLSPrivateKey         string   `json:"tls_private_key,omitempty"`
+	PacketPrivateKey      string   `json:"packet_private_key,omitempty"`
+	PacketObfuscationKey  string   `json:"packet_obfuscation_key,omitempty"`
 	Clients               []Client `json:"clients"`
 }
 
@@ -93,6 +95,9 @@ func (config *Config) Normalize() error {
 	if config.Version == 1 {
 		config.Version = CurrentVersion
 		config.OrdinaryEnabled = true
+	}
+	if config.Version == 2 {
+		config.Version = CurrentVersion
 	}
 	config.ListenAddress = strings.TrimSpace(config.ListenAddress)
 	config.PublicEndpoint = strings.TrimSpace(config.PublicEndpoint)
@@ -180,6 +185,12 @@ func (config Config) Validate() error {
 		if config.RealityPrivateKey == "" || config.RealityPublicKey == "" || config.RealityShortID == "" || config.TLSCertificate == "" || config.TLSPrivateKey == "" {
 			return fmt.Errorf("call_server_protocol_identity_missing")
 		}
+	}
+	if _, err := decode32ByteKey(config.PacketPrivateKey); err != nil {
+		return fmt.Errorf("call_server_packet_identity_missing")
+	}
+	if _, err := decode32ByteKey(config.PacketObfuscationKey); err != nil {
+		return fmt.Errorf("call_server_packet_obfuscation_missing")
 	}
 	if config.InvitationURL != "" {
 		if _, err := callvk.ParseInvitation(config.InvitationURL); err != nil {

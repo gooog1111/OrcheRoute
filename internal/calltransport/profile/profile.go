@@ -21,10 +21,11 @@ import (
 )
 
 const (
-	Version   = 1
-	Transport = "vk-call-xray"
-	Provider  = "vk"
-	URIScheme = "orcheroute"
+	Version         = 1
+	Transport       = "vk-call"
+	LegacyTransport = "vk-call-xray"
+	Provider        = "vk"
+	URIScheme       = "orcheroute"
 )
 
 type Profile struct {
@@ -166,7 +167,7 @@ func (profile Profile) Validate() error {
 	if profile.Version != Version {
 		return fmt.Errorf("call_transport_profile_version_unsupported")
 	}
-	if profile.Transport != Transport || profile.Provider != Provider {
+	if (profile.Transport != Transport && profile.Transport != LegacyTransport) || profile.Provider != Provider {
 		return fmt.Errorf("call_transport_profile_kind_unsupported")
 	}
 	if _, err := callvk.ParseInvitation(profile.InvitationURL); err != nil {

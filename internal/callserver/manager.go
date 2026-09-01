@@ -198,6 +198,9 @@ func (manager *Manager) CreateClient(input CreateClientInput) (Client, error) {
 	if err != nil {
 		return Client{}, err
 	}
+	if err := manager.attachPacketProfileLocked(&manager.data, &profile); err != nil {
+		return Client{}, err
+	}
 	client := Client{ID: id, Name: name, Enabled: true, CreatedAt: now.Unix(), SubscriptionToken: token, Profile: profile}
 	candidate := manager.data
 	candidate.Clients = append(append([]Client(nil), manager.data.Clients...), client)

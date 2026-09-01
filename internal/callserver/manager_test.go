@@ -70,8 +70,38 @@ func TestManagerPersistsClientsWithoutLeakingSecrets(t *testing.T) {
 	if err != nil || decoded.VLESSUUID != client.Profile.VLESSUUID {
 		t.Fatalf("unexpected persisted profile: %#v, %v", decoded.Public(), err)
 	}
+	if !decoded.UsesPacketTunnel() || decoded.PacketTunnel.Carrier != "vk-turn" || decoded.PacketTunnel.Mode != "awg" {
+		t.Fatalf("packet tunnel missing from generated subscription: %#v", decoded.PacketTunnel)
+	}
 	if !strings.HasSuffix(reopened.SubscriptionURL(client.SubscriptionToken), "/subscription/"+client.SubscriptionToken) {
 		t.Fatal("unexpected subscription URL")
+	}
+}
+
+func TestOpenMigratesVersionTwoWithoutChangingClientToken(t *testing.T) {
+	manager, _ := configuredManager(t)
+	client, err := manager.CreateClient(CreateClientInput{Name: "Existing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := manager.data
+	legacy.Version = 2
+	legacy.PacketPrivateKey = ""
+	legacy.PacketObfuscationKey = ""
+	legacy.Clients[0].Profile.PacketTunnel = nil
+	if err := manager.saveLocked(legacy); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(manager.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := reopened.data.Clients[0]
+	if got.SubscriptionToken != client.SubscriptionToken || got.Profile.VLESSUUID != client.Profile.VLESSUUID {
+		t.Fatalf("migration replaced client identity: before=%#v after=%#v", client.PublicAt(manager.now()), got.PublicAt(manager.now()))
+	}
+	if reopened.data.Version != CurrentVersion || got.Profile.PacketTunnel == nil {
+		t.Fatalf("packet migration missing: version=%d profile=%#v", reopened.data.Version, got.Profile.PacketTunnel)
 	}
 }
 

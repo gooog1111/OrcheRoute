@@ -10,8 +10,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
+	"fmt"
 	"math/big"
+	"net/netip"
+	"strings"
 	"time"
+
+	callprofile "github.com/gooog1111/orcheroute/internal/calltransport/profile"
 )
 
 func (manager *Manager) ensureServerIdentityLocked(config *Config) (bool, error) {
@@ -41,7 +46,102 @@ func (manager *Manager) ensureServerIdentityLocked(config *Config) (bool, error)
 		config.TLSCertificate, config.TLSPrivateKey = certificate, privateKey
 		changed = true
 	}
+	if config.PacketPrivateKey == "" {
+		privateKey, err := ecdh.X25519().GenerateKey(manager.rand)
+		if err != nil {
+			return false, err
+		}
+		config.PacketPrivateKey = base64.RawURLEncoding.EncodeToString(privateKey.Bytes())
+		changed = true
+	}
+	if config.PacketObfuscationKey == "" {
+		value := make([]byte, 32)
+		if _, err := manager.rand.Read(value); err != nil {
+			return false, err
+		}
+		config.PacketObfuscationKey = base64.RawURLEncoding.EncodeToString(value)
+		changed = true
+	}
+	for index := range config.Clients {
+		if config.Clients[index].Profile.PacketTunnel != nil {
+			continue
+		}
+		if err := manager.attachPacketProfileLocked(config, &config.Clients[index].Profile); err != nil {
+			return false, err
+		}
+		changed = true
+	}
 	return changed, nil
+}
+
+func (manager *Manager) attachPacketProfileLocked(config *Config, profile *callprofile.Profile) error {
+	if profile.PacketTunnel != nil {
+		return nil
+	}
+	serverPrivate, err := decode32ByteKey(config.PacketPrivateKey)
+	if err != nil {
+		return err
+	}
+	serverKey, err := ecdh.X25519().NewPrivateKey(serverPrivate)
+	if err != nil {
+		return err
+	}
+	clientKey, err := ecdh.X25519().GenerateKey(manager.rand)
+	if err != nil {
+		return err
+	}
+	address, err := nextPacketClientAddress(config.Clients)
+	if err != nil {
+		return err
+	}
+	profile.PacketTunnel = &callprofile.PacketTunnel{
+		Carrier: "vk-turn", Mode: "awg", ObfuscationProfile: "rtpopus3",
+		ObfuscationKey: config.PacketObfuscationKey,
+		Config: fmt.Sprintf("[Interface]\nPrivateKey = %s\nAddress = %s/32\nDNS = 1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = %s\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 25\n",
+			base64.StdEncoding.EncodeToString(clientKey.Bytes()), address,
+			base64.StdEncoding.EncodeToString(serverKey.PublicKey().Bytes())),
+	}
+	return profile.Normalize()
+}
+
+func nextPacketClientAddress(clients []Client) (string, error) {
+	used := map[string]bool{"10.77.0.1": true}
+	for _, client := range clients {
+		if client.Profile.PacketTunnel == nil {
+			continue
+		}
+		for _, line := range strings.Split(client.Profile.PacketTunnel.Config, "\n") {
+			key, value, found := strings.Cut(line, "=")
+			if !found || !strings.EqualFold(strings.TrimSpace(key), "Address") {
+				continue
+			}
+			for _, raw := range strings.Split(value, ",") {
+				prefix, parseErr := netip.ParsePrefix(strings.TrimSpace(raw))
+				if parseErr == nil && prefix.Addr().Is4() {
+					used[prefix.Addr().String()] = true
+				}
+			}
+		}
+	}
+	for third := 0; third < 256; third++ {
+		for fourth := 2; fourth < 255; fourth++ {
+			candidate := fmt.Sprintf("10.77.%d.%d", third, fourth)
+			if !used[candidate] {
+				return candidate, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("call_server_packet_address_exhausted")
+}
+
+func decode32ByteKey(value string) ([]byte, error) {
+	for _, encoding := range []*base64.Encoding{base64.RawURLEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.StdEncoding} {
+		decoded, err := encoding.DecodeString(strings.TrimSpace(value))
+		if err == nil && len(decoded) == 32 {
+			return decoded, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid_32_byte_key")
 }
 
 func selfSignedCertificate(serverName string, now time.Time) (string, string, error) {
