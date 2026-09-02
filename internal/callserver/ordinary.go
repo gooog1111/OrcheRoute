@@ -26,6 +26,8 @@ type OrdinarySnapshot struct {
 	TLSCertificate        string
 	TLSPrivateKey         string
 	Clients               []OrdinaryClient
+	ControllerAddress     string
+	ControllerSecret      string
 }
 
 func ordinaryMihomoConfig(snapshot OrdinarySnapshot) ([]byte, error) {
@@ -64,8 +66,13 @@ func ordinaryMihomoConfig(snapshot OrdinarySnapshot) ([]byte, error) {
 			"users": hysteriaUsers, "certificate": snapshot.TLSCertificate, "private-key": snapshot.TLSPrivateKey,
 			"alpn": []string{"h3"}, "masquerade": "https://" + snapshot.FakeSNI},
 	}
-	return json.MarshalIndent(map[string]any{"mode": "rule", "log-level": "warning", "ipv6": true,
-		"listeners": listeners, "rules": []string{"MATCH,DIRECT"}}, "", "  ")
+	config := map[string]any{"mode": "rule", "log-level": "warning", "ipv6": true,
+		"listeners": listeners, "rules": []string{"MATCH,DIRECT"}}
+	if snapshot.ControllerAddress != "" {
+		config["external-controller"] = snapshot.ControllerAddress
+		config["secret"] = snapshot.ControllerSecret
+	}
+	return json.MarshalIndent(config, "", "  ")
 }
 
 func splitListener(endpoint string) (string, int, error) {

@@ -256,6 +256,14 @@ func (runtime *embeddedPacketRuntime) DrainTraffic() map[string]Traffic {
 		}
 	}
 	flush()
+	if reporter, ok := runtime.ordinary.(trafficReporter); ok {
+		for id, delta := range reporter.DrainTraffic() {
+			total := result[id]
+			total.RXBytes += delta.RXBytes
+			total.TXBytes += delta.TXBytes
+			result[id] = total
+		}
+	}
 	return result
 }
 
