@@ -1,3 +1,27 @@
+<!-- LANG_START -->
+🇬🇧 [English version](README.en.md)
+<!-- LANG_END -->
+
+<!-- STATS_START -->
+<!-- auto-updated by GitHub Actions · 2026-09-02 19:01 UTC -->
+
+[![Views local](https://img.shields.io/badge/Views_local-1-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
+[![Views GitHub](https://img.shields.io/badge/Views_GitHub-6-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
+[![Unique visitors](https://img.shields.io/badge/Unique-3-blue?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
+[![Clones](https://img.shields.io/badge/Clones-333-purple?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
+[![Stars](https://img.shields.io/badge/Stars-0-yellow?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute/stargazers)
+[![Forks](https://img.shields.io/badge/Forks-0-green?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute/network/members)
+[![Downloads latest release](https://img.shields.io/badge/Downloads_latest_release-6-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases/latest)
+[![Downloads total assets](https://img.shields.io/badge/Downloads_total_assets-164-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases)
+
+<!-- STATS_END -->
+
+<!-- GRAPH_START -->
+<p align="center">
+  <img src="./traffic-views.png" width="100%" alt="GitHub Traffic">
+</p>
+<!-- GRAPH_END -->
+
 <!-- ISSUES_START -->
 <!-- auto-updated by GitHub Actions · 2026-09-02 19:01 UTC -->
 
@@ -31,31 +55,7 @@
 
 <!-- ISSUES_END -->
 
-<!-- GRAPH_START -->
-<p align="center">
-  <img src="./traffic-views.png" width="100%" alt="GitHub Traffic">
-</p>
-<!-- GRAPH_END -->
-
-<!-- STATS_START -->
-<!-- auto-updated by GitHub Actions · 2026-09-02 19:01 UTC -->
-
-[![Views local](https://img.shields.io/badge/Views_local-1-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Views GitHub](https://img.shields.io/badge/Views_GitHub-6-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Unique visitors](https://img.shields.io/badge/Unique-3-blue?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Clones](https://img.shields.io/badge/Clones-333-purple?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Stars](https://img.shields.io/badge/Stars-0-yellow?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute/stargazers)
-[![Forks](https://img.shields.io/badge/Forks-0-green?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute/network/members)
-[![Downloads latest release](https://img.shields.io/badge/Downloads_latest_release-6-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases/latest)
-[![Downloads total assets](https://img.shields.io/badge/Downloads_total_assets-164-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases)
-
-<!-- STATS_END -->
-
-<!-- LANG_START -->
-🇬🇧 [English version](README.en.md)
-<!-- LANG_END -->
-
-# OrcheRoute
+## OrcheRoute
 
 OrcheRoute — VPN-клиент и контроллер маршрутизации на базе
 [Mihomo](https://github.com/MetaCubeX/mihomo). Приложение принимает обычные
