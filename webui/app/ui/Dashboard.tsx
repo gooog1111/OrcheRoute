@@ -312,7 +312,7 @@ export function Dashboard() {
           <Metric icon={<RouteIcon />} label="Маршруты" value={String(routeCount(data))} detail="direct · proxy · block" tone="neutral" />
           <Metric icon={<SettingsIcon />} label="Управление" value={data?.status.proxy.mode === "manual" ? "Ручное" : data?.status.proxy.mode === "emergency" ? "Только аварийный" : "Автоматически"} detail={<>Переключение<time>{formatTime(data?.status.proxy.last_switch ?? 0)}</time></>} tone="neutral" />
         </div>
-        {(data?.status.wan.mode === "allowlist" || whitelistScanning || (whitelistPool?.total ?? 0) > 0) && (
+        {(data?.status.wan.mode === "allowlist" || whitelistScanning) && (
           <div className={`whitelist-strip ${whitelistScanning ? "is-scanning" : ""}`}>
             <span className="status-dot" />
             <div>
