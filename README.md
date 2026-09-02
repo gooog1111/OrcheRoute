@@ -12,9 +12,9 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
 
 ## Скачать
 
-- **Текущая стабильная версия: 0.6.3** (Android `versionCode 63`)
-- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.6.3/OrcheRoute-Android-0.6.3-code63-arm64.apk)
-- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.6.3/OrcheRoute-Linux-Server-0.6.3-amd64.deb)
+- **Текущая стабильная версия: 0.7.3** (Android `versionCode 84`)
+- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.3/OrcheRoute-Android-0.7.3-code84-arm64.apk)
+- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.3/OrcheRoute-Linux-Server-0.7.3-amd64.deb)
 - [Страница последнего стабильного выпуска](https://github.com/gooog1111/OrcheRoute/releases/latest)
 - [Все выпуски и beta-версии](https://github.com/gooog1111/OrcheRoute/releases)
 
@@ -38,7 +38,7 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
 были установлены автоматически:
 
 ```bash
-sudo apt install ./OrcheRoute-Linux-Server-0.6.3-amd64.deb
+sudo apt install ./OrcheRoute-Linux-Server-0.7.3-amd64.deb
 ```
 
 При прямом `dpkg -i` WebUI также запускается, но для включения VPN-транспорта
