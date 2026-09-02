@@ -655,6 +655,13 @@ html[data-theme="rick-morty"] .app-shell::before { background: radial-gradient(c
 .rm-saucer-body { position: absolute; inset: 34% 0 0 0; border-radius: 50%; background: linear-gradient(180deg, #d7dee6, #7c8ba0); box-shadow: 0 0 16px rgba(140,255,224,.32), inset 0 -6px 10px rgba(0,0,0,.35); }
 .rm-saucer-dome { position: absolute; left: 30%; right: 30%; top: -55%; height: 90%; border-radius: 50% 50% 0 0 / 100% 100% 0 0; background: linear-gradient(180deg, rgba(150,255,224,.9), rgba(76,205,178,.55)); box-shadow: 0 0 10px rgba(150,255,224,.7); }
 .rm-saucer-beam { position: absolute; left: 36%; right: 36%; top: 96%; height: 130px; background: linear-gradient(180deg, rgba(183,255,55,.32), transparent); filter: blur(2px); animation: beam-flicker 2.6s ease-in-out infinite; }
+.rm-peeker { position: absolute; left: 50%; bottom: -7%; width: min(15vw, 156px); aspect-ratio: 1.15; transform: translateX(-50%); animation: peeker-bob 6s ease-in-out infinite; }
+.rm-peeker-head { position: absolute; inset: 0; border-radius: 48% 48% 44% 44% / 62% 62% 38% 38%; background: linear-gradient(180deg, #9dea52, #4f9a24); box-shadow: 0 -6px 20px rgba(157,234,82,.35), inset 0 -10px 16px rgba(0,0,0,.18); }
+.rm-peeker-eye { position: absolute; top: 30%; width: 17%; aspect-ratio: 1; border-radius: 50%; background: #0d1406; }
+.rm-peeker-eye::after { content: ""; position: absolute; inset: 24%; border-radius: 50%; background: #ddffb3; }
+.rm-peeker-eye-l { left: 22%; }
+.rm-peeker-eye-r { right: 22%; }
+.rm-peeker-hand { position: absolute; left: 8%; bottom: 4%; width: 13%; aspect-ratio: 1; border-radius: 55% 55% 55% 8%; background: #75d62a; transform-origin: bottom center; animation: peeker-twitch .16s steps(2, end) infinite alternate; }
 .science-symbols { position: absolute; left: 4%; bottom: 4%; padding: 6px 11px; border: 1px solid rgba(183,255,55,.3); border-radius: 7px; background: rgba(9,7,18,.4); color: rgba(202,255,106,.6); font: 700 clamp(10px, 1.2vw, 16px)/1.5 "Cascadia Code", Consolas, monospace; letter-spacing: .12em; text-transform: uppercase; text-shadow: 0 0 8px rgba(183,255,55,.5); animation: science-flicker 6s steps(8,end) infinite; }
 
 html[data-theme="dark"] {
@@ -725,6 +732,8 @@ html[data-release-channel="beta"][data-theme] {
 @keyframes ooze-drip { 0%, 100% { transform: scaleY(.82); opacity: .7; } 50% { transform: scaleY(1.1); opacity: 1; } }
 @keyframes saucer-fly { from { transform: translate(0,0) rotate(-2deg); } to { transform: translate(128vw,-10vh) rotate(2deg); } }
 @keyframes beam-flicker { 0%, 100% { opacity: .5; } 50% { opacity: .12; } }
+@keyframes peeker-bob { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-8px); } }
+@keyframes peeker-twitch { to { transform: translateY(-2px) rotate(-8deg); } }
 
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes modal-in { from { opacity: 0; transform: translateY(10px) scale(.99); } }

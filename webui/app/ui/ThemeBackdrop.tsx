@@ -57,6 +57,7 @@ export function ThemeBackdrop({ theme }: { theme: ThemeID }) {
         <span className="portal portal-two"><i /><i /><i /></span>
         <span className="dimension-orbit"><i /><i /><i /></span>
         <span className="rm-saucer"><i className="rm-saucer-beam"/><i className="rm-saucer-dome"/><i className="rm-saucer-body"/></span>
+        <span className="rm-peeker"><i className="rm-peeker-head"/><i className="rm-peeker-eye rm-peeker-eye-l"/><i className="rm-peeker-eye rm-peeker-eye-r"/><i className="rm-peeker-hand"/></span>
         <span className="science-symbols">C-137　⚛　≋　∑　 portal online</span>
       </div>
     );
