@@ -170,6 +170,10 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 		<div className="call-client-body">
 			<div className="form-grid two"><label className="form-field"><span>Название</span><input value={name} onChange={event => setName(event.target.value)} placeholder="Необязательно" disabled={busy}/></label><label className="choice-row"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={busy}/><span><strong>Клиент включён</strong></span></label><label className="form-field"><span>Действует до</span><input type="datetime-local" value={expires} onChange={event => setExpires(event.target.value)} disabled={busy}/></label><label className="form-field"><span>Лимит, ГБ</span><input type="number" min={0} step="0.1" value={limitGB} onChange={event => setLimitGB(event.target.value)} disabled={busy}/></label></div>
 			<div className="pool-audit"><div><span>Получено <strong>{formatBytes(client.traffic_rx_bytes)}</strong></span><span>Отправлено <strong>{formatBytes(client.traffic_tx_bytes)}</strong></span><span>Последняя связь <strong>{client.last_seen_at ? new Date(client.last_seen_at * 1000).toLocaleString("ru-RU") : "—"}</strong></span></div></div>
+			{(profileQR || subscriptionURL) && <div className="call-subscription-summary">
+				<span>Остаток трафика <strong>{remainingTraffic(client)}</strong></span>
+				<span>Подписка действует <strong>{expiryLabel(client.expires_at)}</strong></span>
+			</div>}
 			{profileQR && <div className="call-profile-qr">
 				{/* eslint-disable-next-line @next/next/no-img-element */}
 				<img src={profileQR} alt={`QR профиля ${client.name}`}/>
@@ -184,6 +188,25 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 
 const localDateTime = (timestamp: number) => { const date = new Date(timestamp * 1000); date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); return date.toISOString().slice(0, 16); };
 const formatBytes = (value: number) => value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} ГБ` : value >= 1024 ** 2 ? `${(value / 1024 ** 2).toFixed(1)} МБ` : `${Math.round(value / 1024)} КБ`;
+const remainingTraffic = (client: CallServerClient) => {
+	if (!client.traffic_limit_bytes) return "без ограничения";
+	const remaining = client.traffic_limit_bytes - client.traffic_used_bytes;
+	return remaining > 0 ? `${formatBytes(remaining)} из ${formatBytes(client.traffic_limit_bytes)}` : "лимит исчерпан";
+};
+const expiryLabel = (expiresAt: number | undefined) => {
+	if (!expiresAt) return "бессрочно";
+	const days = Math.ceil((expiresAt * 1000 - Date.now()) / 86400000);
+	const date = new Date(expiresAt * 1000).toLocaleDateString("ru-RU");
+	if (days < 0) return `истекла ${date}`;
+	if (days === 0) return `до конца дня (${date})`;
+	return `до ${date} · ${days} ${daysWord(days)}`;
+};
+const daysWord = (days: number) => {
+	const mod10 = days % 10, mod100 = days % 100;
+	if (mod10 === 1 && mod100 !== 11) return "день";
+	if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return "дня";
+	return "дней";
+};
 const safeFilename = (value: string) => value.replace(/[^a-zA-Z0-9а-яА-Я._-]+/g, "-").replace(/^-+|-+$/g, "") || "orcheroute-client";
 const callServerError = (value: string) => ({
 	call_server_no_active_clients: "Нет ни одного активного клиента.",
