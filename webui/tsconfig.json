@@ -31,12 +31,6 @@
     "**/*.mts"
   ],
   "exclude": [
-    "node_modules",
-    "build",
-    "db",
-    "drizzle",
-    "examples",
-    "worker",
-    "app/_sites-preview"
+    "node_modules"
   ]
 }
