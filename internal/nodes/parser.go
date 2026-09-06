@@ -321,7 +321,7 @@ func parseHysteria2(link, source string, index int) (map[string]any, error) {
 		"port": port, "password": password, "udp": true,
 	}
 	copyIf(proxy, "sni", firstNonEmpty(query.Get("sni"), query.Get("peer")))
-	copyIf(proxy, "fingerprint", firstNonEmpty(query.Get("fingerprint"), query.Get("fp")))
+	copyIf(proxy, "fingerprint", firstNonEmpty(query.Get("pinSHA256"), query.Get("fingerprint"), query.Get("fp")))
 	copyIf(proxy, "obfs", query.Get("obfs"))
 	copyIf(proxy, "obfs-password", firstNonEmpty(query.Get("obfs-password"), query.Get("obfsParam")))
 	copyIf(proxy, "ports", firstNonEmpty(query.Get("ports"), query.Get("mport")))
@@ -390,6 +390,7 @@ func parseTrojan(link, source string, index int) (map[string]any, error) {
 	}
 	copyIf(proxy, "sni", firstNonEmpty(query.Get("sni"), query.Get("peer")))
 	copyIf(proxy, "client-fingerprint", query.Get("fp"))
+	copyIf(proxy, "fingerprint", query.Get("fingerprint"))
 	if truthy(firstNonEmpty(query.Get("allowInsecure"), query.Get("allowinsecure"), query.Get("insecure"))) {
 		proxy["skip-cert-verify"] = true
 	}

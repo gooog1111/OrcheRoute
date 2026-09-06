@@ -2,7 +2,10 @@ package callserver
 
 import (
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/url"
@@ -44,12 +47,28 @@ func (manager *Manager) encodeSubscriptionLocked(client Client) (string, error) 
 		"sni": {manager.data.FakeSNI}, "fp": {"chrome"}, "pbk": {manager.data.RealityPublicKey}, "sid": {manager.data.RealityShortID}}
 	profiles = append(profiles, (&url.URL{Scheme: "vless", User: url.User(client.Profile.VLESSUUID), Host: net.JoinHostPort(host, vlessPort), RawQuery: vlessQuery.Encode(), Fragment: name + " · VLESS"}).String())
 
-	trojanQuery := url.Values{"security": {"tls"}, "type": {"tcp"}, "sni": {manager.data.FakeSNI}, "allowInsecure": {"true"}}
+	fingerprint, err := certificateFingerprint(manager.data.TLSCertificate)
+	if err != nil {
+		return "", err
+	}
+	trojanQuery := url.Values{"security": {"tls"}, "type": {"tcp"}, "sni": {manager.data.FakeSNI}, "fingerprint": {fingerprint}}
 	profiles = append(profiles, (&url.URL{Scheme: "trojan", User: url.User(protocolPassword(client.Profile.PSK, "trojan")), Host: net.JoinHostPort(host, trojanPort), RawQuery: trojanQuery.Encode(), Fragment: name + " · Trojan"}).String())
 
-	hy2Query := url.Values{"sni": {manager.data.FakeSNI}, "insecure": {"1"}}
+	hy2Query := url.Values{"sni": {manager.data.FakeSNI}, "fingerprint": {fingerprint}, "pinSHA256": {fingerprint}}
 	profiles = append(profiles, (&url.URL{Scheme: "hysteria2", User: url.User(protocolPassword(client.Profile.PSK, "hysteria2")), Host: net.JoinHostPort(host, hy2Port), RawQuery: hy2Query.Encode(), Fragment: name + " · Hysteria2"}).String())
 	return strings.Join(profiles, "\n"), nil
+}
+
+func certificateFingerprint(certificate string) (string, error) {
+	block, _ := pem.Decode([]byte(certificate))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return "", fmt.Errorf("call_server_invalid_tls_certificate")
+	}
+	if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+		return "", fmt.Errorf("call_server_invalid_tls_certificate:%w", err)
+	}
+	digest := sha256.Sum256(block.Bytes)
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func callprofileEncode(client Client, manager *Manager) (string, error) {
