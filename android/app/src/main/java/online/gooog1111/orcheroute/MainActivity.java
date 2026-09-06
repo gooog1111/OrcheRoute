@@ -48,6 +48,8 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import mobilecore.Mobilecore;
 
 public final class MainActivity extends ComponentActivity {
@@ -486,14 +488,40 @@ public final class MainActivity extends ComponentActivity {
 
     private final class EmbeddedClient extends WebViewClientCompat {
         @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            return routeNavigation(request.getUrl(), request.isForMainFrame() && request.hasGesture());
+        }
+
+        @Override
+        @SuppressWarnings("deprecation")
+        public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            return routeNavigation(Uri.parse(url), false);
+        }
+
+        private boolean routeNavigation(Uri uri, boolean openExternal) {
+            if (MobileWebPolicy.trusted(uri.toString(), APP_HOST)) return false;
+            if (openExternal && MobileWebPolicy.externalWebLink(uri.toString())) {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)); }
+                catch (ActivityNotFoundException ignored) { }
+            }
+            return true;
+        }
+
+        @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-            return assetLoader.shouldInterceptRequest(request.getUrl());
+            return localResource(request.getUrl());
         }
 
         @Override
         @SuppressWarnings("deprecation")
         public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
-            return assetLoader.shouldInterceptRequest(Uri.parse(url));
+            return localResource(Uri.parse(url));
+        }
+
+        private WebResourceResponse localResource(Uri uri) {
+            if (!MobileWebPolicy.trusted(uri.toString(), APP_HOST)) return blocked();
+            WebResourceResponse resource = assetLoader.shouldInterceptRequest(uri);
+            return resource == null ? blocked() : resource;
         }
     }
 
@@ -505,7 +533,11 @@ public final class MainActivity extends ComponentActivity {
             if (unsafeAssetPath(path)) return blocked();
             try {
                 InputStream stream = getAssets().open("web/" + path);
-                return new WebResourceResponse(mimeType(path), "UTF-8", 200, "OK", Collections.singletonMap("Cache-Control", "no-cache"), stream);
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Cache-Control", "no-cache");
+                headers.put("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'");
+                headers.put("X-Content-Type-Options", "nosniff");
+                return new WebResourceResponse(mimeType(path), "UTF-8", 200, "OK", headers, stream);
             } catch (IOException ignored) {
                 return response(404, "Not Found", "text/plain", new byte[0]);
             }

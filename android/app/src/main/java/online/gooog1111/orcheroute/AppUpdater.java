@@ -11,6 +11,7 @@ import android.os.Build;
 import android.provider.Settings;
 
 import androidx.core.content.FileProvider;
+import androidx.core.content.pm.PackageInfoCompat;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -57,7 +58,7 @@ final class AppUpdater {
         try {
             PackageInfo installed = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0);
             version = installed.versionName == null ? "unknown" : installed.versionName;
-            code = installed.getLongVersionCode();
+            code = PackageInfoCompat.getLongVersionCode(installed);
         } catch (PackageManager.NameNotFoundException ignored) { }
         currentVersion = version; currentVersionCode = code;
 		preferences = activity.getSharedPreferences(PREFERENCES, 0);
@@ -222,7 +223,7 @@ final class AppUpdater {
         } else if (!sameSignatures(archive.signatures, installed.signatures)) {
             throw new SecurityException("Сертификат подписи APK не совпадает");
         }
-        if (archive.getLongVersionCode() <= currentVersionCode) throw new SecurityException("Загруженная версия не новее установленной");
+        if (PackageInfoCompat.getLongVersionCode(archive) <= currentVersionCode) throw new SecurityException("Загруженная версия не новее установленной");
     }
 
     private void requestInstall(File apk) {
