@@ -25,8 +25,20 @@ android {
         }
     }
 
+    signingConfigs {
+        production {
+            def signingPath = providers.environmentVariable("ORCHEROUTE_ANDROID_KEYSTORE").orNull
+            if (signingPath) storeFile file(signingPath)
+            storePassword providers.environmentVariable("ORCHEROUTE_ANDROID_STORE_PASSWORD").orNull
+            keyAlias providers.environmentVariable("ORCHEROUTE_ANDROID_KEY_ALIAS").orNull
+            keyPassword providers.environmentVariable("ORCHEROUTE_ANDROID_KEY_PASSWORD").orNull
+        }
+    }
+
     buildTypes {
         release {
+            debuggable false
+            signingConfig signingConfigs.production
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
@@ -58,6 +70,15 @@ android {
         dependsOn(stageWebAssets)
     }
 }
+
+tasks.register("validateOrcheRouteReleaseSigning") {
+    doLast {
+        ["ORCHEROUTE_ANDROID_KEYSTORE", "ORCHEROUTE_ANDROID_KEY_ALIAS", "ORCHEROUTE_ANDROID_STORE_PASSWORD", "ORCHEROUTE_ANDROID_KEY_PASSWORD"].each { key ->
+            if (!providers.environmentVariable(key).orNull) throw new GradleException("Release signing requires " + key + "; reuse the existing app signing certificate")
+        }
+    }
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn("validateOrcheRouteReleaseSigning") }
 
 def mobileCoreAar = providers.gradleProperty("orcherouteMobileCoreAar")
         .orElse(rootProject.layout.projectDirectory.dir("../dist/verify/android").file("mobilecore.aar").asFile.absolutePath)

@@ -198,6 +198,15 @@ QR-кода.
 На Linux используется `./scripts/build-all.sh all`. Сборка через GitHub Actions
 в проекте запрещена.
 
+Android собирается вариантом `release`, без `debuggable`. Перед сборкой задайте
+переменные окружения `ORCHEROUTE_ANDROID_KEYSTORE`, `ORCHEROUTE_ANDROID_KEY_ALIAS`,
+`ORCHEROUTE_ANDROID_STORE_PASSWORD` и `ORCHEROUTE_ANDROID_KEY_PASSWORD`.
+Используйте **тот же сертификат подписи, которым подписано установленное приложение**:
+новый ключ не позволит обновиться поверх него. Keystore и пароли не добавляйте в Git.
+Без явных параметров подписи сборщик завершится ошибкой, а не создаст debug-APK
+под видом релиза. Для проверки Java-кода без выпуска пакета можно запускать
+`:app:compileDebugJavaWithJavac` из каталога `android`.
+
 Актуальная разработка ведётся в единственной ветке `main`. Стабильные версии
 зафиксированы тегами `v*`, а тестовые Android-сборки — тегом `android-beta`.
 Сборки и проверки выполняются только локально; workflow GitHub Actions удалены.

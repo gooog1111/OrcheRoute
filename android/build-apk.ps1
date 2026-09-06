@@ -11,7 +11,7 @@ try {
     Pop-Location
 }
 
-$apk = Join-Path $PSScriptRoot "app\build\outputs\apk\debug\app-debug.apk"
+$apk = Join-Path $PSScriptRoot "app\build\outputs\apk\release\app-release.apk"
 if (-not (Test-Path -LiteralPath $apk)) {
     throw "Unified build did not create $apk"
 }
@@ -21,6 +21,6 @@ if (-not $release.version) { throw "release.json does not contain a version" }
 
 $dist = Join-Path $PSScriptRoot "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
-$output = Join-Path $dist ("OrcheRoute-{0}-debug.apk" -f $release.version)
+$output = Join-Path $dist ("OrcheRoute-{0}-release.apk" -f $release.version)
 Copy-Item -LiteralPath $apk -Destination $output -Force
 Write-Output "APK: $output"

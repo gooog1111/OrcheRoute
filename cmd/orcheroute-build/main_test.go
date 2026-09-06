@@ -9,6 +9,34 @@ import (
 	"testing"
 )
 
+func TestAndroidReleaseRequiresExplicitSigning(t *testing.T) {
+	keys := []string{"ORCHEROUTE_ANDROID_KEYSTORE", "ORCHEROUTE_ANDROID_KEY_ALIAS", "ORCHEROUTE_ANDROID_STORE_PASSWORD", "ORCHEROUTE_ANDROID_KEY_PASSWORD"}
+	for _, key := range keys {
+		t.Setenv(key, "")
+	}
+	if requireAndroidReleaseSigning() == nil {
+		t.Fatal("unsigned/debug fallback allowed")
+	}
+	file := filepath.Join(t.TempDir(), "test-only.keystore")
+	if err := os.WriteFile(file, []byte("not a real key"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range keys {
+		t.Setenv(key, "test-only")
+	}
+	t.Setenv(keys[0], file)
+	if err := requireAndroidReleaseSigning(); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range keys[1:] {
+		t.Setenv(key, "")
+		if requireAndroidReleaseSigning() == nil {
+			t.Fatalf("missing %s accepted", key)
+		}
+		t.Setenv(key, "test-only")
+	}
+}
+
 func TestOutputInDoesNotMixSuccessfulStderrIntoStdout(t *testing.T) {
 	t.Setenv("ORCHEROUTE_OUTPUT_HELPER", "1")
 	got, err := outputIn("", os.Args[0], "-test.run=TestOutputInHelperProcess", "--")

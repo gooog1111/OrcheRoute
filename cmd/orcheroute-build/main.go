@@ -187,6 +187,9 @@ func (b *builder) android() error {
 	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
 		return fmt.Errorf("Android target must run on Windows or Linux, got %s", runtime.GOOS)
 	}
+	if err := requireAndroidReleaseSigning(); err != nil {
+		return err
+	}
 	if err := b.common(); err != nil {
 		return err
 	}
@@ -218,16 +221,29 @@ func (b *builder) android() error {
 		}
 		androidDir := filepath.Join(b.root, "android")
 		webOut := filepath.Join(b.root, "webui", "out")
-		if err := b.command(androidDir, androidEnv, gradle, "--no-daemon", "--no-configuration-cache", "clean", "assembleDebug",
+		if err := b.command(androidDir, androidEnv, gradle, "--no-daemon", "--no-configuration-cache", "clean", "assembleRelease",
 			"-PorcherouteMobileCoreAar="+aar, "-PorcherouteWebAssets="+webOut); err != nil {
 			return err
 		}
 		return verifyArchiveFileMatches(
-			filepath.Join(androidDir, "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
+			filepath.Join(androidDir, "app", "build", "outputs", "apk", "release", "app-release.apk"),
 			"assets/web/index.html",
 			filepath.Join(webOut, "index.html"),
 		)
 	})
+}
+
+func requireAndroidReleaseSigning() error {
+	for _, key := range []string{"ORCHEROUTE_ANDROID_KEYSTORE", "ORCHEROUTE_ANDROID_KEY_ALIAS", "ORCHEROUTE_ANDROID_STORE_PASSWORD", "ORCHEROUTE_ANDROID_KEY_PASSWORD"} {
+		if strings.TrimSpace(os.Getenv(key)) == "" {
+			return fmt.Errorf("release signing requires %s; reuse the installed application's signing certificate", key)
+		}
+	}
+	info, err := os.Stat(os.Getenv("ORCHEROUTE_ANDROID_KEYSTORE"))
+	if err != nil || !info.Mode().IsRegular() {
+		return fmt.Errorf("release signing keystore is not a regular readable file")
+	}
+	return nil
 }
 
 func (b *builder) freeTURNGomobile(androidEnv []string) (string, []string, error) {
