@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -22,6 +20,7 @@ import (
 	"github.com/gooog1111/orcheroute/internal/callserver"
 	"github.com/gooog1111/orcheroute/internal/controller"
 	"github.com/gooog1111/orcheroute/internal/core/noderank"
+	"github.com/gooog1111/orcheroute/internal/core/transportcheck"
 	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
 	"github.com/gooog1111/orcheroute/internal/core/whitelist"
 	"github.com/gooog1111/orcheroute/internal/network"
@@ -634,39 +633,11 @@ func (runtime *Runtime) activeAvailable(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	return tlsTargetsAvailable(ctx, dialer, []string{"www.gstatic.com:443", "www.cloudflare.com:443"}, nil, attemptTimeout)
-}
-
-// A whitelist path may be slow enough that waiting for an HTTP response gives
-// a false outage. A verified TLS handshake proves that the selected proxy can
-// establish an authenticated Internet connection without depending on page
-// response time or contents.
-func tlsTargetsAvailable(ctx context.Context, dialer proxy.Dialer, targets []string, roots *x509.CertPool, attemptTimeout time.Duration) bool {
-	for _, target := range targets {
-		host, _, err := net.SplitHostPort(target)
-		if err != nil {
-			continue
-		}
-		attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
-		connection, err := dialProxyContext(attemptCtx, dialer, "tcp", target)
-		if err != nil {
-			cancel()
-			continue
-		}
-		deadline := time.Now().Add(attemptTimeout)
-		if parentDeadline, ok := attemptCtx.Deadline(); ok && parentDeadline.Before(deadline) {
-			deadline = parentDeadline
-		}
-		_ = connection.SetDeadline(deadline)
-		secure := tls.Client(connection, &tls.Config{ServerName: host, RootCAs: roots, MinVersion: tls.VersionTLS12})
-		err = secure.HandshakeContext(attemptCtx)
-		_ = secure.Close()
-		cancel()
-		if err == nil {
-			return true
-		}
-	}
-	return false
+	_, err = transportcheck.VerifiedTLS(ctx, []string{"www.gstatic.com:443", "www.cloudflare.com:443"}, nil, attemptTimeout,
+		func(ctx context.Context, network, address string) (net.Conn, error) {
+			return dialProxyContext(ctx, dialer, network, address)
+		})
+	return err == nil
 }
 
 func dialProxyContext(ctx context.Context, dialer proxy.Dialer, network, address string) (net.Conn, error) {
