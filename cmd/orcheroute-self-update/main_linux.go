@@ -119,8 +119,15 @@ func run(action, dir string, beta bool) error {
 		return err
 	}
 	staging := filepath.Join(dir, "self-update")
-	os.MkdirAll(staging, 0700)
-	candidate := filepath.Join(staging, rel.Asset.Name)
+	if err := os.MkdirAll(staging, 0700); err != nil {
+		return err
+	}
+	privateDir, err := os.MkdirTemp(staging, "install-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(privateDir)
+	candidate := filepath.Join(privateDir, "candidate.deb")
 	write(dir, status{State: "downloading", Message: "Загружаем DEB", CurrentVersion: current, LatestVersion: rel.Version, Active: true, UpdatedAt: time.Now().Unix(), Beta: beta})
 	if err = download(ctx, rel.Asset.URL, candidate, rel.Asset.Size); err != nil {
 		return err
@@ -141,11 +148,11 @@ func run(action, dir string, beta bool) error {
 	command := exec.CommandContext(ctx, installer, arguments...)
 	command.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 	if out, e := command.CombinedOutput(); e != nil {
-		return rollbackInstall(ctx, rollback, fmt.Errorf("apt_install_failed:%s", tail(string(out))))
+		return rollbackInstall(rollback, fmt.Errorf("apt_install_failed:%s", tail(string(out))), core)
 	}
 	time.Sleep(3 * time.Second)
 	if exec.Command("systemctl", "is-active", "--quiet", "orcheroute-go.service").Run() != nil || (core && exec.Command("systemctl", "is-active", "--quiet", "orcheroute-core.service").Run() != nil) || !health() {
-		return rollbackInstall(ctx, rollback, fmt.Errorf("healthcheck_failed"))
+		return rollbackInstall(rollback, fmt.Errorf("healthcheck_failed"), core)
 	}
 	os.MkdirAll(filepath.Dir(rollback), 0700)
 	if err = os.Rename(candidate, rollback+".new"); err != nil {
@@ -277,16 +284,66 @@ func packageInstallCommand(path string) (string, []string) {
 
 func rollbackAssetURL(version string, beta bool) string {
 	tag := "v" + version
-	if beta {
+	// The previous package's channel, not the requested target channel.
+	if strings.Contains(version, "-") {
 		tag = "server-beta"
 	}
 	name := "OrcheRoute-Linux-Server-" + version + "-amd64.deb"
 	return "https://github.com/" + selfupdate.Repository + "/releases/download/" + url.PathEscape(tag) + "/" + url.PathEscape(name)
 }
-func rollbackInstall(ctx context.Context, p string, cause error) error {
-	_, _ = exec.CommandContext(ctx, "dpkg", "-i", p).CombinedOutput()
-	_ = exec.Command("systemctl", "restart", "orcheroute-go.service").Run()
-	return fmt.Errorf("%v; rolled_back", cause)
+func rollbackInstall(p string, cause error, coreWasActive bool) error {
+	// Recovery must still have a time budget when installation exhausted its own.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	expected := debField(p, "Version")
+	return runRollback(ctx, cause, func(ctx context.Context) error {
+		out, err := exec.CommandContext(ctx, "dpkg", "-i", p).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("dpkg:%w:%s", err, tail(string(out)))
+		}
+		return nil
+	}, func(ctx context.Context) error {
+		services := []string{"restart", "orcheroute-go.service"}
+		if coreWasActive {
+			services = append(services, "orcheroute-routing.service", "orcheroute-core.service")
+		}
+		out, err := exec.CommandContext(ctx, "systemctl", services...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("restart:%w:%s", err, tail(string(out)))
+		}
+		return nil
+	}, func(ctx context.Context) error {
+		if expected == "" || installed() != expected {
+			return fmt.Errorf("installed_version_mismatch")
+		}
+		for {
+			coreOK := !coreWasActive || exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", "orcheroute-core.service").Run() == nil
+			if coreOK && exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", "orcheroute-go.service").Run() == nil && health() {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
+		}
+	})
+}
+
+func runRollback(ctx context.Context, cause error, install, restart, verify func(context.Context) error) error {
+	for _, step := range []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{"install", install}, {"restart", restart}, {"verify", verify},
+	} {
+		if err := step.run(ctx); err != nil {
+			return fmt.Errorf("%w; rollback_failed:%s:%v", cause, step.name, err)
+		}
+	}
+	// This verifies the previous PACKAGE and service health only. It must not
+	// claim that the database/configuration snapshot was restored.
+	return fmt.Errorf("%w; package_rollback_verified; data_snapshot_not_restored", cause)
 }
 func installed() string {
 	b, _ := exec.Command("dpkg-query", "-W", "-f=${Version}", "orcheroute").Output()
@@ -303,9 +360,15 @@ func debField(p, field string) string {
 	return strings.TrimSpace(string(b))
 }
 func download(ctx context.Context, u, p string, size int64) error {
-	q, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if !selfupdate.ValidAssetURL(u) {
+		return fmt.Errorf("untrusted_asset_url")
+	}
+	q, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return err
+	}
 	q.Header.Set("User-Agent", "OrcheRoute self updater")
-	r, e := http.DefaultClient.Do(q)
+	r, e := selfupdate.HTTPClient(15 * time.Minute).Do(q)
 	if e != nil {
 		return e
 	}
@@ -313,19 +376,40 @@ func download(ctx context.Context, u, p string, size int64) error {
 	if r.StatusCode != 200 {
 		return fmt.Errorf("download_http_%d", r.StatusCode)
 	}
-	if r.ContentLength > 512<<20 {
+	if r.ContentLength > selfupdate.MaxAssetBytes {
 		return fmt.Errorf("asset_too_large")
 	}
 	f, e := os.OpenFile(p, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 	if e != nil {
 		return e
 	}
-	_, e = io.Copy(f, io.LimitReader(r.Body, 512<<20))
+	e = copyAsset(f, r.Body, size)
 	c := f.Close()
 	if e != nil {
 		return e
 	}
 	return c
+}
+
+func copyAsset(dst io.Writer, src io.Reader, expected int64) error {
+	limit := selfupdate.MaxAssetBytes
+	if expected < 0 || expected > limit {
+		return fmt.Errorf("invalid_asset_size")
+	}
+	if expected > 0 {
+		limit = expected
+	}
+	n, err := io.Copy(dst, io.LimitReader(src, limit+1))
+	if err != nil {
+		return err
+	}
+	if n > limit {
+		return fmt.Errorf("asset_too_large")
+	}
+	if expected > 0 && n != expected {
+		return fmt.Errorf("asset_size_mismatch")
+	}
+	return nil
 }
 func digest(p string) string {
 	f, e := os.Open(p)
