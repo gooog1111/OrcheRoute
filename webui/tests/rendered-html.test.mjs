@@ -154,18 +154,17 @@ test("android whitelist scan finishes before VPN connect and checks one source c
 	assert.match(repository, /removeEmergencyWhitelistSources/);
 });
 
-test("android whitelist health trusts qualification and requires repeated multi-url failures", async () => {
+test("android whitelist health trusts qualification and requires repeated verified-TLS failures", async () => {
   const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
   const verifier = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/ProxyHealthVerifier.java", import.meta.url), "utf8");
   assert.match(service, /consecutiveWhitelistHealthFailures/);
   assert.match(service, /proxyConnectedAtElapsedMs < 45_000/);
   assert.match(service, /runtime\.proxyHealthURLs\(\)/);
   assert.match(service, /runtime\.verifyActiveProxyTransport\(\)/);
-  assert.match(service, /Active whitelist proxy passed transport URL-test/);
+  assert.match(service, /Active whitelist proxy passed verified TLS check/);
   assert.match(service, /if \(restrictedNetwork\) \{[\s\S]*probeAllowlistProxy\(runtime\);[\s\S]*return;/);
-  assert.match(verifier, /Mobilecore\.engineTestProxiesMulti/);
-	assert.match(verifier, /ALLOWLIST_HEALTH_TIMEOUT_MS = 25_000/);
-	assert.match(verifier, /Math\.max\(defaults\.optInt\("url_timeout_ms", 3000\), ALLOWLIST_HEALTH_TIMEOUT_MS\)/);
+  assert.match(verifier, /Mobilecore\.engineVerifyProxyTLS/);
+	assert.match(verifier, /ALLOWLIST_HEALTH_TIMEOUT_MS = 8_000/);
   assert.match(service, /int failures = \+\+consecutiveWhitelistHealthFailures/);
   assert.match(service, /if \(failures < 3\)[\s\S]*Keeping whitelist node after inconclusive transport round/);
   assert.match(service, /Proxy health failed in/);
