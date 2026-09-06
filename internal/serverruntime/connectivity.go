@@ -17,16 +17,18 @@ import (
 // ConnectivitySnapshot is owned by the physical-network monitor. Controllers
 // and transports consume it but must never run their own connectivity probes.
 type ConnectivitySnapshot struct {
-	State           mobileconnectivity.State  `json:"state"`
-	ObservedState   mobileconnectivity.State  `json:"observed_state"`
-	CandidateState  mobileconnectivity.State  `json:"candidate_state,omitempty"`
-	CandidateCount  int                       `json:"candidate_count"`
-	Changed         bool                      `json:"changed"`
-	UpdatedAt       int64                     `json:"updated_at"`
-	ConfirmedAt     int64                     `json:"confirmed_at"`
-	DirectInterface string                    `json:"direct_interface,omitempty"`
-	Observation     mobileconnectivity.Result `json:"observation"`
-	Error           string                    `json:"error,omitempty"`
+	State            mobileconnectivity.State  `json:"state"`
+	ObservedState    mobileconnectivity.State  `json:"observed_state"`
+	CandidateState   mobileconnectivity.State  `json:"candidate_state,omitempty"`
+	CandidateCount   int                       `json:"candidate_count"`
+	CandidateSinceMS int64                     `json:"candidate_since_ms,omitempty"`
+	Changed          bool                      `json:"changed"`
+	UpdatedAt        int64                     `json:"updated_at"`
+	AttemptedAt      int64                     `json:"attempted_at"`
+	ConfirmedAt      int64                     `json:"confirmed_at"`
+	DirectInterface  string                    `json:"direct_interface,omitempty"`
+	Observation      mobileconnectivity.Result `json:"observation"`
+	Error            string                    `json:"error,omitempty"`
 }
 
 type connectivityProbeFactory func(interfaceName string, timeout time.Duration) mobileconnectivity.Probe
@@ -83,9 +85,13 @@ func (runtime *Runtime) connectivityCycle(ctx context.Context) {
 		runtime.recordConnectivityError(previous, err)
 		return
 	}
+	if previous.DirectInterface != interfaceName {
+		previous.CandidateState, previous.CandidateCount, previous.CandidateSinceMS = "", 0, 0
+	}
 	confirmed, err := mobileconnectivity.Confirm(mobileconnectivity.ConfirmationInput{
 		ConfirmedState: previous.State, CandidateState: previous.CandidateState,
 		CandidateCount: previous.CandidateCount, ObservedState: observed.State,
+		NowMS: time.Now().UnixMilli(), CandidateSinceMS: previous.CandidateSinceMS,
 	})
 	if err != nil {
 		runtime.recordConnectivityError(previous, err)
@@ -99,7 +105,8 @@ func (runtime *Runtime) connectivityCycle(ctx context.Context) {
 	snapshot := ConnectivitySnapshot{
 		State: confirmed.State, ObservedState: observed.State,
 		CandidateState: confirmed.CandidateState, CandidateCount: confirmed.CandidateCount,
-		Changed: confirmed.Changed, UpdatedAt: now, ConfirmedAt: confirmedAt,
+		CandidateSinceMS: confirmed.CandidateSinceMS,
+		Changed:          confirmed.Changed, UpdatedAt: now, AttemptedAt: now, ConfirmedAt: confirmedAt,
 		DirectInterface: interfaceName, Observation: observed,
 	}
 	_ = atomicJSON(runtime.connectivityPath(), snapshot)
@@ -120,7 +127,7 @@ func (runtime *Runtime) connectivitySnapshot() ConnectivitySnapshot {
 
 func (runtime *Runtime) recordConnectivityError(previous ConnectivitySnapshot, err error) {
 	previous.Changed = false
-	previous.UpdatedAt = time.Now().Unix()
+	previous.AttemptedAt = time.Now().Unix()
 	previous.Error = err.Error()
 	_ = atomicJSON(runtime.connectivityPath(), previous)
 }

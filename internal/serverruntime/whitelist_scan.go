@@ -77,7 +77,15 @@ func (runtime *Runtime) runWhitelistScan(ids []string, operation, cancelPath, re
 		}
 	}
 	if connected && len(ids) == 0 && !cancelled && commandErr == nil {
-		runtime.refreshWhitelistSubscriptions(operation, cancelPath)
+		_ = atomicJSON(operation, map[string]any{"kind": "subscription_update", "status": "running", "phase": "whitelist_stability",
+			"message": "Проверяем устойчивость подключения перед обновлением подписок", "allowlist_scan": true, "updated_at": time.Now().Unix()})
+		if runtime.awaitWhitelistStability(cancelPath) {
+			runtime.refreshWhitelistSubscriptions(operation, cancelPath)
+		}
+		if _, err := os.Stat(cancelPath); err == nil {
+			cancelled = true
+			_ = os.Remove(cancelPath)
+		}
 		transition.State = runtime.whitelistState()
 	}
 	status, message := "success", fmt.Sprintf("Список для белых списков готов: %d серверов", len(transition.State.Nodes))
@@ -93,6 +101,7 @@ func (runtime *Runtime) runWhitelistScan(ids []string, operation, cancelPath, re
 }
 
 func (runtime *Runtime) refreshWhitelistSubscriptions(operation, cancelPath string) {
+	selected := runtime.whitelistState().SelectedNode
 	items, err := runtime.Store.List(context.Background(), false)
 	if err != nil {
 		return
@@ -115,6 +124,11 @@ func (runtime *Runtime) refreshWhitelistSubscriptions(operation, cancelPath stri
 	}
 	internalOperation := filepath.Join(runtime.Config.StateDirectory, "whitelist-followup-operation.json")
 	for index, item := range enabled {
+		// A manually changed node or physical-network mode needs a new stability
+		// window; do not carry a previous connection's approval to another one.
+		if runtime.connectivitySnapshot().State != connectivity.Allowlist || runtime.whitelistState().SelectedNode != selected {
+			return
+		}
 		if _, err := os.Stat(cancelPath); err == nil {
 			return
 		}
@@ -182,8 +196,11 @@ func (runtime *Runtime) applyWhitelistResult(result updater.WhitelistResult) err
 
 func (runtime *Runtime) selectWhitelistCandidate(state whitelist.State) error {
 	transition, err := runtime.whitelistTransition(whitelist.Command{Operation: "request"})
-	if err != nil || transition.Candidate == nil {
+	if err != nil {
 		return err
+	}
+	if transition.Candidate == nil {
+		return fmt.Errorf("whitelist_candidate_unavailable")
 	}
 	name, _ := transition.Candidate.Proxy["name"].(string)
 	if name == "" {
@@ -197,7 +214,6 @@ func (runtime *Runtime) selectWhitelistCandidate(state whitelist.State) error {
 			_, selectErr := runtime.mihomo(ctx, http.MethodPut, "/proxies/ACTIVE", map[string]any{"name": name})
 			cancel()
 			if selectErr == nil {
-				_, _ = runtime.whitelistTransition(whitelist.Command{Operation: "confirm", NodeID: transition.Candidate.ID})
 				return nil
 			}
 		} else {
@@ -206,4 +222,50 @@ func (runtime *Runtime) selectWhitelistCandidate(state whitelist.State) error {
 		time.Sleep(500 * time.Millisecond)
 	}
 	return fmt.Errorf("mihomo_not_ready_for_whitelist")
+}
+
+func (runtime *Runtime) awaitWhitelistStability(cancelPath string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	var window connectivity.StabilityWindow
+	for {
+		if _, err := os.Stat(cancelPath); err == nil {
+			return false
+		}
+		physical := runtime.connectivitySnapshot()
+		if physical.State != connectivity.Allowlist || physical.Error != "" {
+			return false
+		}
+		control, err := runtime.Store.Control(ctx)
+		if err != nil || !control.Enabled {
+			return false
+		}
+		selected := runtime.whitelistState().SelectedNode
+		if selected == "" {
+			return false
+		}
+		probeCtx, stopProbe := context.WithTimeout(ctx, 8*time.Second)
+		ok := runtime.activeAvailable(probeCtx)
+		stopProbe()
+		// Refuse a sample that completed after a concurrent selection change.
+		if runtime.whitelistState().SelectedNode != selected {
+			ok = false
+		}
+		after := runtime.connectivitySnapshot()
+		if after.State != physical.State || after.DirectInterface != physical.DirectInterface || after.ConfirmedAt != physical.ConfirmedAt || after.Error != "" {
+			ok = false
+		}
+		key := fmt.Sprintf("%s/%s/%d", selected, physical.DirectInterface, physical.ConfirmedAt)
+		if window.Observe(time.Now(), key, ok, 30*time.Second, 3) {
+			_, err := runtime.whitelistTransition(whitelist.Command{Operation: "confirm", NodeID: selected})
+			return err == nil
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+		}
+	}
 }

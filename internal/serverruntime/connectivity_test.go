@@ -62,6 +62,16 @@ func TestServerConnectivityMonitorUsesDirectInterfaceAndHysteresis(t *testing.T)
 	}
 	runtime.connectivityCycle(context.Background())
 	restricted := runtime.connectivitySnapshot()
+	if restricted.State != mobileconnectivity.Normal {
+		t.Fatal("three rapid observations must not bypass the minimum hold")
+	}
+	// Simulate the hold elapsing without sleeping or using the real network.
+	restricted.CandidateSinceMS = time.Now().Add(-21 * time.Second).UnixMilli()
+	if err := atomicJSON(runtime.connectivityPath(), restricted); err != nil {
+		t.Fatal(err)
+	}
+	runtime.connectivityCycle(context.Background())
+	restricted = runtime.connectivitySnapshot()
 	if restricted.State != mobileconnectivity.Allowlist || !restricted.Changed {
 		t.Fatalf("confirmed allowlist=%#v", restricted)
 	}

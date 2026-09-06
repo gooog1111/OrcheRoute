@@ -220,7 +220,10 @@ func (runtime *Runtime) restrictedNetworkCycle(ctx context.Context, mode mobilec
 				}
 			}
 		}
+		runtime.setRestrictedSnapshot("whitelist_connecting", activeName, whitelist.Pool, now)
+		return
 	}
+	_, _ = runtime.whitelistTransition(whitelist.Command{Operation: "confirm", NodeID: activeID})
 	runtime.setRestrictedSnapshot("proxy_ok", activeName, whitelist.Pool, now)
 }
 

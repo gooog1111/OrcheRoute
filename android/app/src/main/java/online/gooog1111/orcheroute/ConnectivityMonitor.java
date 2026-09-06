@@ -80,6 +80,7 @@ final class ConnectivityMonitor {
     private boolean queued;
     private String candidateState = "";
     private int candidateCount;
+	private long candidateSinceMs;
     private long lastProbeAtMs;
     private volatile Network activePhysicalNetwork;
 
@@ -141,6 +142,9 @@ final class ConnectivityMonitor {
             if (!targetPayload.optBoolean("ok")) throw new IllegalStateException(coreError(targetPayload));
             JSONArray targets = targetPayload.getJSONObject("result").getJSONArray("targets");
             Network underlay = physicalNetwork(settings.transport);
+			if (activePhysicalNetwork == null ? underlay != null : !activePhysicalNetwork.equals(underlay)) {
+				candidateState = ""; candidateCount = 0; candidateSinceMs = 0;
+			}
             activePhysicalNetwork = underlay;
             JSONObject observation = emptyObservation();
             observation.put("physical_network_available", underlay != null);
@@ -167,6 +171,8 @@ final class ConnectivityMonitor {
                     .put("confirmed_state", previous.state)
                     .put("candidate_state", candidateState)
                     .put("candidate_count", candidateCount)
+					.put("now_ms", android.os.SystemClock.elapsedRealtime())
+					.put("candidate_since_ms", candidateSinceMs)
                     .put("observed_state", observedState);
             JSONObject confirmationPayload = new JSONObject(Mobilecore.confirmConnectivity(confirmationInput.toString()));
             JSONObject confirmation = confirmationPayload.optJSONObject("result");
@@ -176,6 +182,7 @@ final class ConnectivityMonitor {
             String state = confirmation.optString("state", previous.state);
             candidateState = confirmation.optString("candidate_state", "");
             candidateCount = confirmation.optInt("candidate_count", 0);
+			candidateSinceMs = confirmation.optLong("candidate_since_ms", 0);
             boolean confirmed = validState(state);
             Snapshot current = new Snapshot(state, confirmed ? attemptedAt : previous.confirmedAt, attemptedAt, "");
             snapshot = current;

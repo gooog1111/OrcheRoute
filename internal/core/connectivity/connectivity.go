@@ -57,17 +57,20 @@ type Result struct {
 // probe observations. Keeping the thresholds here prevents Android and future
 // clients from interpreting a single timeout as a network-mode transition.
 type ConfirmationInput struct {
-	ConfirmedState State `json:"confirmed_state"`
-	CandidateState State `json:"candidate_state"`
-	CandidateCount int   `json:"candidate_count"`
-	ObservedState  State `json:"observed_state"`
+	ConfirmedState   State `json:"confirmed_state"`
+	CandidateState   State `json:"candidate_state"`
+	CandidateCount   int   `json:"candidate_count"`
+	ObservedState    State `json:"observed_state"`
+	NowMS            int64 `json:"now_ms,omitempty"`
+	CandidateSinceMS int64 `json:"candidate_since_ms,omitempty"`
 }
 
 type ConfirmationResult struct {
-	State          State `json:"state"`
-	CandidateState State `json:"candidate_state,omitempty"`
-	CandidateCount int   `json:"candidate_count"`
-	Changed        bool  `json:"changed"`
+	State            State `json:"state"`
+	CandidateState   State `json:"candidate_state,omitempty"`
+	CandidateCount   int   `json:"candidate_count"`
+	Changed          bool  `json:"changed"`
+	CandidateSinceMS int64 `json:"candidate_since_ms,omitempty"`
 }
 
 type Identity struct {
@@ -181,8 +184,12 @@ func Confirm(input ConfirmationInput) (ConfirmationResult, error) {
 		return ConfirmationResult{State: confirmed}, nil
 	}
 	candidate, count := input.ObservedState, 1
+	since := input.NowMS
 	if input.CandidateState == input.ObservedState && input.CandidateCount > 0 {
 		count = input.CandidateCount + 1
+		if input.CandidateSinceMS > 0 && input.CandidateSinceMS <= input.NowMS {
+			since = input.CandidateSinceMS
+		}
 	}
 	required := 2
 	if confirmed == Offline {
@@ -198,10 +205,13 @@ func Confirm(input ConfirmationInput) (ConfirmationResult, error) {
 	} else if input.ObservedState == Offline && confirmed != "unknown" {
 		required = 3
 	}
-	if count >= required {
+	// New platform adapters pass their clock. Keep old serialized callers
+	// compatible, while preventing callback bursts from compressing the BP hold.
+	heldLongEnough := input.ObservedState != Allowlist || input.NowMS == 0 || input.NowMS-since >= 20_000
+	if count >= required && heldLongEnough {
 		return ConfirmationResult{State: input.ObservedState, Changed: input.ObservedState != confirmed}, nil
 	}
-	return ConfirmationResult{State: confirmed, CandidateState: candidate, CandidateCount: count}, nil
+	return ConfirmationResult{State: confirmed, CandidateState: candidate, CandidateCount: count, CandidateSinceMS: since}, nil
 }
 
 func validObserved(state State) bool {
