@@ -27,6 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import freeturnbridge.EventSink;
 import freeturnbridge.Freeturnbridge;
@@ -78,6 +79,7 @@ public final class OrcheRouteVpnService extends VpnService {
     private volatile String notificationNode = "";
     private volatile boolean freeTURNActive;
     private volatile boolean packetTunnelActive;
+    private final AtomicBoolean freeTurnRecoveryTriggered = new AtomicBoolean(false);
 
     static void start(Context context) {
         Intent intent = new Intent(context, OrcheRouteVpnService.class).setAction(ACTION_START);
@@ -333,6 +335,7 @@ public final class OrcheRouteVpnService extends VpnService {
             proxyConnectedAtElapsedMs = 0;
             notificationNode = "";
 			packetTunnelActive = false;
+			freeTurnRecoveryTriggered.set(false);
         }
     }
 
@@ -384,6 +387,18 @@ public final class OrcheRouteVpnService extends VpnService {
 			}
 			@Override public void onState(String state, long streams, long total, String error) {
 				Log.i("OrcheRouteFreeTURN", "state=" + state + " streams=" + streams + "/" + total + " error=" + error);
+				// The startup poll in startFreeTURN already throws and reports its own
+				// "error" state. This only reacts to a terminal failure reported after
+				// that poll returned "connected" — otherwise the VPN/UI stayed stuck
+				// showing connected while the transport had actually died. reload()
+				// only posts an Intent, so it is safe to call from this native
+				// callback thread without risking a deadlock against a synchronous
+				// stop on the same FreeTURN session.
+				if (FreeTurnFailurePolicy.shouldRecover(state, connected, stopping)
+						&& freeTurnRecoveryTriggered.compareAndSet(false, true)) {
+					Log.w("OrcheRouteFreeTURN", "post-connect FreeTURN failure, reloading: " + error);
+					reload(OrcheRouteVpnService.this);
+				}
 			}
 		});
 		String config = Freeturnbridge.configFromOrcheRouteProfile(encodedProfile, "127.0.0.1:19000");
