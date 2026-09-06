@@ -125,6 +125,8 @@ func callSubscriptionToken(path string) (string, bool) {
 func (runtime *Runtime) callServerSubscription(writer http.ResponseWriter, request *http.Request, token string) {
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Pragma", "no-cache")
+	writer.Header().Set("Referrer-Policy", "no-referrer")
+	writer.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
 	if request.Method != http.MethodGet {
 		writeJSON(writer, 405, map[string]any{"error": "method_not_allowed"})
 		return

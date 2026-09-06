@@ -76,6 +76,12 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	if subscriptionResponse.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("secret subscription must not be cached")
 	}
+	if subscriptionResponse.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatal("browser may disclose subscription URL as a referrer")
+	}
+	if !strings.Contains(subscriptionResponse.Header().Get("X-Robots-Tag"), "noindex") {
+		t.Fatal("secret subscription is indexable")
+	}
 	if disposition := subscriptionResponse.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "inline") {
 		t.Fatalf("subscription is not browser-readable: %q", disposition)
 	}
@@ -84,6 +90,24 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	runtime.WebHandler().ServeHTTP(legacyResponse, legacyRequest)
 	if legacyResponse.Code != http.StatusOK || legacyResponse.Body.String() != subscriptionResponse.Body.String() {
 		t.Fatalf("legacy subscription URL is no longer compatible: %d %s", legacyResponse.Code, legacyResponse.Body.String())
+	}
+	callServerAPI(t, runtime, http.MethodPatch, "/v1/call-server/clients/"+client["id"].(string), map[string]any{
+		"name": "Phone", "enabled": true, "traffic_limit_bytes": 1024, "rotate_token": true,
+	}, http.StatusOK)
+	oldResponse := httptest.NewRecorder()
+	runtime.WebHandler().ServeHTTP(oldResponse, httptest.NewRequest(http.MethodGet, path, nil))
+	if oldResponse.Code != http.StatusNotFound || oldResponse.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("rotated subscription remained usable or cacheable: %d", oldResponse.Code)
+	}
+	newSecret := callServerAPI(t, runtime, http.MethodGet, "/v1/call-server/clients/"+client["id"].(string)+"/subscription", nil, http.StatusOK)
+	newPath := newSecret["subscription_path"].(string)
+	if newPath == path {
+		t.Fatal("rotation did not replace the secret URL")
+	}
+	newResponse := httptest.NewRecorder()
+	runtime.WebHandler().ServeHTTP(newResponse, httptest.NewRequest(http.MethodGet, newPath, nil))
+	if newResponse.Code != http.StatusOK {
+		t.Fatalf("rotated subscription is unusable: %d %s", newResponse.Code, newResponse.Body.String())
 	}
 	callServerAPI(t, runtime, http.MethodPost, "/v1/call-server/apply", map[string]any{}, http.StatusOK)
 	active := callServerAPI(t, runtime, http.MethodGet, "/v1/call-server", nil, http.StatusOK)
