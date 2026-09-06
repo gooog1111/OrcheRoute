@@ -138,7 +138,7 @@ func run(action, dir string, beta bool) error {
 	if debField(candidate, "Package") != "orcheroute" || debField(candidate, "Architecture") != "amd64" || debField(candidate, "Version") != rel.Version {
 		return fmt.Errorf("invalid_deb_package")
 	}
-	_, backupErr := createBackup(ctx, dir)
+	backup, backupErr := createBackup(ctx, dir)
 	if backupErr != nil {
 		return fmt.Errorf("backup_failed:%s", backupErr)
 	}
@@ -148,11 +148,11 @@ func run(action, dir string, beta bool) error {
 	command := exec.CommandContext(ctx, installer, arguments...)
 	command.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 	if out, e := command.CombinedOutput(); e != nil {
-		return rollbackInstall(rollback, fmt.Errorf("apt_install_failed:%s", tail(string(out))), core)
+		return rollbackInstall(rollback, backup, dir, fmt.Errorf("apt_install_failed:%s", tail(string(out))), core)
 	}
 	time.Sleep(3 * time.Second)
 	if exec.Command("systemctl", "is-active", "--quiet", "orcheroute-go.service").Run() != nil || (core && exec.Command("systemctl", "is-active", "--quiet", "orcheroute-core.service").Run() != nil) || !health() {
-		return rollbackInstall(rollback, fmt.Errorf("healthcheck_failed"), core)
+		return rollbackInstall(rollback, backup, dir, fmt.Errorf("healthcheck_failed"), core)
 	}
 	os.MkdirAll(filepath.Dir(rollback), 0700)
 	if err = os.Rename(candidate, rollback+".new"); err != nil {
@@ -248,6 +248,98 @@ func backupSQLite(ctx context.Context, source, target string) error {
 	return nil
 }
 
+func restoreBackup(ctx context.Context, archive, stateDir string) error {
+	return restoreBackupTargets(ctx, archive, "/etc/orcheroute", stateDir)
+}
+
+func restoreBackupTargets(ctx context.Context, archive, etcTarget, stateTarget string) error {
+	if strings.TrimSpace(archive) == "" || strings.TrimSpace(etcTarget) == "" || strings.TrimSpace(stateTarget) == "" {
+		return fmt.Errorf("invalid_snapshot_path")
+	}
+	listing, err := exec.CommandContext(ctx, "tar", "-tzf", archive).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("snapshot_list:%s", tail(string(listing)))
+	}
+	for _, member := range strings.Split(string(listing), "\n") {
+		if member = strings.TrimSpace(member); member != "" && !validSnapshotMember(member) {
+			return fmt.Errorf("snapshot_member_invalid:%s", member)
+		}
+	}
+	staging, err := os.MkdirTemp(filepath.Dir(archive), ".restore-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(staging)
+	if output, err := exec.CommandContext(ctx, "tar", "-xzf", archive, "-C", staging).CombinedOutput(); err != nil {
+		return fmt.Errorf("snapshot_extract:%s", tail(string(output)))
+	}
+	return restoreSnapshotTree(ctx, staging, etcTarget, stateTarget)
+}
+
+func validSnapshotMember(member string) bool {
+	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(member)))
+	if clean == "." || clean == "" || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
+		return false
+	}
+	return clean == "etc" || strings.HasPrefix(clean, "etc/") ||
+		clean == "var" || clean == "var/lib" || clean == "var/lib/orcheroute" || strings.HasPrefix(clean, "var/lib/orcheroute/")
+}
+
+func restoreSnapshotTree(ctx context.Context, snapshotRoot, etcTarget, stateTarget string) error {
+	if err := restoreEntries(ctx, filepath.Join(snapshotRoot, "etc", "orcheroute"), etcTarget, nil); err != nil {
+		return fmt.Errorf("restore_etc:%w", err)
+	}
+	for _, name := range []string{"state.db-wal", "state.db-shm"} {
+		if err := os.Remove(filepath.Join(stateTarget, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if err := restoreEntries(ctx, filepath.Join(snapshotRoot, "var", "lib", "orcheroute"), stateTarget, restoreExcluded); err != nil {
+		return fmt.Errorf("restore_state:%w", err)
+	}
+	return nil
+}
+
+func restoreExcluded(name string) bool {
+	switch name {
+	case "backups", "self-update", "packages", "app-update.json", "state.db-wal", "state.db-shm":
+		return true
+	default:
+		return false
+	}
+}
+
+func restoreEntries(ctx context.Context, source, target string, excluded func(string) bool) error {
+	info, err := os.Lstat(source)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("snapshot_directory_missing:%s", source)
+	}
+	if err := os.MkdirAll(target, 0700); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(source)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if excluded != nil && excluded(entry.Name()) {
+			continue
+		}
+		destination := filepath.Join(target, entry.Name())
+		relative, err := filepath.Rel(target, destination)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("restore_target_invalid")
+		}
+		if err := os.RemoveAll(destination); err != nil {
+			return err
+		}
+		if err := copyEntry(ctx, filepath.Join(source, entry.Name()), target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func ensureRollback(ctx context.Context, dir, current string, beta bool) (string, error) {
 	rollback := filepath.Join(dir, "packages", "current.deb")
 	if validRollback(rollback, current) {
@@ -291,7 +383,7 @@ func rollbackAssetURL(version string, beta bool) string {
 	name := "OrcheRoute-Linux-Server-" + version + "-amd64.deb"
 	return "https://github.com/" + selfupdate.Repository + "/releases/download/" + url.PathEscape(tag) + "/" + url.PathEscape(name)
 }
-func rollbackInstall(p string, cause error, coreWasActive bool) error {
+func rollbackInstall(p, backup, stateDir string, cause error, coreWasActive bool) error {
 	// Recovery must still have a time budget when installation exhausted its own.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -302,6 +394,18 @@ func rollbackInstall(p string, cause error, coreWasActive bool) error {
 			return fmt.Errorf("dpkg:%w:%s", err, tail(string(out)))
 		}
 		return nil
+	}, func(ctx context.Context) error {
+		services := []string{"stop", "orcheroute-go.service"}
+		if coreWasActive {
+			services = append(services, "orcheroute-core.service", "orcheroute-routing.service")
+		}
+		out, err := exec.CommandContext(ctx, "systemctl", services...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("stop:%w:%s", err, tail(string(out)))
+		}
+		return nil
+	}, func(ctx context.Context) error {
+		return restoreBackup(ctx, backup, stateDir)
 	}, func(ctx context.Context) error {
 		services := []string{"restart", "orcheroute-go.service"}
 		if coreWasActive {
@@ -330,20 +434,18 @@ func rollbackInstall(p string, cause error, coreWasActive bool) error {
 	})
 }
 
-func runRollback(ctx context.Context, cause error, install, restart, verify func(context.Context) error) error {
+func runRollback(ctx context.Context, cause error, install, stop, restore, restart, verify func(context.Context) error) error {
 	for _, step := range []struct {
 		name string
 		run  func(context.Context) error
 	}{
-		{"install", install}, {"restart", restart}, {"verify", verify},
+		{"install", install}, {"stop", stop}, {"restore", restore}, {"restart", restart}, {"verify", verify},
 	} {
 		if err := step.run(ctx); err != nil {
 			return fmt.Errorf("%w; rollback_failed:%s:%v", cause, step.name, err)
 		}
 	}
-	// This verifies the previous PACKAGE and service health only. It must not
-	// claim that the database/configuration snapshot was restored.
-	return fmt.Errorf("%w; package_rollback_verified; data_snapshot_not_restored", cause)
+	return fmt.Errorf("%w; package_and_data_rollback_verified", cause)
 }
 func installed() string {
 	b, _ := exec.Command("dpkg-query", "-W", "-f=${Version}", "orcheroute").Output()
