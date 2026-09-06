@@ -73,6 +73,9 @@ func TestCallServerAPIIssuesSecretFreePublicStateAndClientProfile(t *testing.T) 
 	if subscriptionResponse.Header().Get("Subscription-Userinfo") == "" {
 		t.Fatal("subscription traffic metadata missing")
 	}
+	if subscriptionResponse.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("secret subscription must not be cached")
+	}
 	if disposition := subscriptionResponse.Header().Get("Content-Disposition"); !strings.HasPrefix(disposition, "inline") {
 		t.Fatalf("subscription is not browser-readable: %q", disposition)
 	}

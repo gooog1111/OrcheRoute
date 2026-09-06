@@ -10,15 +10,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/pbkdf2"
 
@@ -37,7 +40,30 @@ func (runtime *Runtime) WebHandler() http.Handler {
 			writeJSON(writer, 403, map[string]any{"error": "management_network_required"})
 			return
 		}
-		if !runtime.validBasic(request.Header.Get("Authorization")) {
+		if strings.HasPrefix(request.URL.Path, "/api/") && request.Method != http.MethodGet && request.Method != http.MethodHead {
+			if !trustedWebMutation(request) {
+				writeJSON(writer, http.StatusForbidden, map[string]any{"error": "cross_origin_request_denied"})
+				return
+			}
+			mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+			if err != nil || mediaType != "application/json" {
+				writeJSON(writer, http.StatusUnsupportedMediaType, map[string]any{"error": "application_json_required"})
+				return
+			}
+		}
+		authorization := request.Header.Get("Authorization")
+		valid := false
+		if authorization != "" {
+			finish, retry := runtime.webAuthAttempts.begin(request.RemoteAddr, time.Now())
+			if finish == nil {
+				writer.Header().Set("Retry-After", strconv.Itoa(retry))
+				writeJSON(writer, http.StatusTooManyRequests, map[string]any{"error": "authentication_rate_limited"})
+				return
+			}
+			valid = len(authorization) <= 8192 && runtime.validBasic(authorization)
+			finish(valid)
+		}
+		if !valid {
 			writer.Header().Set("WWW-Authenticate", `Basic realm="OrcheRoute", charset="UTF-8"`)
 			writeJSON(writer, 401, map[string]any{"error": "authentication_required"})
 			return
@@ -66,6 +92,23 @@ func (runtime *Runtime) WebHandler() http.Handler {
 	})
 }
 
+// Basic credentials can be ambient browser credentials. Reject foreign browser
+// requests before doing expensive password verification. Non-browser clients
+// without Origin remain supported, but must use the non-simple JSON MIME type.
+func trustedWebMutation(request *http.Request) bool {
+	if site := request.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		return false
+	}
+	if origin := request.Header.Get("Origin"); origin != "" {
+		parsed, err := url.Parse(origin)
+		// Match the actual authority, never a client-supplied forwarded host.
+		// HTTPS termination at a trusted reverse proxy may change the scheme.
+		return err == nil && (parsed.Scheme == "https" || parsed.Scheme == "http") && parsed.User == nil &&
+			parsed.Path == "" && parsed.RawQuery == "" && parsed.Fragment == "" && strings.EqualFold(parsed.Host, request.Host)
+	}
+	return true
+}
+
 func callSubscriptionToken(path string) (string, bool) {
 	for _, prefix := range []string{"/subscription/call/", "/subscription/"} {
 		if !strings.HasPrefix(path, prefix) {
@@ -80,6 +123,8 @@ func callSubscriptionToken(path string) (string, bool) {
 }
 
 func (runtime *Runtime) callServerSubscription(writer http.ResponseWriter, request *http.Request, token string) {
+	writer.Header().Set("Cache-Control", "no-store")
+	writer.Header().Set("Pragma", "no-cache")
 	if request.Method != http.MethodGet {
 		writeJSON(writer, 405, map[string]any{"error": "method_not_allowed"})
 		return

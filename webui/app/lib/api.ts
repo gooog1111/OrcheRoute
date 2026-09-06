@@ -461,7 +461,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     ...options,
     headers: {
       Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.body || (options.method && options.method !== "GET" && options.method !== "HEAD") ? { "Content-Type": "application/json" } : {}),
       ...(options.method && options.method !== "GET" ? { "X-OrcheRoute-UI": "1" } : {}),
       ...options.headers,
     },

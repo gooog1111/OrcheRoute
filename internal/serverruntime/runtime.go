@@ -71,6 +71,7 @@ type Runtime struct {
 	lastObservation          controller.Observation
 	connectivityProbeFactory connectivityProbeFactory
 	startedAt                int64
+	webAuthAttempts          webAuthLimiter
 }
 
 func New(config Config) (*Runtime, error) {
