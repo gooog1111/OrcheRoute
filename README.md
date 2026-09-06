@@ -12,9 +12,9 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
 
 ## Скачать
 
-- **Текущая стабильная версия: 0.7.4** (Android `versionCode 85`)
-- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.4/OrcheRoute-Android-0.7.4-code85-arm64.apk)
-- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.4/OrcheRoute-Linux-Server-0.7.4-amd64.deb)
+- **Текущая стабильная версия: 0.7.5** (Android `versionCode 86`)
+- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.5/OrcheRoute-Android-0.7.5-code86-arm64.apk)
+- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.5/OrcheRoute-Linux-Server-0.7.5-amd64.deb)
 - [Страница последнего стабильного выпуска](https://github.com/gooog1111/OrcheRoute/releases/latest)
 - [Все выпуски и beta-версии](https://github.com/gooog1111/OrcheRoute/releases)
 
@@ -38,7 +38,7 @@ OrcheRoute — VPN-клиент и контроллер маршрутизаци
 были установлены автоматически:
 
 ```bash
-sudo apt install ./OrcheRoute-Linux-Server-0.7.4-amd64.deb
+sudo apt install ./OrcheRoute-Linux-Server-0.7.5-amd64.deb
 ```
 
 При прямом `dpkg -i` WebUI также запускается, но для включения VPN-транспорта
@@ -58,7 +58,9 @@ VLESS/Trojan/Hysteria2 (раз в 5 секунд опрашиваются акт
 Mihomo; сессия, успевшая полностью открыться и закрыться между двумя опросами,
 а также «хвост» уже увиденной сессии между последним опросом и её закрытием, в
 счётчик не попадают). Для точных лимитов трафика на этот счётчик полагаться
-нельзя.
+нельзя. По умолчанию подключённым клиентам доступен только Интернет — локальная
+сеть сервера и другие подключённые клиенты изолированы; доступ к LAN можно
+включить явно в настройках VPN-сервера.
 
 `sudo apt remove orcheroute` сохраняет настройки, авторизацию, подписки,
 маршруты и состояние. `sudo apt purge orcheroute` полностью удаляет эти данные
