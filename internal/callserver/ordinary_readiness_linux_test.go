@@ -29,17 +29,12 @@ func TestOrdinaryReadyRequiresAuthenticatedControllerAndBothListeners(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	address := other.Addr().String()
-	other.Close()
-	snapshot := OrdinarySnapshot{ControllerAddress: strings.TrimPrefix(controller.URL, "http://"), ControllerSecret: "test-secret", VLESSListenAddress: listener.Addr().String(), TrojanListenAddress: address}
+	defer other.Close()
+	snapshot := OrdinarySnapshot{ControllerAddress: strings.TrimPrefix(controller.URL, "http://"), ControllerSecret: "test-secret", VLESSListenAddress: listener.Addr().String(), TrojanListenAddress: "127.0.0.1:0"}
 	if ordinaryReady(context.Background(), snapshot) {
 		t.Fatal("unopened Trojan listener counted ready")
 	}
-	other, err = net.Listen("tcp", address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer other.Close()
+	snapshot.TrojanListenAddress = other.Addr().String()
 	if !ordinaryReady(context.Background(), snapshot) {
 		t.Fatal("ready listeners rejected")
 	}
