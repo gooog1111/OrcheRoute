@@ -8,6 +8,7 @@ require (
 	github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20260814
 	github.com/google/uuid v1.6.0
 	github.com/metacubex/mihomo v1.19.30
+	github.com/metacubex/tls v0.1.8
 	github.com/xtls/xray-core v1.251202.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/mod v0.38.0
@@ -107,7 +108,6 @@ require (
 	github.com/metacubex/tailscale v0.0.0-20260807072706-a4fb5feabcbb // indirect
 	github.com/metacubex/tailscale-wireguard-go v0.0.0-20260725073821-e61ab99cede2 // indirect
 	github.com/metacubex/tfo-go v0.0.0-20260623020846-376a77860b8c // indirect
-	github.com/metacubex/tls v0.1.8 // indirect
 	github.com/metacubex/utls v1.8.7 // indirect
 	github.com/metacubex/wireguard-go v0.0.0-20250820062549-a6cecdd7f57f // indirect
 	github.com/metacubex/yamux v0.0.0-20250918083631-dd5f17c0be49 // indirect
@@ -125,7 +125,7 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.57.1 // indirect
 	github.com/rasky/go-lzo v0.0.0-20200203143853-96a758eda86e // indirect
-	github.com/refraction-networking/utls v1.8.1 // indirect
+	github.com/refraction-networking/utls v1.8.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/riobard/go-bloom v0.0.0-20200614022211-cdc8013cb5b3 // indirect
 	github.com/safchain/ethtool v0.3.0 // indirect
