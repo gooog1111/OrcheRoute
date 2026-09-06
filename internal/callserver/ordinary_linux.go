@@ -142,9 +142,19 @@ func ordinaryReady(ctx context.Context, snapshot OrdinarySnapshot) bool {
 // endpoint and accumulates per-client byte deltas into pending. VLESS, Trojan
 // and Hysteria2 authenticate each connection against the client list configured
 // in ordinaryMihomoConfig, and Mihomo reports the matched username back as
-// metadata.inboundUser, so it doubles as the client ID used elsewhere. Traffic
-// from a connection that opens and fully closes between two polls is lost;
-// ordinaryTrafficPoll keeps that window short.
+// metadata.inboundUser, so it doubles as the client ID used elsewhere.
+//
+// This is an approximate counter, not an exact one, and shortening
+// ordinaryTrafficPoll cannot fix that: stock Mihomo removes a connection's
+// tracker from statistic.Manager the moment it closes, and /connections (REST
+// or websocket) only ever exposes a snapshot of the trackers still open at
+// poll time. A connection that opens and fully closes between two polls is
+// never observed at all, and the final bytes an already-seen connection sends
+// between its last poll and its close are lost with it. Accurate per-user
+// quotas need either upstream/custom close events carrying final
+// per-inboundUser counters, or a different backend altogether — see F9 in
+// the local audit notes.
+
 func (runtime *ordinaryMihomoRuntime) pollTraffic(ctx context.Context, address, secret string) {
 	client := &http.Client{Timeout: 3 * time.Second}
 	ticker := time.NewTicker(ordinaryTrafficPoll)
