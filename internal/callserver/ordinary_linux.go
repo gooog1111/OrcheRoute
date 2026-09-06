@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -78,17 +79,63 @@ func (backend ordinaryMihomoBackend) Start(parent context.Context, snapshot Ordi
 		running.mu.Unlock()
 		running.done <- err
 	}()
-	select {
-	case err := <-running.done:
-		cancel()
-		return nil, fmt.Errorf("call_server_mihomo_start: %w: %s", err, tailOutput(stderr.Bytes()))
-	case <-time.After(500 * time.Millisecond):
-		go running.pollTraffic(ctx, snapshot.ControllerAddress, snapshot.ControllerSecret)
-		return running, nil
-	case <-parent.Done():
-		_ = running.Close()
-		return nil, parent.Err()
+	readyCtx, stopReady := context.WithTimeout(parent, 10*time.Second)
+	defer stopReady()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := running.Alive(); err != nil {
+			_ = running.Close()
+			return nil, fmt.Errorf("call_server_mihomo_start: %w: %s", err, tailOutput(stderr.Bytes()))
+		}
+		if ordinaryReady(readyCtx, snapshot) {
+			go running.pollTraffic(ctx, snapshot.ControllerAddress, snapshot.ControllerSecret)
+			return running, nil
+		}
+		select {
+		case <-readyCtx.Done():
+			_ = running.Close()
+			return nil, fmt.Errorf("call_server_mihomo_not_ready: %w: %s", readyCtx.Err(), tailOutput(stderr.Bytes()))
+		case <-ticker.C:
+		}
 	}
+}
+
+// Process creation or a fixed sleep does not mean the configured listeners are
+// usable. Verify our authenticated controller and both TCP listeners first.
+func ordinaryReady(ctx context.Context, snapshot OrdinarySnapshot) bool {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+snapshot.ControllerAddress+"/version", nil)
+	if err != nil {
+		return false
+	}
+	request.Header.Set("Authorization", "Bearer "+snapshot.ControllerSecret)
+	client := &http.Client{Timeout: 250 * time.Millisecond}
+	response, err := client.Do(request)
+	if err != nil {
+		return false
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return false
+	}
+	for _, address := range []string{snapshot.VLESSListenAddress, snapshot.TrojanListenAddress} {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return false
+		}
+		if host == "" || host == "0.0.0.0" {
+			host = "127.0.0.1"
+		}
+		if host == "::" {
+			host = "::1"
+		}
+		connection, err := (&net.Dialer{Timeout: 250 * time.Millisecond}).DialContext(ctx, "tcp", net.JoinHostPort(host, port))
+		if err != nil {
+			return false
+		}
+		connection.Close()
+	}
+	return true
 }
 
 // pollTraffic periodically reads Mihomo's external-controller /connections
