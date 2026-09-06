@@ -772,6 +772,16 @@ final class MobileRepository {
 
     synchronized int whitelistCount() { JSONArray nodes = root.optJSONArray("whitelist_nodes"); return nodes == null ? 0 : nodes.length(); }
 
+    synchronized int whitelistVerifiedCount() {
+        JSONArray nodes = root.optJSONArray("whitelist_nodes");
+        int count = 0;
+        if (nodes != null) for (int i = 0; i < nodes.length(); i++) {
+            JSONObject node = nodes.optJSONObject(i);
+            if (node != null && node.optBoolean("alive", false)) count++;
+        }
+        return count;
+    }
+
     synchronized JSONObject deleteNode(String id) throws JSONException {
         JSONObject normal = findNode(id);
         JSONObject whitelist = findWhitelistNode(id);
@@ -888,7 +898,7 @@ final class MobileRepository {
         }
         JSONArray whitelist = root.getJSONArray("whitelist_nodes");
         output.put(new JSONObject().put("id", "whitelist").put("priority", 0)
-                .put("total", whitelist.length()).put("alive", whitelist.length())
+                .put("total", whitelist.length()).put("alive", whitelistVerifiedCount())
                 .put("selected", whitelistMode));
         return output;
     }

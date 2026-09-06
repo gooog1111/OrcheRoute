@@ -254,6 +254,12 @@ func reindex(state *State) {
 		})
 	}
 	sort.SliceStable(state.Nodes, func(i, j int) bool {
+		// Missing measurements are not evidence of a better connection. Keep
+		// activatable Call profiles as fallback/manual candidates, below nodes
+		// whose connectivity has actually been verified.
+		if state.Nodes[i].Alive != state.Nodes[j].Alive {
+			return state.Nodes[i].Alive
+		}
 		if state.Nodes[i].Score == state.Nodes[j].Score {
 			return state.Nodes[i].ID < state.Nodes[j].ID
 		}
