@@ -29,6 +29,7 @@ type Config struct {
 	TrojanListenAddress   string   `json:"trojan_listen_address"`
 	HysteriaListenAddress string   `json:"hysteria2_listen_address"`
 	FakeSNI               string   `json:"fake_sni"`
+	AllowLAN              bool     `json:"allow_lan"`
 	RealityPrivateKey     string   `json:"reality_private_key,omitempty"`
 	RealityPublicKey      string   `json:"reality_public_key,omitempty"`
 	RealityShortID        string   `json:"reality_short_id,omitempty"`
@@ -65,6 +66,7 @@ type PublicConfig struct {
 	TrojanListenAddress   string         `json:"trojan_listen_address"`
 	HysteriaListenAddress string         `json:"hysteria2_listen_address"`
 	FakeSNI               string         `json:"fake_sni"`
+	AllowLAN              bool           `json:"allow_lan"`
 	Clients               []PublicClient `json:"clients"`
 }
 
@@ -302,7 +304,7 @@ func (config Config) PublicAt(now time.Time) PublicConfig {
 		InvitationConfigured: config.InvitationURL != "", InvitationCount: boolInt(config.InvitationURL != "") + len(config.InvitationURLs), SubscriptionBaseURL: config.SubscriptionBaseURL,
 		OrdinaryEnabled: config.OrdinaryEnabled, VLESSListenAddress: config.VLESSListenAddress,
 		TrojanListenAddress: config.TrojanListenAddress, HysteriaListenAddress: config.HysteriaListenAddress,
-		FakeSNI: config.FakeSNI, Clients: clients}
+		FakeSNI: config.FakeSNI, AllowLAN: config.AllowLAN, Clients: clients}
 }
 
 func boolInt(value bool) int {

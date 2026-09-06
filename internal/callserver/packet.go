@@ -18,6 +18,7 @@ type PacketSnapshot struct {
 	PrivateKey       []byte
 	ObfuscationKey   []byte
 	Peers            []PacketPeer
+	AllowLAN         bool
 }
 
 type PacketPeer struct {

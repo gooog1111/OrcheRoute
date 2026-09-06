@@ -68,7 +68,7 @@ func (backend EmbeddedPacketBackend) Start(ctx context.Context, snapshot Runtime
 		running.Close()
 		return nil, fmt.Errorf("call_server_packet_configure: %w", err)
 	}
-	if err := running.configureNetwork(snapshot.Packet.InterfaceAddress); err != nil {
+	if err := running.configureNetwork(snapshot.Packet.InterfaceAddress, snapshot.Packet.AllowLAN); err != nil {
 		running.Close()
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (backend EmbeddedPacketBackend) Start(ctx context.Context, snapshot Runtime
 	return running, nil
 }
 
-func (runtime *embeddedPacketRuntime) configureNetwork(address string) error {
+func (runtime *embeddedPacketRuntime) configureNetwork(address string, allowLAN bool) error {
 	for _, binary := range []string{"ip", "nft", "iptables"} {
 		if _, err := exec.LookPath(binary); err != nil {
 			return fmt.Errorf("call_server_dependency_missing:%s", binary)
@@ -123,15 +123,17 @@ func (runtime *embeddedPacketRuntime) configureNetwork(address string) error {
 		runtime.forwardingChanged = true
 	}
 	// NAT alone is insufficient on hosts where Docker, UFW or the system
-	// firewall leaves FORWARD at DROP. Insert only the two interface-scoped
-	// rules required by this tunnel. Rules that already existed remain owned by
-	// the administrator and are not removed on shutdown.
-	for _, rule := range packetForwardRules(runtime.interfaceName) {
+	// firewall leaves FORWARD at DROP. Insert only the interface-scoped rules
+	// required by this tunnel, at explicit positions so peer isolation and the
+	// LAN block (S5) are always evaluated before the generic accept further
+	// down. Rules that already existed remain owned by the administrator and
+	// are not removed on shutdown.
+	for index, rule := range packetForwardRules(runtime.interfaceName, allowLAN) {
 		check := append([]string{"-w", "5", "-C", "FORWARD"}, rule...)
 		if exec.Command("iptables", check...).Run() == nil {
 			continue
 		}
-		insert := append([]string{"-w", "5", "-I", "FORWARD", "1"}, rule...)
+		insert := append([]string{"-w", "5", "-I", "FORWARD", strconv.Itoa(index + 1)}, rule...)
 		if err := runPacketCommand("iptables", insert...); err != nil {
 			return err
 		}
@@ -188,11 +190,31 @@ func packetRouteConflict(routeTable, tunnelAddress, tunnelInterface string) (str
 	return "", false, nil
 }
 
-func packetForwardRules(interfaceName string) [][]string {
-	return [][]string{
-		{"-i", interfaceName, "-j", "ACCEPT"},
-		{"-o", interfaceName, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"},
+// packetForwardRules implements S5 for the FreeTURN/AWG packet backend: by
+// default a subscriber reaches the Internet only. Returned in the exact
+// order the caller must apply the rules in the FORWARD chain, so peer
+// isolation and (unless allowLAN) the LAN block are evaluated before the
+// generic accept that follows them:
+//  1. drop traffic routed back out the same tunnel interface it arrived on,
+//     so one subscriber cannot reach another connected through this backend;
+//  2. unless allowLAN, drop traffic from the tunnel toward private/link-local/
+//     CGNAT/loopback ranges, which would otherwise reach the server's own LAN
+//     or the host itself;
+//  3. accept everything else from the tunnel interface;
+//  4. accept established/related return traffic.
+func packetForwardRules(interfaceName string, allowLAN bool) [][]string {
+	rules := [][]string{
+		{"-i", interfaceName, "-o", interfaceName, "-j", "DROP"},
 	}
+	if !allowLAN {
+		for _, cidr := range privateIPv4CIDRs {
+			rules = append(rules, []string{"-i", interfaceName, "-d", cidr, "-j", "DROP"})
+		}
+	}
+	return append(rules,
+		[]string{"-i", interfaceName, "-j", "ACCEPT"},
+		[]string{"-o", interfaceName, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"},
+	)
 }
 
 func runPacketCommand(name string, arguments ...string) error {

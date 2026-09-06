@@ -382,8 +382,8 @@ func (manager *Manager) RuntimeSnapshot() (RuntimeSnapshot, error) {
 		Ordinary: OrdinarySnapshot{Enabled: manager.data.OrdinaryEnabled, VLESSListenAddress: manager.data.VLESSListenAddress,
 			TrojanListenAddress: manager.data.TrojanListenAddress, HysteriaListenAddress: manager.data.HysteriaListenAddress,
 			FakeSNI: manager.data.FakeSNI, RealityPrivateKey: manager.data.RealityPrivateKey, RealityShortID: manager.data.RealityShortID,
-			TLSCertificate: manager.data.TLSCertificate, TLSPrivateKey: manager.data.TLSPrivateKey},
-		Packet: PacketSnapshot{InterfaceName: "orchecall0", InterfaceAddress: "10.77.0.1/16", ListenAddress: manager.data.BackendAddress}}
+			TLSCertificate: manager.data.TLSCertificate, TLSPrivateKey: manager.data.TLSPrivateKey, AllowLAN: manager.data.AllowLAN},
+		Packet: PacketSnapshot{InterfaceName: "orchecall0", InterfaceAddress: "10.77.0.1/16", ListenAddress: manager.data.BackendAddress, AllowLAN: manager.data.AllowLAN}}
 	privateKey, err := decode32ByteKey(manager.data.PacketPrivateKey)
 	if err != nil {
 		return RuntimeSnapshot{}, err

@@ -28,6 +28,7 @@ type OrdinarySnapshot struct {
 	Clients               []OrdinaryClient
 	ControllerAddress     string
 	ControllerSecret      string
+	AllowLAN              bool
 }
 
 func ordinaryMihomoConfig(snapshot OrdinarySnapshot) ([]byte, error) {
@@ -67,12 +68,31 @@ func ordinaryMihomoConfig(snapshot OrdinarySnapshot) ([]byte, error) {
 			"alpn": []string{"h3"}, "masquerade": "https://" + snapshot.FakeSNI},
 	}
 	config := map[string]any{"mode": "rule", "log-level": "warning", "ipv6": true,
-		"listeners": listeners, "rules": []string{"MATCH,DIRECT"}}
+		"listeners": listeners, "rules": ordinaryEgressRules(snapshot.AllowLAN)}
 	if snapshot.ControllerAddress != "" {
 		config["external-controller"] = snapshot.ControllerAddress
 		config["secret"] = snapshot.ControllerSecret
 	}
 	return json.MarshalIndent(config, "", "  ")
+}
+
+// ordinaryEgressRules implements S5 for the VLESS/Trojan/Hysteria2 sidecar:
+// subscribers reach the Internet only, not the server's own LAN, unless the
+// administrator explicitly opts back in. REJECT-DROP silently discards the
+// packet instead of returning a TCP RST, so a scanning client cannot use the
+// response to distinguish "filtered" from "genuinely unreachable".
+func ordinaryEgressRules(allowLAN bool) []string {
+	if allowLAN {
+		return []string{"MATCH,DIRECT"}
+	}
+	rules := make([]string, 0, len(privateIPv4CIDRs)+len(privateIPv6CIDRs)+1)
+	for _, cidr := range privateIPv4CIDRs {
+		rules = append(rules, "IP-CIDR,"+cidr+",REJECT-DROP")
+	}
+	for _, cidr := range privateIPv6CIDRs {
+		rules = append(rules, "IP-CIDR6,"+cidr+",REJECT-DROP")
+	}
+	return append(rules, "MATCH,DIRECT")
 }
 
 func splitListener(endpoint string) (string, int, error) {

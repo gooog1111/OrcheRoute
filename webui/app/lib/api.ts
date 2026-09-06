@@ -274,6 +274,7 @@ export type CallServerConfig = {
 	trojan_listen_address: string;
 	hysteria2_listen_address: string;
 	fake_sni: string;
+	allow_lan: boolean;
 	clients: CallServerClient[];
 };
 

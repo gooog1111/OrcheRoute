@@ -40,6 +40,7 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 			trojan_listen_address: config.trojan_listen_address,
 			hysteria2_listen_address: config.hysteria2_listen_address,
 			fake_sni: config.fake_sni,
+			allow_lan: config.allow_lan,
 			...(invitation.trim() ? { invitation_url: invitation.trim() } : {}),
 			...(additionalInvitations.trim() ? { invitation_urls: additionalInvitations.split(/\s+/).map(value => value.trim()).filter(Boolean) } : {}),
 		};
@@ -84,6 +85,7 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 			</div>
 			<details className="advanced-settings"><summary>Ручная настройка сети</summary><div className="form-grid two">
 				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.ordinary_enabled} onChange={event => update("ordinary_enabled", event.target.checked)} disabled={busy}/><span><strong>VLESS, Trojan и Hysteria2</strong><small>Добавлять эти серверы в персональную подписку.</small></span></label>
+				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.allow_lan} onChange={event => update("allow_lan", event.target.checked)} disabled={busy}/><span><strong>Доступ клиентов к локальной сети сервера</strong><small>По умолчанию клиентам виден только Интернет. Включите, только если это действительно нужно — это открывает LAN сервера всем подключённым клиентам.</small></span></label>
 				<label className="form-field"><span>Публичный адрес FreeTURN</span><input value={config.public_endpoint ?? ""} onChange={event => update("public_endpoint", event.target.value)} placeholder="vpn.example.ru:4443" disabled={busy}/><small>Публичный IP или доменное имя и UDP-порт.</small></label>
 				<label className="form-field"><span>Адрес подписок</span><input type="url" value={config.subscription_base_url ?? ""} onChange={event => update("subscription_base_url", event.target.value)} placeholder="Необязательно" disabled={busy}/><small>Нужен только для обновляемой HTTPS-ссылки. Файл и QR работают без домена.</small></label>
 				<label className="form-field"><span>Слушать FreeTURN UDP</span><input value={config.listen_address} onChange={event => update("listen_address", event.target.value)} placeholder="0.0.0.0:4443" disabled={busy}/></label>

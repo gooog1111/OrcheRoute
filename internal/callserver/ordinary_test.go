@@ -71,6 +71,35 @@ func TestOrdinaryMihomoConfigAcceptedByRealBinary(t *testing.T) {
 	}
 }
 
+func TestOrdinaryEgressRulesBlockPrivateRangesByDefault(t *testing.T) {
+	rules := ordinaryEgressRules(false)
+	if rules[len(rules)-1] != "MATCH,DIRECT" {
+		t.Fatalf("MATCH,DIRECT must remain the final catch-all: %#v", rules)
+	}
+	for _, expected := range []string{
+		"IP-CIDR,10.0.0.0/8,REJECT-DROP", "IP-CIDR,192.168.0.0/16,REJECT-DROP", "IP-CIDR,169.254.0.0/16,REJECT-DROP",
+		"IP-CIDR6,fc00::/7,REJECT-DROP", "IP-CIDR6,fe80::/10,REJECT-DROP",
+	} {
+		found := false
+		for _, rule := range rules[:len(rules)-1] {
+			if rule == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("missing %q ahead of the MATCH,DIRECT catch-all: %#v", expected, rules)
+		}
+	}
+}
+
+func TestOrdinaryEgressRulesAllowLANIsJustDirect(t *testing.T) {
+	rules := ordinaryEgressRules(true)
+	if len(rules) != 1 || rules[0] != "MATCH,DIRECT" {
+		t.Fatalf("allowLAN must skip the private-range rules entirely: %#v", rules)
+	}
+}
+
 func TestVersionOneConfigMigratesToOrdinaryProtocols(t *testing.T) {
 	config := DefaultConfig()
 	config.Version = 1
