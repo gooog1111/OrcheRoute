@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -626,23 +628,50 @@ func (runtime *Runtime) directAvailable(ctx context.Context, interfaceName strin
 }
 
 func (runtime *Runtime) activeAvailable(ctx context.Context) bool {
-	dialer, err := proxy.SOCKS5("tcp", "127.0.0.1:21080", nil, proxy.Direct)
+	const attemptTimeout = 4 * time.Second
+	forward := &net.Dialer{Timeout: attemptTimeout, KeepAlive: -1}
+	dialer, err := proxy.SOCKS5("tcp", "127.0.0.1:21080", nil, forward)
 	if err != nil {
 		return false
 	}
-	transport := &http.Transport{DialContext: func(_ context.Context, network, address string) (net.Conn, error) {
-		return dialer.Dial(network, address)
-	}}
-	client := &http.Client{Transport: transport, Timeout: 6 * time.Second}
-	for _, target := range []string{"https://www.gstatic.com/generate_204", "https://www.cloudflare.com/cdn-cgi/trace"} {
-		request, _ := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-		response, err := client.Do(request)
+	return tlsTargetsAvailable(ctx, dialer, []string{"www.gstatic.com:443", "www.cloudflare.com:443"}, nil, attemptTimeout)
+}
+
+// A whitelist path may be slow enough that waiting for an HTTP response gives
+// a false outage. A verified TLS handshake proves that the selected proxy can
+// establish an authenticated Internet connection without depending on page
+// response time or contents.
+func tlsTargetsAvailable(ctx context.Context, dialer proxy.Dialer, targets []string, roots *x509.CertPool, attemptTimeout time.Duration) bool {
+	for _, target := range targets {
+		host, _, err := net.SplitHostPort(target)
+		if err != nil {
+			continue
+		}
+		attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
+		connection, err := dialProxyContext(attemptCtx, dialer, "tcp", target)
+		if err != nil {
+			cancel()
+			continue
+		}
+		deadline := time.Now().Add(attemptTimeout)
+		if parentDeadline, ok := attemptCtx.Deadline(); ok && parentDeadline.Before(deadline) {
+			deadline = parentDeadline
+		}
+		_ = connection.SetDeadline(deadline)
+		secure := tls.Client(connection, &tls.Config{ServerName: host, RootCAs: roots, MinVersion: tls.VersionTLS12})
+		err = secure.HandshakeContext(attemptCtx)
+		_ = secure.Close()
+		cancel()
 		if err == nil {
-			response.Body.Close()
-			if response.StatusCode >= 200 && response.StatusCode < 400 {
-				return true
-			}
+			return true
 		}
 	}
 	return false
+}
+
+func dialProxyContext(ctx context.Context, dialer proxy.Dialer, network, address string) (net.Conn, error) {
+	if contextual, ok := dialer.(proxy.ContextDialer); ok {
+		return contextual.DialContext(ctx, network, address)
+	}
+	return dialer.Dial(network, address)
 }
