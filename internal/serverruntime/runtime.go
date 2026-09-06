@@ -59,20 +59,21 @@ func DefaultConfig() Config {
 }
 
 type Runtime struct {
-	Config                   Config
-	Store                    *serverstate.Store
-	CallServer               *callserver.Manager
-	callServerError          string
-	CallTransport            *callserver.Runtime
-	apiToken                 string
-	controllerSecret         string
-	client                   *http.Client
-	mu                       sync.RWMutex
-	lastDecision             controller.Decision
-	lastObservation          controller.Observation
-	connectivityProbeFactory connectivityProbeFactory
-	startedAt                int64
-	webAuthAttempts          webAuthLimiter
+	Config                     Config
+	Store                      *serverstate.Store
+	CallServer                 *callserver.Manager
+	callServerError            string
+	CallTransport              *callserver.Runtime
+	apiToken                   string
+	controllerSecret           string
+	client                     *http.Client
+	mu                         sync.RWMutex
+	lastDecision               controller.Decision
+	lastObservation            controller.Observation
+	connectivityProbeFactory   connectivityProbeFactory
+	connectivityTopologyLookup connectivityTopologyLookup
+	startedAt                  int64
+	webAuthAttempts            webAuthLimiter
 }
 
 func New(config Config) (*Runtime, error) {

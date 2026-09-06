@@ -89,6 +89,65 @@ func TestServerConnectivityMonitorUsesDirectInterfaceAndHysteresis(t *testing.T)
 	}
 }
 
+func TestServerConnectivityMonitorResetsCandidateOnSameInterfaceNewNetwork(t *testing.T) {
+	directory := t.TempDir()
+	runtimeEnv := filepath.Join(directory, "runtime.env")
+	if err := os.WriteFile(runtimeEnv, []byte("controller_secret=test-secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := DefaultConfig()
+	config.StateDirectory, config.ProductionState = directory, directory
+	config.ConfigDirectory, config.RuntimeEnv = directory, runtimeEnv
+	config.RequireAPIAuth = false
+	runtime, err := New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	profile := network.DefaultProfile("direct-test0")
+	if err := atomicJSON(filepath.Join(directory, "network-active.json"), profile); err != nil {
+		t.Fatal(err)
+	}
+	runtime.connectivityProbeFactory = func(string, time.Duration) mobileconnectivity.Probe {
+		return func(_ context.Context, target mobileconnectivity.Target) bool { return target.Name == "allowlist" }
+	}
+	gateway := "203.0.113.1"
+	topology := network.Topology{Interfaces: []network.Interface{{
+		Name:          "direct-test0",
+		Addresses:     []network.Address{{Family: "inet", CIDR: "203.0.113.10/24"}},
+		DefaultRoutes: []network.DefaultRoute{{Gateway: &gateway}},
+	}}}
+	runtime.connectivityTopologyLookup = func(context.Context) (network.Topology, error) { return topology, nil }
+
+	// Two allowlist observations build a candidate, still short of the
+	// three required to confirm — the interface and its attached network
+	// have not changed yet.
+	runtime.connectivityCycle(context.Background())
+	runtime.connectivityCycle(context.Background())
+	building := runtime.connectivitySnapshot()
+	if building.CandidateState != mobileconnectivity.Allowlist || building.CandidateCount != 2 {
+		t.Fatalf("candidate before network change=%#v", building)
+	}
+
+	// Same interface name, but DHCP handed out a different address and
+	// gateway: this must be treated as a new network, not a continuation of
+	// the allowlist candidate observed on the old one.
+	otherGateway := "198.51.100.1"
+	topology = network.Topology{Interfaces: []network.Interface{{
+		Name:          "direct-test0",
+		Addresses:     []network.Address{{Family: "inet", CIDR: "198.51.100.20/24"}},
+		DefaultRoutes: []network.DefaultRoute{{Gateway: &otherGateway}},
+	}}}
+	runtime.connectivityCycle(context.Background())
+	afterChange := runtime.connectivitySnapshot()
+	if afterChange.CandidateCount != 1 {
+		t.Fatalf("candidate must restart at 1 after same-name network change, got=%#v", afterChange)
+	}
+	if afterChange.DirectNetwork == building.DirectNetwork {
+		t.Fatalf("direct network fingerprint must change with the gateway: before=%q after=%q", building.DirectNetwork, afterChange.DirectNetwork)
+	}
+}
+
 func TestStatusUsesPhysicalConnectivitySnapshot(t *testing.T) {
 	runtime := cleanTestRuntime(t)
 	if err := atomicJSON(runtime.connectivityPath(), ConnectivitySnapshot{

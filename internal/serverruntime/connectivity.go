@@ -27,11 +27,13 @@ type ConnectivitySnapshot struct {
 	AttemptedAt      int64                     `json:"attempted_at"`
 	ConfirmedAt      int64                     `json:"confirmed_at"`
 	DirectInterface  string                    `json:"direct_interface,omitempty"`
+	DirectNetwork    string                    `json:"direct_network,omitempty"`
 	Observation      mobileconnectivity.Result `json:"observation"`
 	Error            string                    `json:"error,omitempty"`
 }
 
 type connectivityProbeFactory func(interfaceName string, timeout time.Duration) mobileconnectivity.Probe
+type connectivityTopologyLookup func(context.Context) (network.Topology, error)
 
 func (runtime *Runtime) RunConnectivityMonitor(ctx context.Context) {
 	ticker := time.NewTicker(runtime.Config.ConnectivityEvery)
@@ -85,7 +87,22 @@ func (runtime *Runtime) connectivityCycle(ctx context.Context) {
 		runtime.recordConnectivityError(previous, err)
 		return
 	}
-	if previous.DirectInterface != interfaceName {
+	topologyLookup := runtime.connectivityTopologyLookup
+	if topologyLookup == nil {
+		topologyLookup = discoverTopology
+	}
+	// The interface name alone survives a DHCP renewal, an AP roam, or a
+	// USB-tether reconnect that keeps the same name but attaches to a
+	// different physical network. Fold in the interface's current address and
+	// gateway so those cases also reset a stale allowlist candidate, instead
+	// of only a rename to a different interface.
+	networkID := interfaceName
+	if topology, topoErr := topologyLookup(cycle); topoErr == nil {
+		networkID = directNetworkFingerprint(topology, interfaceName)
+	} else if previous.DirectNetwork != "" {
+		networkID = previous.DirectNetwork
+	}
+	if previous.DirectInterface != interfaceName || (previous.DirectNetwork != "" && previous.DirectNetwork != networkID) {
 		previous.CandidateState, previous.CandidateCount, previous.CandidateSinceMS = "", 0, 0
 	}
 	confirmed, err := mobileconnectivity.Confirm(mobileconnectivity.ConfirmationInput{
@@ -107,9 +124,38 @@ func (runtime *Runtime) connectivityCycle(ctx context.Context) {
 		CandidateState: confirmed.CandidateState, CandidateCount: confirmed.CandidateCount,
 		CandidateSinceMS: confirmed.CandidateSinceMS,
 		Changed:          confirmed.Changed, UpdatedAt: now, AttemptedAt: now, ConfirmedAt: confirmedAt,
-		DirectInterface: interfaceName, Observation: observed,
+		DirectInterface: interfaceName, DirectNetwork: networkID, Observation: observed,
 	}
 	_ = atomicJSON(runtime.connectivityPath(), snapshot)
+}
+
+// directNetworkFingerprint identifies the physical network currently attached
+// to interfaceName, not just the interface's name. A stable name can outlive
+// the attached network across a DHCP renewal, a Wi-Fi AP roam or a tether
+// reconnect, so the fingerprint also folds in the interface's current
+// address and default gateway.
+func directNetworkFingerprint(topology network.Topology, interfaceName string) string {
+	for _, iface := range topology.Interfaces {
+		if iface.Name != interfaceName {
+			continue
+		}
+		address := ""
+		for _, candidate := range iface.Addresses {
+			if candidate.Family == "inet" {
+				address = candidate.CIDR
+				break
+			}
+		}
+		gateway := ""
+		for _, route := range iface.DefaultRoutes {
+			if route.Gateway != nil {
+				gateway = *route.Gateway
+				break
+			}
+		}
+		return interfaceName + "|" + address + "|" + gateway
+	}
+	return interfaceName
 }
 
 func (runtime *Runtime) connectivityPath() string {
