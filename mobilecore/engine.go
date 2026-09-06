@@ -44,6 +44,12 @@ func EngineTestProxiesMulti(proxiesJSON, testURLsJSON string, timeoutMs, concurr
 	return activeTransport.TestProxiesMulti(proxiesJSON, testURLsJSON, timeoutMs, concurrency)
 }
 
+// EngineVerifyProxyTLS checks one already-connected proxy with an authenticated
+// TLS handshake. It does not issue HTTP requests or perform a speed test.
+func EngineVerifyProxyTLS(proxyJSON, testURLsJSON string, timeoutMs int) string {
+	return activeTransport.VerifyProxyTLS(proxyJSON, testURLsJSON, timeoutMs)
+}
+
 // EngineFilterCountries resolves the actual proxy egress country and removes
 // countries excluded by the user's normal-mode policy.
 func EngineFilterCountries(proxiesJSON, excludedJSON string, timeoutMs, concurrency int) string {

@@ -35,6 +35,7 @@ func (qualificationTransport) TestTCP(payload string, _, _ int) string {
 func (qualificationTransport) TestProxiesMulti(payload, _ string, _, _ int) string {
 	return probeReply(payload, 40, 0)
 }
+func (qualificationTransport) VerifyProxyTLS(string, string, int) string { return `{"ok":true}` }
 func (qualificationTransport) FilterCountries(payload, _ string, _, _ int) string {
 	return probeReply(payload, 40, 0)
 }

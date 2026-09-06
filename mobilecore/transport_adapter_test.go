@@ -1,6 +1,10 @@
 package mobilecore
 
-import mobiletransport "github.com/gooog1111/orcheroute/internal/core/transport"
+import (
+	"testing"
+
+	mobiletransport "github.com/gooog1111/orcheroute/internal/core/transport"
+)
 
 type transportContractCheck struct{}
 
@@ -17,6 +21,7 @@ func (transportContractCheck) TestTCP(string, int, int) string             { ret
 func (transportContractCheck) TestProxiesMulti(string, string, int, int) string {
 	return "urls"
 }
+func (transportContractCheck) VerifyProxyTLS(string, string, int) string       { return "tls" }
 func (transportContractCheck) FilterCountries(string, string, int, int) string { return "geo" }
 func (transportContractCheck) SpeedAvailable(string, int) string               { return "speed-available" }
 func (transportContractCheck) TestSpeed(string, string, int, int, float64, float64) string {
@@ -27,3 +32,12 @@ func (transportContractCheck) TestSpeedAdaptive(string, string, int, int, float6
 }
 
 var _ mobiletransport.Engine = transportContractCheck{}
+
+func TestEngineVerifyProxyTLSUsesTransportContract(t *testing.T) {
+	previous := activeTransport
+	activeTransport = transportContractCheck{}
+	defer func() { activeTransport = previous }()
+	if result := EngineVerifyProxyTLS(`{"name":"node"}`, `["https://example.com"]`, 8000); result != "tls" {
+		t.Fatalf("unexpected TLS verification result: %q", result)
+	}
+}

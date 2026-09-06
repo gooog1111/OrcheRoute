@@ -13,6 +13,7 @@ func engineStopTun() string                                             { return
 func engineTestProxies(string, string, int, int) string                 { return engineUnavailable() }
 func engineTestTCP(string, int, int) string                             { return engineUnavailable() }
 func engineTestProxiesMulti(string, string, int, int) string            { return engineUnavailable() }
+func engineVerifyProxyTLS(string, string, int) string                   { return engineUnavailable() }
 func engineFilterCountries(string, string, int, int) string             { return engineUnavailable() }
 func engineSpeedAvailable(string, int) string                           { return engineUnavailable() }
 func platformProbeConnectivity(string, string, int) string              { return engineUnavailable() }

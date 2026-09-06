@@ -37,6 +37,9 @@ func (embeddedTransport) TestTCP(proxiesJSON string, timeoutMs, concurrency int)
 func (embeddedTransport) TestProxiesMulti(proxiesJSON, testURLsJSON string, timeoutMs, concurrency int) string {
 	return engineTestProxiesMulti(proxiesJSON, testURLsJSON, timeoutMs, concurrency)
 }
+func (embeddedTransport) VerifyProxyTLS(proxyJSON, testURLsJSON string, timeoutMs int) string {
+	return engineVerifyProxyTLS(proxyJSON, testURLsJSON, timeoutMs)
+}
 func (embeddedTransport) FilterCountries(proxiesJSON, excludedJSON string, timeoutMs, concurrency int) string {
 	return engineFilterCountries(proxiesJSON, excludedJSON, timeoutMs, concurrency)
 }

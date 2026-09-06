@@ -20,6 +20,7 @@ import (
 	"time"
 
 	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
+	"github.com/gooog1111/orcheroute/internal/core/transportcheck"
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/component/dialer"
@@ -286,6 +287,43 @@ func engineTestProxiesMulti(proxiesJSON, testURLsJSON string, timeoutMs, concurr
 		return current
 	})
 	return encode(map[string]any{"ok": true, "result": map[string]any{"nodes": results}})
+}
+
+func engineVerifyProxyTLS(proxyJSON, testURLsJSON string, timeoutMs int) string {
+	var mapping map[string]any
+	var testURLs []string
+	if json.Unmarshal([]byte(proxyJSON), &mapping) != nil || len(mapping) == 0 ||
+		json.Unmarshal([]byte(testURLsJSON), &testURLs) != nil || len(testURLs) == 0 || len(testURLs) > 16 {
+		return engineError("invalid_proxy_tls_check")
+	}
+	if timeoutMs < 1000 || timeoutMs > 30000 {
+		timeoutMs = 8000
+	}
+	proxy, err := adapter.ParseProxy(mapping)
+	if err != nil {
+		return encode(map[string]any{"ok": true, "result": map[string]any{"alive": false, "error": "invalid_proxy"}})
+	}
+	totalTimeout := time.Duration(timeoutMs) * time.Millisecond
+	attemptTimeout := 4 * time.Second
+	if totalTimeout < attemptTimeout {
+		attemptTimeout = totalTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), totalTimeout)
+	defer cancel()
+	delay, err := transportcheck.VerifiedTLS(ctx, testURLs, nil, attemptTimeout, func(ctx context.Context, _, address string) (net.Conn, error) {
+		metadata := C.Metadata{}
+		if err := metadata.SetRemoteAddress(address); err != nil {
+			return nil, err
+		}
+		return proxy.DialContext(ctx, &metadata)
+	})
+	result := map[string]any{"alive": err == nil}
+	if err == nil {
+		result["delay_ms"] = int(delay / time.Millisecond)
+	} else {
+		result["error"] = "tls_transport_unavailable"
+	}
+	return encode(map[string]any{"ok": true, "result": result})
 }
 
 func engineFilterCountries(proxiesJSON, excludedJSON string, timeoutMs, concurrency int) string {

@@ -630,11 +630,11 @@ public final class OrcheRouteVpnService extends VpnService {
 			if (runtime.verifyActiveProxyTransport()) {
 				consecutiveWhitelistHealthFailures = 0;
 				runtime.onProxyHealth(true);
-				Log.i("OrcheRouteHealth", "Active whitelist proxy passed transport URL-test");
+				Log.i("OrcheRouteHealth", "Active whitelist proxy passed verified TLS check");
 				return;
 			}
 		} catch (Throwable verificationError) {
-			Log.w("OrcheRouteHealth", "Active whitelist proxy URL-test failed: " + verificationError.getMessage());
+			Log.w("OrcheRouteHealth", "Active whitelist proxy TLS check failed: " + verificationError.getMessage());
 		}
 		int failures = ++consecutiveWhitelistHealthFailures;
 		if (failures < 3) {
