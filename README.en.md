@@ -69,9 +69,9 @@ working connection and routes traffic according to the rules `direct`, `proxy` a
 
 ## Download
 
-- **Current stable version: 0.7.5** (Android `versionCode 86`)
-- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.5/OrcheRoute-Android-0.7.5-code86-arm64.apk)
-- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.5/OrcheRoute-Linux-Server-0.7.5-amd64.deb)
+- **Current stable version: 0.8.0** (Android `versionCode 88`)
+- [Download Android arm64 APK](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.0/OrcheRoute-Android-0.8.0-code88-arm64.apk)
+- [Download Linux Server amd64 DEB](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.0/OrcheRoute-Linux-Server-0.8.0-amd64.deb)
 - [Страница последнего стабильного выпуска](https://github.com/gooog1111/OrcheRoute/releases/latest)
 - [Все выпуски и beta-версии](https://github.com/gooog1111/OrcheRoute/releases)
 
@@ -127,8 +127,9 @@ and OrcheRoute backups.
 - automatically recognize the supported subscription format;
 - discard duplicate servers and duplicate subscriptions;
 - check servers at the TCP, URL-test and speed-test stages;
-- rank production servers by latency, speed and stability;- switch between the main and emergency lists of servers;
-- separately find servers operating under the operator’s “white list” mode;
+- rank servers by latency, speed and stability;
+- manually select Android servers from one list grouped by subscription;
+- use main, emergency and restricted-network lists on Linux Server;
 - apply routes by domains, IP/CIDR, ports, protocols, GeoIP and GeoSite;
 - intercept normal DNS requests inside Android VPN and apply to them
   selected routing;
@@ -137,7 +138,21 @@ and OrcheRoute backups.
 - change the design theme common to Android and Linux: “The Matrix”, Hello Kitty,
   Liquid Glass, Windows 95, dark or light.
 
-## How automation works
+## Android manual control
+
+Android uses one main server list containing enabled built-in sources and user
+subscriptions. Check a single subscription or the complete list, then select a
+server manually. Network changes, failed checks and transport errors do not
+select another server or turn off the VPN. A separate button retries the selected
+connection. To update from beta to stable, disable “Beta versions” in Updates
+and check for an update.
+
+FreeTURN first tries its built-in automatic VK verification and opens a manual
+CAPTCHA when needed. Closing that window does not stop the VPN. Pending checks
+for additional streams do not hide an already working connection. If no streams
+are connected and VK requires manual verification, it must still be completed.
+
+## How Linux Server automation works
 
 OrcheRoute independently monitors the state of the physical network and distinguishes between three
 states:
