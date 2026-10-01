@@ -3,16 +3,16 @@
 <!-- LANG_END -->
 
 <!-- STATS_START -->
-<!-- auto-updated by GitHub Actions · 2026-09-02 19:19 UTC -->
+<!-- auto-updated by GitHub Actions · 2026-09-07 01:17 UTC -->
 
-[![Views local](https://img.shields.io/badge/Views_local-2-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Views GitHub](https://img.shields.io/badge/Views_GitHub-6-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
+[![Views local](https://img.shields.io/badge/Views_local-3-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
+[![Views GitHub](https://img.shields.io/badge/Views_GitHub-5-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
 [![Unique visitors](https://img.shields.io/badge/Unique-3-blue?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Clones](https://img.shields.io/badge/Clones-333-purple?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
+[![Clones](https://img.shields.io/badge/Clones-256-purple?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
 [![Stars](https://img.shields.io/badge/Stars-0-yellow?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute/stargazers)
 [![Forks](https://img.shields.io/badge/Forks-0-green?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute/network/members)
-[![Downloads latest release](https://img.shields.io/badge/Downloads_latest_release-6-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases/latest)
-[![Downloads total assets](https://img.shields.io/badge/Downloads_total_assets-164-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases)
+[![Downloads latest release](https://img.shields.io/badge/Downloads_latest_release-10-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases/latest)
+[![Downloads total assets](https://img.shields.io/badge/Downloads_total_assets-202-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases)
 
 <!-- STATS_END -->
 
@@ -23,7 +23,7 @@
 <!-- GRAPH_END -->
 
 <!-- ISSUES_START -->
-<!-- auto-updated by GitHub Actions · 2026-09-02 19:19 UTC -->
+<!-- auto-updated by GitHub Actions · 2026-09-07 01:17 UTC -->
 
 ## Issues
 
@@ -69,9 +69,9 @@ working connection and routes traffic according to the rules `direct`, `proxy` a
 
 ## Download
 
-- **Current stable version: 0.7.4** (Android `versionCode 85`)
-- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.4/OrcheRoute-Android-0.7.4-code85-arm64.apk)
-- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.4/OrcheRoute-Linux-Server-0.7.4-amd64.deb)
+- **Current stable version: 0.7.5** (Android `versionCode 86`)
+- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.5/OrcheRoute-Android-0.7.5-code86-arm64.apk)
+- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.7.5/OrcheRoute-Linux-Server-0.7.5-amd64.deb)
 - [Страница последнего стабильного выпуска](https://github.com/gooog1111/OrcheRoute/releases/latest)
 - [Все выпуски и beta-версии](https://github.com/gooog1111/OrcheRoute/releases)
 
@@ -94,7 +94,7 @@ Install the downloaded DEB via APT so that the necessary network components
 were installed automatically:
 
 ```bash
-sudo apt install ./OrcheRoute-Linux-Server-0.7.4-amd64.deb
+sudo apt install ./OrcheRoute-Linux-Server-0.7.5-amd64.deb
 ```
 
 With direct `dpkg -i` WebUI also starts, but to enable VPN transport
@@ -107,8 +107,15 @@ the subscription contains FreeTURN, VLESS Reality, Trojan TLS and Hysteria2; def
 SNI `m.vk.ru` is used and ports TCP 24443, TCP 24444 and UDP 24445.
 FreeTURN accepts external TCP traffic and forwards it to the built-in Xray;
 VLESS/Trojan/Hysteria2 listeners work through an isolated instance
-complete Mihomo and do not change the current outgoingrouting. The expiration date applies to the entire subscription; traffic counter beta
-For now, only the FreeTURN path is taken into account.
+complete Mihomo and do not change the current outgoingrouting. The expiration date applies to the entire subscription. Traffic counter is accurate
+for the FreeTURN path (taken from the AWG interface counters) and is approximately for
+VLESS/Trojan/Hysteria2 (active connections are polled every 5 seconds
+Mihomo; a session that managed to fully open and close between two polls,
+as well as the “tail” of the already seen session between the last survey and its closing, in
+the counter does not fall). For accurate traffic limits, rely on this counter
+it is impossible. By default, only the Internet is available to connected clients - local
+the server network and other connected clients are isolated; LAN access is possible
+enable it explicitly in the VPN server settings.
 
 `sudo apt remove orcheroute` saves settings, authorization, subscriptions,
 routes and condition. `sudo apt purge orcheroute` completely removes this data
@@ -120,15 +127,15 @@ and OrcheRoute backups.
 - automatically recognize the supported subscription format;
 - discard duplicate servers and duplicate subscriptions;
 - check servers at the TCP, URL-test and speed-test stages;
-- rank production servers by latency, speed and stability;
-- switch between the main and emergency lists of servers;
+- rank production servers by latency, speed and stability;- switch between the main and emergency lists of servers;
 - separately find servers operating under the operator’s “white list” mode;
 - apply routes by domains, IP/CIDR, ports, protocols, GeoIP and GeoSite;
 - intercept normal DNS requests inside Android VPN and apply to them
   selected routing;
 - update GeoIP and GeoSite from the selected source;
 - save settings, subscriptions and routes between restarts and updates.
-- change the design theme common to Android and Linux: “The Matrix”, Hello Kitty,Liquid Glass, Windows 95, dark or light.
+- change the design theme common to Android and Linux: “The Matrix”, Hello Kitty,
+  Liquid Glass, Windows 95, dark or light.
 
 ## How automation works
 
@@ -140,8 +147,7 @@ states:
 - **Only white lists are available.** The application generates a separate list from
   servers actually available on a limited network. Regional filter for this
   no verification is applied, and all traffic, except for explicitly blocked traffic, goes through the VPN.
-- **No network.** The VPN is turned off so as not to hold the broken tunnel, and
-  is restored after the appearance of a suitable network, if it was turned on before the accident.
+- **No network.** The VPN is turned off so as not to hold the broken tunnel, andis restored after the appearance of a suitable network, if it was turned on before the accident.
 
 In automatic mode, the server is held until failure. Manual mode secures
 selected server until the user re-enables automatic mode.
@@ -154,7 +160,8 @@ The rule can be directed to one of three actions:
 - `proxy` — through the selected VPN server;
 - `block` — block the connection.
 
-Supports individual IP addresses, CIDR and IP ranges, domain masks,GeoIP/GeoSite, protocols and independent port expressions, such as `:5000`,
+Supports individual IP addresses, CIDR and IP ranges, domain masks,
+GeoIP/GeoSite, protocols and independent port expressions, such as `:5000`,
 `:5000-6000` or `:5000,5002,5005`.
 
 Before applying non-standard rules, leave access to the local network and
@@ -171,8 +178,7 @@ To the VPN server: an erroneous `block` or `direct` rule may make the connection
 ## # Transport FreeTURN
 
 - [samosvalishe/free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy)
-  used as a single client and server FreeTURN runtime;
-- `third_party/free-turn-proxy` contains a verified upstream revision
+  used as a single client and server FreeTURN runtime;- `third_party/free-turn-proxy` contains a verified upstream revision
   with a minimal patch for isolating failures of independent VK Call providers.
 
 Credit(s), license, and original revision(s) are listed in `THIRD_PARTY_NOTICES.md`.
@@ -186,7 +192,9 @@ With a clean installation, two public sources are available. They can be turned 
 - [EbraSha/free-v2ray-public-list](https://github.com/ebrasha/free-v2ray-public-list)
   — [используемый список серверов](https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt);
 - [Au1rxx/free-vpn-subscriptions](https://github.com/Au1rxx/free-vpn-subscriptions)
-  — [используемая V2Ray/Base64-подписка](https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt).These repositories are not owned by OrcheRoute. Composition, availability and safety
+  — [используемая V2Ray/Base64-подписка](https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt).
+
+These repositories are not owned by OrcheRoute. Composition, availability and safety
 public servers are controlled by their authors and node owners. Consider
 them as an emergency reserve: for permanent operation it is better to add your own trusted
 subscription. Do not transmit sensitive data through unknown servers without application
@@ -206,8 +214,7 @@ The application supports three ready-made sources:
   [GeoIP](https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat)
   and [GeoSite](https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat).
 
-You can also specify your own direct HTTPS links to compatible
-`geoip.dat` and `geosite.dat`. One selected set is used at a time.
+You can also specify your own direct HTTPS links to compatible`geoip.dat` and `geosite.dat`. One selected set is used at a time.
 
 ## Android data and permissions
 
@@ -216,7 +223,8 @@ applications. OrcheRoute does not require registration. To operate the applicati
 networks, VPN system permission, foreground notification and camera access only when scanning
 QR code.
 
-Uninstalling an application deletes its local data. Before reinstalling with anotherExport important subscriptions and servers with a signing certificate.
+Uninstalling an application deletes its local data. Before reinstalling with another
+Export important subscriptions and servers with a signing certificate.
 
 ## Limitations
 
@@ -232,8 +240,7 @@ Uninstalling an application deletes its local data. Before reinstalling with ano
 ## Development documentation
 
 - [API.md](API.md) — local HTTP API;
-- [ANDROID_ARCHITECTURE.md](ANDROID_ARCHITECTURE.md) — Android application device;
-- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) - third-party components and licenses.
+- [ANDROID_ARCHITECTURE.md](ANDROID_ARCHITECTURE.md) — Android application device;- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) - third-party components and licenses.
 
 ## Local check and build
 
@@ -246,9 +253,19 @@ The single sign-on checks only supported targets - Android and Linux Server:
 On Windows, Android is built locally, and Linux Server is built in WSL
 `Ubuntu-24.04`. Individual goals: `android`, `linux-server`, `web` and `common`.
 On Linux, `./scripts/build-all.sh all` is used. Build via GitHub Actions
-prohibited in the project.Current development is carried out in a single branch `main`. Stable versions
-are fixed with the `v*` tags, and test Android builds with the `android-beta` tag.
-Builds and checks are performed locally only; workflow GitHub Actions have been removed.
+prohibited in the project.
+
+Android is built with the `release` option, without `debuggable`. Before assembly, set
+environment variables `ORCHEROUTE_ANDROID_KEYSTORE`, `ORCHEROUTE_ANDROID_KEY_ALIAS`,
+`ORCHEROUTE_ANDROID_STORE_PASSWORD` and `ORCHEROUTE_ANDROID_KEY_PASSWORD`.
+Use **the same signing certificate that signed the installed application**:
+the new key will not allow updating on top of it. Don't add Keystore or passwords to Git.
+Without explicit signing parameters, the builder will fail rather than create the debug-APK
+under the guise of a release. To test Java code without releasing the package, you can run
+`:app:compileDebugJavaWithJavac` from the `android` catalog.
+
+Current development is carried out in a single branch `main`. Stable versions
+are fixed with the `v*` tags, and test Android builds with the `android-beta` tag.Builds and checks are performed locally only; workflow GitHub Actions have been removed.
 
 ## Licenses and attribution
 
