@@ -68,6 +68,7 @@ type Runtime struct {
 	controllerSecret           string
 	client                     *http.Client
 	mu                         sync.RWMutex
+	subscriptionStartMu        sync.Mutex
 	lastDecision               controller.Decision
 	lastObservation            controller.Observation
 	connectivityProbeFactory   connectivityProbeFactory

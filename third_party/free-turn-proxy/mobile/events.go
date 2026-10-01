@@ -2,6 +2,7 @@ package mobile
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,9 +44,39 @@ func currentSink() EventSink {
 	return nil
 }
 
+var captchaDisplay = struct {
+	sync.Mutex
+	pending string
+	shown   bool
+}{}
+
+// Extra provider credentials must not interrupt an already usable stream.
+func captchaDisplayUpdate(url *string, streams int) (string, bool) {
+	captchaDisplay.Lock()
+	defer captchaDisplay.Unlock()
+	if url != nil {
+		captchaDisplay.pending = *url
+	}
+	if captchaDisplay.pending == "" || streams > 0 {
+		if captchaDisplay.shown {
+			captchaDisplay.shown = false
+			return "", true
+		}
+		return "", false
+	}
+	if !captchaDisplay.shown {
+		captchaDisplay.shown = true
+		return captchaDisplay.pending, true
+	}
+	return "", false
+}
+
 func emitCaptcha(url string) {
-	if s := currentSink(); s != nil {
-		s.OnCaptcha(url)
+	value, changed := captchaDisplayUpdate(&url, GetState().Streams)
+	if changed {
+		if s := currentSink(); s != nil {
+			s.OnCaptcha(value)
+		}
 	}
 }
 
@@ -54,6 +85,11 @@ type observer struct{}
 func (observer) OnPhase(phase session.Phase, streams, total int, errMsg string) {
 	if s := currentSink(); s != nil {
 		s.OnState(string(phase), streams, total, errMsg)
+	}
+	if value, changed := captchaDisplayUpdate(nil, streams); changed {
+		if s := currentSink(); s != nil {
+			s.OnCaptcha(value)
+		}
 	}
 }
 

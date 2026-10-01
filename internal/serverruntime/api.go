@@ -1147,6 +1147,8 @@ func (runtime *Runtime) saveDefaultEmergency(ctx context.Context, body map[strin
 }
 
 func (runtime *Runtime) startUpdate(ids []string, updateMode string, groups ...string) (int, any) {
+	runtime.subscriptionStartMu.Lock()
+	defer runtime.subscriptionStartMu.Unlock()
 	operation := filepath.Join(runtime.Config.StateDirectory, "update-operation.json")
 	cancelPath := filepath.Join(runtime.Config.StateDirectory, "update-cancel.request")
 	var current map[string]any
@@ -1174,7 +1176,9 @@ func (runtime *Runtime) startUpdate(ids []string, updateMode string, groups ...s
 			"--policy", filepath.Join(runtime.Config.StateDirectory, "qualification-policy.json"),
 			"--mihomo", runtime.Config.MihomoBinary,
 		}
-		arguments = append(arguments, "--force")
+		if updateMode != "scheduled" {
+			arguments = append(arguments, "--force")
+		}
 		if updateMode == "check" {
 			arguments = append(arguments, "--cached-only")
 		} else {

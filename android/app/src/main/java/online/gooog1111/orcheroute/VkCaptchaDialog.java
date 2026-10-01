@@ -110,7 +110,8 @@ final class VkCaptchaDialog {
         webView.addJavascriptInterface(new CaptchaBridge(), BRIDGE_NAME);
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(webView, CAPTURE_SCRIPT, SCRIPT_ORIGINS);
-            WebViewCompat.addDocumentStartJavaScript(webView, VkCaptchaAutoClick.SCRIPT, SCRIPT_ORIGINS);
+            WebViewCompat.addDocumentStartJavaScript(webView, VkCaptchaAutoClick.SCRIPT,
+                    Set.of("https://id.vk.ru", "https://api.vk.ru", "http://localhost:8765", "http://127.0.0.1:8765"));
         }
         webView.setWebViewClient(new CaptchaClient());
         overlay.addView(webView, new FrameLayout.LayoutParams(

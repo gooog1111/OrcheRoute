@@ -4,8 +4,9 @@ package online.gooog1111.orcheroute;
 final class VkCaptchaAutoClick {
     static final String SCRIPT = """
             (() => {
-              if (location.protocol !== 'https:' || !['id.vk.ru', 'api.vk.ru'].includes(location.hostname)
-                  || !location.pathname.startsWith('/not_robot_captcha') || window.__orcheCaptchaClick) return;
+              const remote = location.protocol === 'https:' && ['id.vk.ru', 'api.vk.ru'].includes(location.hostname);
+              const local = location.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(location.hostname) && location.port === '8765';
+              if ((!remote && !local) || !location.pathname.startsWith('/not_robot_captcha') || window.__orcheCaptchaClick) return;
               window.__orcheCaptchaClick = true;
               const clicked = new WeakSet();
               let count = 0, timer;

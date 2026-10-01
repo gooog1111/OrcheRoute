@@ -5,7 +5,7 @@ import vm from "node:vm";
 
 const java = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/VkCaptchaAutoClick.java", import.meta.url), "utf8");
 const script = java.match(/SCRIPT = """([\s\S]*?)""";/)[1].replaceAll("\\\\", "\\");
-function fixture(host = "id.vk.ru", text = "Я не робот", checkbox = false) {
+function fixture(host = "id.vk.ru", text = "Я не робот", checkbox = false, protocol = "https:", port = "") {
   let clicks = 0, stopped = false, tick, touch;
   const element = {
     innerText: text, disabled: false, checked: false,
@@ -13,7 +13,7 @@ function fixture(host = "id.vk.ru", text = "Я не робот", checkbox = fals
     getBoundingClientRect: () => ({ width: 100, height: 30 }), click: () => clicks++,
   };
   const context = vm.createContext({
-    location: { protocol: "https:", hostname: host, pathname: "/not_robot_captcha" },
+    location: { protocol, hostname: host, port, pathname: "/not_robot_captcha" },
     window: { addEventListener() {} },
     document: { querySelectorAll: () => [element], addEventListener: (_, fn) => touch = fn },
     getComputedStyle: () => ({ visibility: "visible", display: "block", opacity: "1" }),
@@ -31,6 +31,11 @@ test("CAPTCHA window clicks initial control only once, including nonbreaking spa
 test("CAPTCHA window does not click unrelated buttons or foreign origins", () => {
   assert.equal(fixture("evil.example").clicks(), 0);
   assert.equal(fixture("id.vk.ru", "Закрыть").clicks(), 0);
+});
+test("FreeTURN local proxy CAPTCHA is supported only on the dedicated port", () => {
+  assert.equal(fixture("localhost", "Я не робот", false, "http:", "8765").clicks(), 1);
+  assert.equal(fixture("127.0.0.1", "Я не робот", false, "http:", "8765").clicks(), 1);
+  assert.equal(fixture("localhost", "Я не робот", false, "http:", "19110").clicks(), 0);
 });
 test("CAPTCHA window supports checkbox and stops automation on real user interaction", () => {
   const f = fixture("api.vk.ru", "", true);

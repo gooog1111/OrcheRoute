@@ -739,7 +739,7 @@ html[data-release-channel="beta"][data-theme] {
 @keyframes modal-in { from { opacity: 0; transform: translateY(10px) scale(.99); } }
 @keyframes operation-in { from { opacity: 0; transform: translateX(10px); } }
 @keyframes operation-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
 
 @media (max-width: 1640px) and (min-width: 761px) {
   .modal-backdrop.has-operation { display: grid; grid-template-columns: 1fr; padding: 16px; }

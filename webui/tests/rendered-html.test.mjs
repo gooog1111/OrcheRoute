@@ -706,3 +706,8 @@ test("call server accepts additional VK links for parallel FreeTURN providers", 
 import "./mobile-connection.test.mjs";
 import "./captcha-click.test.mjs";
 import "./android-memory.test.mjs";
+test("reduced motion stops animations instead of accelerating infinite loops", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /prefers-reduced-motion: reduce\)[^}]*animation: none !important/);
+  assert.doesNotMatch(css, /animation-duration: \.01ms/);
+});

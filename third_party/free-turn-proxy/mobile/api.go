@@ -174,6 +174,12 @@ func SetDNSServers(servers string) {
 }
 
 func stopLocked() {
+	empty := ""
+	if _, changed := captchaDisplayUpdate(&empty, 0); changed {
+		if s := currentSink(); s != nil {
+			s.OnCaptcha("")
+		}
+	}
 	l := current.Swap(nil)
 	if l == nil {
 		// Ожидание освобождения дескриптора сессией перед возможным Restart.

@@ -54,7 +54,10 @@ fi
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable orcheroute-go.service >/dev/null
 systemctl restart orcheroute-go.service
-systemctl enable --now orcheroute-update.timer orcheroute-geo.timer
+# Subscription intervals are now owned by the Go runtime and its operation
+# guard, not a second process which bypasses the shared API operation state.
+systemctl disable --now orcheroute-update.timer >/dev/null 2>&1 || true
+systemctl enable --now orcheroute-geo.timer
 if [ "$core_was_active" -eq 1 ]; then
     # Preserve the running state even when converting a manual installation
     # into a dpkg-managed one. A clean install remains stopped.
