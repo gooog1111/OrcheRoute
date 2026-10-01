@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { actions, getAndroidAppUpdateStatus, installAndroidAppUpdate, loadDashboard, loadLiveDashboard, type AndroidAppUpdateStatus, type ConnectionIdentity, type DashboardData, type Node } from "../lib/api";
 import { platformCapabilities } from "../platform/runtime";
+import { mobileConnectionView } from "../lib/mobile-connection.mjs";
 import { releaseBranding } from "../platform/release";
 import { ChevronIcon, CloseIcon, GlobeIcon, PowerIcon, RefreshIcon, RouteIcon, ServerIcon, SettingsIcon } from "./Icons";
 import { SettingsModal as EditableSettingsModal, type SettingsTab } from "./SettingsModal";
@@ -215,10 +216,9 @@ export function Dashboard() {
       setError(reason instanceof Error ? reason.message : "Не удалось сформировать список серверов");
     }
   };
-  const stateLabel = enabled
-    ? platform.kind === "android" && data?.status.mobile?.state === "error"
-      ? "Выбранный сервер недоступен"
-      : (statusText[data?.status.connectivity ?? "starting"] ?? "Подключение")
+  const mobileConnection = mobileConnectionView(enabled, data?.status.mobile?.state);
+  const stateLabel = platform.kind === "android" ? mobileConnection.label : enabled
+    ? (statusText[data?.status.connectivity ?? "starting"] ?? "Подключение")
     : "Готов к запуску";
 
   const toggle = async () => {
@@ -287,7 +287,7 @@ export function Dashboard() {
             <span className="status-dot" />
             {loading ? "Подключение к серверу" : stateLabel}
           </div>
-          <h1>{enabled ? "OrcheRoute включён" : "OrcheRoute выключен"}</h1>
+          <h1>{platform.kind === "android" ? mobileConnection.title : enabled ? "OrcheRoute включён" : "OrcheRoute выключен"}</h1>
           {enabled && activeServerName && <p className="connected-server" title={activeServerName}><span>Сервер</span><strong>{activeServerName}</strong></p>}
           {enabled && <p className="connection-identity"><span>Direct</span>{platform.kind !== "android" && data?.status.wan.mode === "allowlist" ? "Недоступен при белых списках" : identityText(data?.status.wan.identity)}</p>}
           {enabled && <p className="connection-identity"><span>Proxy</span>{identityText(data?.status.proxy.identity)}</p>}

@@ -273,6 +273,11 @@ public final class OrcheRouteVpnService extends VpnService {
 
     @Override
     public void onDestroy() {
+        // stopTunnel clears connected. Report unexpected destruction before
+        // cleanup, without changing the user's saved manual start/stop intent.
+        if (!stopping && (connected || starting)) {
+            MobileRuntime.get(this).onTransportError("VPN-служба остановлена системой. Повторите подключение вручную.");
+        }
         stopping = true;
         stopTunnel();
 		stopFreeTURN();
@@ -280,8 +285,8 @@ public final class OrcheRouteVpnService extends VpnService {
         healthWorker.shutdownNow();
         trafficWorker.shutdownNow();
         identityWorker.shutdownNow();
-        if (connected) MobileRuntime.get(this).onTransportError("VPN-служба остановлена системой. Повторите подключение вручную.");
         connected = false;
+        stopForeground(true);
         super.onDestroy();
     }
 
