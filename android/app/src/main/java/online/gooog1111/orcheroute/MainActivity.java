@@ -177,6 +177,18 @@ public final class MainActivity extends ComponentActivity {
     protected void onDestroy() {
         if (activeInstance == this) activeInstance = null;
         if (vkCaptchaDialog != null) vkCaptchaDialog.close(false);
+        vkCaptchaDialog = null;
+        if (appUpdater != null) appUpdater.close();
+        if (webView != null) {
+            WebView old = webView;
+            webView = null;
+            old.stopLoading();
+            old.removeJavascriptInterface("OrcheRouteAndroid");
+            old.setWebViewClient(null);
+            if (root != null) root.removeView(old);
+            old.removeAllViews();
+            old.destroy();
+        }
         super.onDestroy();
     }
 
@@ -416,48 +428,54 @@ public final class MainActivity extends ComponentActivity {
     }
 
     private void dispatchQrResult(String value) {
-        runOnUiThread(() -> webView.evaluateJavascript(
+        evaluateUI(
                 "window.dispatchEvent(new CustomEvent('orcheroute:qr-scan',{detail:{value:"
                         + JSONObject.quote(value)
                         + "}}));",
                 null
-        ));
+        );
     }
 
     private void dispatchQrError(String message) {
-        runOnUiThread(() -> webView.evaluateJavascript(
+        evaluateUI(
                 "window.dispatchEvent(new CustomEvent('orcheroute:qr-error',{detail:{message:"
                         + JSONObject.quote(message)
                         + "}}));",
                 null
-        ));
+        );
     }
 
     private void dispatchFileSaveError(String message) {
-        runOnUiThread(() -> webView.evaluateJavascript(
+        evaluateUI(
                 "window.dispatchEvent(new CustomEvent('orcheroute:file-save-error',{detail:{message:"
                         + JSONObject.quote(message)
                         + "}}));",
                 null
-        ));
+        );
     }
 
     private void dispatchFileOpenResult(String content) {
-        runOnUiThread(() -> webView.evaluateJavascript(
+        evaluateUI(
                 "window.dispatchEvent(new CustomEvent('orcheroute:file-open',{detail:{content:"
                         + JSONObject.quote(content)
                         + "}}));",
                 null
-        ));
+        );
     }
 
     private void dispatchFileOpenError(String message) {
-        runOnUiThread(() -> webView.evaluateJavascript(
+        evaluateUI(
                 "window.dispatchEvent(new CustomEvent('orcheroute:file-open-error',{detail:{message:"
                         + JSONObject.quote(message)
                         + "}}));",
                 null
-        ));
+        );
+    }
+
+    private void evaluateUI(String script, android.webkit.ValueCallback<String> callback) {
+        runOnUiThread(() -> {
+            if (webView != null && !isDestroyed()) webView.evaluateJavascript(script, callback);
+        });
     }
 
     private boolean openVkCaptcha(String redirectURL) {

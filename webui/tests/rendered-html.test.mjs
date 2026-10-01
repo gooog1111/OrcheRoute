@@ -705,3 +705,4 @@ test("call server accepts additional VK links for parallel FreeTURN providers", 
 });
 import "./mobile-connection.test.mjs";
 import "./captcha-click.test.mjs";
+import "./android-memory.test.mjs";

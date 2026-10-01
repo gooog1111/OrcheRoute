@@ -50,6 +50,7 @@ final class AppUpdater {
     private int latestVersionCode;
     private long current, total;
     private boolean active;
+    private volatile boolean closed;
     private File pendingAPK;
 
     AppUpdater(MainActivity activity) {
@@ -84,7 +85,7 @@ final class AppUpdater {
     }
 
     synchronized boolean check() {
-        if (active) return false;
+        if (closed || active) return false;
 		final boolean beta = betaEnabled;
 		channel = beta ? "beta" : "stable";
         set("checking", beta ? "Проверяем обновления Beta" : "Проверяем обновления Stable", "", true, 0, 0);
@@ -100,7 +101,7 @@ final class AppUpdater {
 	}
 
 	synchronized boolean setBetaEnabled(boolean enabled) {
-		if (active) return false;
+		if (closed || active) return false;
 		betaEnabled = enabled;
 		channel = enabled ? "beta" : "stable";
 		preferences.edit().putBoolean(BETA_ENABLED, enabled).apply();
@@ -116,7 +117,7 @@ final class AppUpdater {
 	}
 
 	private synchronized boolean downloadAndInstall(boolean beta) {
-        if (active) return false;
+        if (closed || active) return false;
 		channel = beta ? "beta" : "stable";
 		set("checking", beta ? "Проверяем доступную Beta-версию" : "Проверяем обновление перед загрузкой", "", true, 0, 0);
         worker.execute(() -> {
@@ -141,7 +142,7 @@ final class AppUpdater {
     void resumeInstallIfPermitted() {
         File apk;
         synchronized (this) {
-            if (!"permission".equals(state) || pendingAPK == null || !canInstallPackages()) return;
+            if (closed || !"permission".equals(state) || pendingAPK == null || !canInstallPackages()) return;
             apk = pendingAPK;
             set("installer", "Разрешение получено. Открываем системный установщик", "", false, total, total);
         }
@@ -197,6 +198,7 @@ final class AppUpdater {
         try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(temporary)) {
             byte[] buffer = new byte[64 * 1024];
             for (int count; (count = input.read(buffer)) >= 0; ) {
+                if (closed || Thread.currentThread().isInterrupted()) throw new java.io.InterruptedIOException("Activity closed");
                 written += count;
                 if (written > total || written > MAX_APK_BYTES) throw new SecurityException("Размер APK превышает заявленный");
                 output.write(buffer, 0, count); digest.update(buffer, 0, count);
@@ -227,6 +229,7 @@ final class AppUpdater {
     }
 
     private void requestInstall(File apk) {
+        if (closed || activity.isFinishing() || activity.isDestroyed()) return;
         if (!canInstallPackages()) {
             synchronized (this) { set("permission", "Разрешите OrcheRoute устанавливать обновления", "", false, total, total); }
             try { activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + activity.getPackageName()))); }
@@ -241,6 +244,12 @@ final class AppUpdater {
     }
 
     private boolean canInstallPackages() { return Build.VERSION.SDK_INT < Build.VERSION_CODES.O || activity.getPackageManager().canRequestPackageInstalls(); }
+
+    synchronized void close() {
+        closed = true;
+        active = false;
+        worker.shutdownNow();
+    }
     private static int signingFlags() { return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ? PackageManager.GET_SIGNING_CERTIFICATES : PackageManager.GET_SIGNATURES; }
     private static boolean sameSignatures(Signature[] left, Signature[] right) {
         if (left == null || right == null || left.length != right.length) return false;
