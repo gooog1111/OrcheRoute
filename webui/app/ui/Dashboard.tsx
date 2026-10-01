@@ -295,6 +295,7 @@ export function Dashboard() {
 
         <div className="power-stage">
           <div className={`power-halo ${enabled ? "is-on" : ""}`}>
+            {themeReady && theme === "rick-morty" && <span className="portal power-portal" aria-hidden="true"><i /><i /><i /></span>}
             <button
               className={`power-button ${enabled ? "is-on" : ""}`}
               type="button"

@@ -125,9 +125,9 @@ public final class MainActivity extends ComponentActivity {
             @Override
             public void onCancel() {
                 if (freeTURNCaptchaActive) {
-                    freeTURNCaptchaActive = false;
-                    OrcheRouteVpnService.stopWithError(MainActivity.this);
-                    MobileRuntime.get(MainActivity.this).onEngineError("Подключение FreeTURN отменено");
+                    // Closing a secondary CAPTCHA must not stop already connected
+                    // streams or cancel the user's VPN request.
+                    Log.i("OrcheRouteFreeTURN", "CAPTCHA window dismissed; transport remains active");
                     return;
                 }
             }
@@ -137,8 +137,8 @@ public final class MainActivity extends ComponentActivity {
                 if (freeTURNCaptchaActive) {
                     // A transient WebView or upstream resource failure must not
                     // cancel the FreeTURN session. The local CAPTCHA proxy stays
-                    // alive and VkCaptchaDialog shows the retryable error. Only
-                    // an explicit user cancellation stops the VPN startup.
+                    // alive and VkCaptchaDialog shows the retryable error.
+                    // Closing the window leaves transport startup running.
                     Log.w("OrcheRouteFreeTURN", "CAPTCHA page error: " + message);
                 }
             }

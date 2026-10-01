@@ -155,6 +155,26 @@ func TestWatchCaptchaSuspendsTimeout(t *testing.T) {
 	}
 }
 
+func TestWatchCaptchaKeepsConnectedStreamUsable(t *testing.T) {
+	s := newTestSession(t, Options{
+		ConnectTimeout: 20 * time.Millisecond,
+		StatusInterval: 5 * time.Millisecond,
+	}, func() bool { return true })
+	s.connected.Store(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.watch(ctx, cancel) }()
+	time.Sleep(50 * time.Millisecond)
+	snap := s.Snapshot()
+	cancel()
+	if err := <-errCh; err != nil {
+		t.Fatalf("watch() stopped surviving stream: %v", err)
+	}
+	if snap.Phase != PhaseConnected || snap.Streams != 1 {
+		t.Fatalf("Snapshot = %+v, want connected with one stream during secondary CAPTCHA", snap)
+	}
+}
+
 type recordingObserver struct {
 	mu     sync.Mutex
 	phases []Phase

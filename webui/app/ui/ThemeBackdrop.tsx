@@ -53,7 +53,6 @@ export function ThemeBackdrop({ theme }: { theme: ThemeID }) {
     return (
       <div key={visibleEpoch} className="theme-backdrop rick-morty-backdrop" aria-hidden="true">
         <span className="rm-ooze"><i/><i/><i/><i/><i/></span>
-        <span className="portal portal-one"><i /><i /><i /></span>
         <span className="portal portal-two"><i /><i /><i /></span>
         <span className="dimension-orbit"><i /><i /><i /></span>
         <span className="rm-saucer"><i className="rm-saucer-beam"/><i className="rm-saucer-dome"/><i className="rm-saucer-body"/></span>

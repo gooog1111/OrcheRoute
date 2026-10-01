@@ -41,6 +41,9 @@ func TestOrcheRouteProfileBecomesTCPFreeTURNConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	proxy := config["proxy"].(map[string]any)
+	if config["vk"].(map[string]any)["manualCaptcha"] != false {
+		t.Fatal("VK must try automatic CAPTCHA verification before manual fallback")
+	}
 	if config["peer"] != "vpn.example.com:4443" || config["clientId"] != profile.VLESSUUID || proxy["mode"] != "tcp" || proxy["bond"] != true {
 		t.Fatalf("unexpected config: %#v", config)
 	}
@@ -108,6 +111,9 @@ func TestPacketProfileBecomesObfuscatedAWGTunnelConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	proxy, tunnel, obf := config["proxy"].(map[string]any), config["tunnel"].(map[string]any), config["obf"].(map[string]any)
+	if config["vk"].(map[string]any)["manualCaptcha"] != false {
+		t.Fatal("packet tunnels must also try automatic CAPTCHA verification first")
+	}
 	if proxy["mode"] != "udp" || proxy["bond"] != false || tunnel["mode"] != "awg" || obf["profile"] != "rtpopus3" {
 		t.Fatalf("unexpected packet config: %#v", config)
 	}

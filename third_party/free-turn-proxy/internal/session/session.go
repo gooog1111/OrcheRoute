@@ -383,7 +383,13 @@ func (s *Session) watch(ctx context.Context, cancel context.CancelFunc) error {
 
 			if s.captchaActive() {
 				deadline = time.Now().Add(s.opts.ConnectTimeout)
-				s.setStatus(PhaseCaptcha, n, "")
+				// One credential may still require CAPTCHA while another stream
+				// already carries traffic. Do not hide the working connection.
+				if n > 0 {
+					s.setStatus(PhaseConnected, n, "")
+				} else {
+					s.setStatus(PhaseCaptcha, n, "")
+				}
 				continue
 			}
 

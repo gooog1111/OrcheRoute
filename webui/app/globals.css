@@ -634,7 +634,7 @@ html[data-theme="rick-morty"] .app-shell::before { background: radial-gradient(c
 .portal > i:nth-child(1) { left: 9%; top: 31%; }
 .portal > i:nth-child(2) { right: 13%; top: 19%; animation-delay: -1.7s; }
 .portal > i:nth-child(3) { right: 22%; bottom: 9%; animation-delay: -3.3s; }
-.portal-one { width: min(39vw, 430px); left: 5%; top: 13%; }
+.power-halo .power-portal { width: 140%; left: 50%; top: 50%; translate: -50% -50%; z-index: 0; pointer-events: none; }
 .portal-two { width: min(23vw, 250px); right: 7%; bottom: 9%; animation-direction: reverse; animation-duration: 23s; }
 .dimension-orbit { position: absolute; left: 62%; top: 23%; width: min(20vw, 210px); aspect-ratio: 1; border: 1px solid rgba(108,225,255,.42); border-radius: 50%; opacity: .5; animation: dimension-drift 9s ease-in-out infinite alternate; }
 .dimension-orbit::before, .dimension-orbit::after { content: ""; position: absolute; inset: 23%; border: 1px dashed rgba(183,255,55,.6); border-radius: 50%; transform: rotate(58deg) scaleY(.35); }
@@ -802,7 +802,7 @@ html[data-release-channel="beta"][data-theme] {
   .retro-stars { left: 4%; bottom: 13%; font-size: 16px; }
   .retro-marquee { bottom: 5%; opacity: .6; }
   .liquid-backdrop span { width: 88vw; opacity: .38; }
-  .portal-one { width: 228px; left: calc(50% - 114px); top: 34%; opacity: .5; }
+  .power-halo .power-portal { opacity: .5; }
   .portal-two { width: 112px; right: -36px; bottom: 10%; opacity: .48; }
   .dimension-orbit { width: 92px; left: -24px; top: 19%; opacity: .54; }
   .science-symbols { left: 5%; bottom: 5%; max-width: 70%; font-size: 8px; opacity: .75; }

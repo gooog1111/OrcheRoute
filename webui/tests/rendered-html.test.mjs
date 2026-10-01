@@ -579,7 +579,7 @@ test("light skins keep diagnostics and power controls readable", async () => {
   assert.match(styles, /data-theme="windows-95"[^}]+\.power-halo::before,[\s\S]+display: none/);
   assert.match(styles, /data-theme="windows-95"[^}]+\.hero-copy[\s\S]+color: #fff/);
   assert.match(styles, /data-theme="rick-morty"/);
-  assert.match(styles, /\.portal-one/);
+  assert.match(styles, /\.power-halo \.power-portal/);
   assert.match(styles, /\.operation-panel[^}]+background: var\(--surface\)/);
   assert.match(styles, /\.picker-dialog[^}]+background: var\(--surface\)/);
   assert.doesNotMatch(styles, /\.form-field > span[^}]+color: #c6cbce/);

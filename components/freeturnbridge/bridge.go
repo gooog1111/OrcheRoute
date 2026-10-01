@@ -61,7 +61,7 @@ func ConfigFromOrcheRouteProfile(encodedProfile, listenAddress string) (string, 
 		config["proxy"] = map[string]any{"mode": "tcp", "listen": listenAddress, "bond": true}
 	}
 	config["vk"] = map[string]any{
-		"links": profile.AllInvitationURLs(), "manualCaptcha": true,
+		"links": profile.AllInvitationURLs(), "manualCaptcha": false,
 		"platform": "mobile", "streamsPerCred": 10,
 	}
 	payload, err := json.Marshal(config)

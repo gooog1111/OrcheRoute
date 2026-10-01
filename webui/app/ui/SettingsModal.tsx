@@ -236,8 +236,8 @@ export function SettingsModal({
   const navRef = useRef<HTMLElement | null>(null);
   const tabs = useMemo<SettingsTab[]>(
     () => platform.showAccessSettings
-      ? ["general", "appearance", "access", "call-server", "network", "routes", "sources", "qualification", "components"]
-      : ["general", "appearance", "network", "routes", "sources", "qualification", "components"],
+      ? ["general", "access", "call-server", "network", "routes", "sources", "qualification", "components", "appearance"]
+      : ["general", "network", "routes", "sources", "qualification", "components", "appearance"],
     [platform.showAccessSettings],
   );
 
@@ -662,11 +662,6 @@ export function SettingsModal({
               onClick={() => onTab("general")}
               label="Основное"
             />
-            <Tab
-              active={activeTab === "appearance"}
-              onClick={() => onTab("appearance")}
-              label="Оформление"
-            />
             {platform.showAccessSettings && (
               <Tab
                 active={activeTab === "access"}
@@ -699,6 +694,11 @@ export function SettingsModal({
               active={activeTab === "components"}
               onClick={() => onTab("components")}
               label="Обновления"
+            />
+            <Tab
+              active={activeTab === "appearance"}
+              onClick={() => onTab("appearance")}
+              label="Оформление"
             />
           </nav>
           <button className="settings-nav-edge right" type="button" disabled={!navEdges.right} onClick={() => scrollNavigation(1)} aria-label="Следующие разделы">›</button>
