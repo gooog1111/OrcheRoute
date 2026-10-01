@@ -790,6 +790,9 @@ function GeneralForm({
   busy: boolean;
   run: Runner;
 }) {
+  if (platformCapabilities().kind === "android") {
+    return <AndroidServerList data={data} busy={busy} run={run} />;
+  }
   const activePool = data?.status.proxy.active_pool;
   const currentNode = activePool === "whitelist" ? undefined : data?.nodes.find((node) =>
     node.selected && node.alive && (!activePool || node.pool === activePool));
@@ -845,6 +848,98 @@ function GeneralForm({
   );
 }
 
+function AndroidServerList({ data, busy, run }: {
+  data: DashboardData | null;
+  busy: boolean;
+  run: Runner;
+}) {
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState<Node | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const nodes = (data?.nodes ?? []).filter((node) => node.pool !== "whitelist");
+  const subscriptions = data?.subscriptions ?? [];
+  const groups = subscriptions.map((source) => ({
+    id: source.id,
+    name: source.name,
+    enabled: source.enabled,
+    nodes: nodes.filter((node) => node.source_id === source.id),
+  }));
+  const ungrouped = nodes.filter((node) => !subscriptions.some((source) => source.id === node.source_id));
+  if (ungrouped.length) groups.push({ id: "", name: "Другие серверы", enabled: false, nodes: ungrouped });
+  const sorted = (items: Node[]) => [...items].sort((left, right) =>
+    Number(right.selected) - Number(left.selected)
+    || Number(right.alive) - Number(left.alive)
+    || (right.score ?? 0) - (left.score ?? 0)
+    || left.display_name.localeCompare(right.display_name));
+
+  return <div className="settings-section">
+    <Heading eyebrow="Серверы" title="Основной список серверов"
+      text="Выберите сервер вручную. Сеть и проверки не переключают VPN. Встроенные источники входят в этот же список, когда включены." />
+    <ActionBar>
+      <button className="secondary-button" type="button" disabled={busy || !subscriptions.some((item) => item.enabled)}
+        onClick={() => void run(actions.checkServers, "Проверка списка завершена.", { title: "Проверяем все серверы", waitFor: "servers" })}>
+        Проверить весь список
+      </button>
+      <button className="node-delete-button" type="button" disabled={busy || !nodes.length || Boolean(data?.status.service?.enabled)}
+        onClick={() => setConfirmClear(true)}>Очистить список</button>
+    </ActionBar>
+    {groups.map((group) => {
+      const entries = sorted(group.nodes);
+      const open = expanded.includes(group.id);
+      return <div className="node-group" key={group.id || "ungrouped"}>
+        <div className="node-group-heading">
+          <span className="field-label">{group.name} · {entries.filter((node) => node.alive).length} из {entries.length}</span>
+          {group.id && <button type="button" disabled={busy || !group.enabled}
+            onClick={() => void run(() => actions.checkSubscription(group.id),
+              `Серверы «${group.name}» проверены.`, { title: `Проверяем «${group.name}»`, waitFor: "servers" })}>
+            Проверить группу
+          </button>}
+          {group.id && <button type="button" disabled={busy || !group.enabled}
+            onClick={() => void run(() => actions.refreshSubscription(group.id),
+              `Подписка «${group.name}» обновлена.`, { title: `Обновляем «${group.name}»`, waitFor: "subscriptions" })}>
+            Обновить
+          </button>}
+        </div>
+        <div className="node-list">
+          {(open ? entries : entries.slice(0, 5)).map((node) => <div className={`node-editor-row ${node.selected ? "selected" : ""}`} key={node.id}>
+            <button type="button" className="node-editor-main" disabled={busy}
+              onClick={() => void run(() => actions.setManual(node.id), `Выбран сервер ${node.display_name}.`)}>
+              <span className={`node-status ${node.alive ? "alive" : ""}`} />
+              <span><strong>{node.display_name}</strong><small>{node.alive ? "доступен" : node.activation_required ? "проверяется подключением" : "не проверен или недоступен"}</small></span>
+              <em>{node.delay_ms ? `${node.delay_ms} мс` : "—"}</em>
+            </button>
+            <button className="node-delete-button" type="button" disabled={busy || (Boolean(data?.status.service?.enabled) && node.selected)}
+              onClick={() => setDeleting(node)} aria-label={`Удалить ${node.display_name}`}>Удалить</button>
+          </div>)}
+          {entries.length > 5 && <button className="node-list-toggle" type="button" aria-expanded={open}
+            onClick={() => setExpanded((current) => open ? current.filter((id) => id !== group.id) : [...current, group.id])}>
+            {open ? "Свернуть" : `Показать все · ${entries.length}`}
+          </button>}
+          {!entries.length && <p className="empty-state">Серверов пока нет. Обновите подписку, затем проверьте группу.</p>}
+        </div>
+      </div>;
+    })}
+    {!groups.length && <p className="empty-state">Добавьте подписку или включите встроенный источник.</p>}
+    {(deleting || confirmClear) && <div className="picker-dialog-backdrop" role="presentation" onMouseDown={() => { setDeleting(null); setConfirmClear(false); }}>
+      <section className="picker-dialog subscription-delete-dialog" role="alertdialog" aria-modal="true" aria-label="Подтвердить удаление"
+        onMouseDown={(event) => event.stopPropagation()}>
+        <header><strong>{deleting ? "Удалить сервер?" : "Очистить список серверов?"}</strong></header>
+        <p>{deleting ? `«${deleting.display_name}» может вернуться при следующей проверке подписки.` : "Подписки сохранятся; серверы появятся после новой проверки."}</p>
+        <footer>
+          <button type="button" className="secondary-button" onClick={() => { setDeleting(null); setConfirmClear(false); }}>Отмена</button>
+          <button type="button" className="danger-button" disabled={busy}
+            onClick={() => void (async () => {
+              const ok = deleting
+                ? await run(() => actions.deleteNode(deleting.id), "Сервер удалён.")
+                : await run(() => actions.clearPool("primary"), "Список очищен.");
+              if (ok) { setDeleting(null); setConfirmClear(false); }
+            })()}>Удалить</button>
+        </footer>
+      </section>
+    </div>}
+  </div>;
+}
+
 function AppearanceForm({ theme, onTheme }: { theme: ThemeID; onTheme: (theme: ThemeID) => void }) {
   return (
     <div className="settings-section appearance-settings">
@@ -882,6 +977,7 @@ function QualificationForm({
   busy: boolean;
   run: Runner;
 }) {
+  const androidManual = platformCapabilities().kind === "android";
   const policy = data?.qualification?.policy;
   const [countries, setCountries] = useState<string[]>([]);
   const [speed, setSpeed] = useState("10");
@@ -985,7 +1081,7 @@ function QualificationForm({
       <Heading
         eyebrow="Квалификация"
         title="Проверка и отбор серверов"
-        text="Настройки применяются к основным и аварийным подпискам."
+        text={androidManual ? "Настройки применяются ко всем включённым подпискам." : "Настройки применяются к основным и аварийным подпискам."}
       />
       <CountryPicker value={countries} onChange={setCountries} />
       <div className="form-grid two">
@@ -1000,13 +1096,13 @@ function QualificationForm({
           <input type="number" min="10" max="100" value={stability} onChange={(event) => setStability(event.target.value)} />
         </Field>
       </div>
-      <Field
+      {!androidManual && <Field
         label="Speed-test аварийной подписки"
         hint="Проверять скорость только у лучших по URL-test серверов каждого источника"
         suffix="серверов"
       >
         <input type="number" min="1" max="10000" value={emergencyTop} onChange={(event) => setEmergencyTop(event.target.value)} />
-      </Field>
+      </Field>}
       <Heading eyebrow="Таймауты" title="Время ожидания одного сервера" compact />
       <div className="form-grid two qualification-timeouts">
         <Field label="TCP-проверка" hint="Соединение с адресом и портом" suffix="сек">
@@ -1057,7 +1153,7 @@ function QualificationForm({
         </button>
         {!validTestURLs && <small className="field-error">Укажите от 1 до 16 уникальных HTTP(S)-ссылок.</small>}
       </div>
-      <Heading eyebrow="Состояние сети" title="Контрольные адреса" compact />
+	  {!androidManual && <><Heading eyebrow="Состояние сети" title="Контрольные адреса" compact />
 	  <Toggle
 		checked={allowlistUseEmergency}
 		onChange={setAllowlistUseEmergency}
@@ -1070,7 +1166,7 @@ function QualificationForm({
         <Field label="Доступно в обычном интернете" hint="URL вне белых списков, который отвечает при полном доступе">
           <input type="url" value={openInternetProbeURL} onChange={(event) => setOpenInternetProbeURL(event.target.value)} placeholder="https://внешний-сайт.example/generate_204" />
         </Field>
-      </div>
+      </div></>}
       <ActionBar>
         <button className="primary-button" type="button" disabled={busy || !policy || !policyChanged || !validTestURLs} onClick={() => void savePolicy()}>
           Сохранить
@@ -2917,8 +3013,8 @@ function SubscriptionsForm({
       <div className="default-source-card">
         <div className="default-source-head">
           <div>
-            <strong>Встроенный аварийный список серверов</strong>
-            <small>Скачиваются и проверяются только отмеченные источники</small>
+          <strong>{platform.kind === "android" ? "Встроенные источники" : "Встроенный аварийный список серверов"}</strong>
+          <small>{platform.kind === "android" ? "Отмеченные источники добавляют серверы в основной список" : "Скачиваются и проверяются только отмеченные источники"}</small>
           </div>
           <span>
             {selectedDefaults.length} из {defaults.length}
@@ -3077,7 +3173,7 @@ function SubscriptionsForm({
             <div className="subscription-main">
               <strong>{subscription.name}</strong>
               <small>
-                {subscription.group === "primary" ? "Основная" : "Аварийная"} ·{" "}
+                {platform.kind !== "android" && <>{subscription.group === "primary" ? "Основная" : "Аварийная"} · </>}
                 {subscription.parser === "inline"
                   ? "готовые серверы"
                   : subscription.parser === "wireguard"
@@ -3884,7 +3980,7 @@ function SubscriptionEditor({
                 placeholder="Например, основной провайдер"
               />
             </Field>
-            <Field label="Группа">
+            {platformCapabilities().kind !== "android" && <Field label="Группа">
               <select
                 value={group}
                 onChange={(event) =>
@@ -3894,7 +3990,7 @@ function SubscriptionEditor({
                 <option value="primary">Основная</option>
                 <option value="emergency">Аварийная</option>
               </select>
-            </Field>
+            </Field>}
             <Field label="Интервал" suffix="мин">
               <input
                 type="number"

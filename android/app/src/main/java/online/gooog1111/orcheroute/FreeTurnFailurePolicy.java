@@ -6,13 +6,12 @@ package online.gooog1111.orcheroute;
  * both while still negotiating a connection (already handled by the
  * synchronous startup poll in OrcheRouteVpnService#startFreeTURN) and after a
  * connection was established and later dropped. Only the latter case must
- * trigger a reload — reacting to a startup-phase error here would race the
- * poll loop that already throws and reports it.
+ * be displayed to the user. A surviving stream must not tear down the VPN.
  */
 final class FreeTurnFailurePolicy {
     private FreeTurnFailurePolicy() { }
 
-    static boolean shouldRecover(String state, boolean connected, boolean stopping) {
-        return "error".equals(state) && connected && !stopping;
+    static boolean shouldReportTerminalFailure(String state, long streams, boolean connected, boolean stopping) {
+        return "error".equals(state) && streams == 0 && connected && !stopping;
     }
 }

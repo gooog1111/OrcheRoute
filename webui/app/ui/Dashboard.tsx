@@ -154,11 +154,13 @@ export function Dashboard() {
   const showAppUpdate = newerAppVersion
     && appUpdate?.latest_version !== dismissedUpdate
     && ["available", "downloading", "permission", "installer", "error"].includes(appUpdate?.state ?? "");
-  const healthy = enabled && data?.status.wan.available === true && !data?.status.stale;
+  const healthy = enabled && (platform.kind === "android"
+    ? data?.status.mobile?.state === "connected"
+    : data?.status.wan.available === true) && !data?.status.stale;
   const activePool = data?.pools.find((pool) => pool.id === data?.status.proxy.active_pool)
     ?? data?.pools.find((pool) => pool.selected);
   const activeNode = data?.nodes.find((node) =>
-    node.selected && (!data?.status.proxy.active_pool || node.pool === data.status.proxy.active_pool));
+    node.selected && (platform.kind === "android" || !data?.status.proxy.active_pool || node.pool === data.status.proxy.active_pool));
   const activeServerName = activeNode?.display_name || data?.status.proxy.active_node;
   const allAliveNodes = data?.pools.reduce((sum, pool) => sum + pool.alive, 0) ?? 0;
   const allTotalNodes = data?.pools.reduce((sum, pool) => sum + pool.total, 0) ?? 0;
@@ -213,7 +215,11 @@ export function Dashboard() {
       setError(reason instanceof Error ? reason.message : "Не удалось сформировать список серверов");
     }
   };
-  const stateLabel = enabled ? (statusText[data?.status.connectivity ?? "starting"] ?? "Проверка") : "Готов к запуску";
+  const stateLabel = enabled
+    ? platform.kind === "android" && data?.status.mobile?.state === "error"
+      ? "Выбранный сервер недоступен"
+      : (statusText[data?.status.connectivity ?? "starting"] ?? "Подключение")
+    : "Готов к запуску";
 
   const toggle = async () => {
     if (!data || busy) return;
@@ -283,7 +289,7 @@ export function Dashboard() {
           </div>
           <h1>{enabled ? "OrcheRoute включён" : "OrcheRoute выключен"}</h1>
           {enabled && activeServerName && <p className="connected-server" title={activeServerName}><span>Сервер</span><strong>{activeServerName}</strong></p>}
-          {enabled && <p className="connection-identity"><span>Direct</span>{data?.status.wan.mode === "allowlist" ? "Недоступен при белых списках" : identityText(data?.status.wan.identity)}</p>}
+          {enabled && <p className="connection-identity"><span>Direct</span>{platform.kind !== "android" && data?.status.wan.mode === "allowlist" ? "Недоступен при белых списках" : identityText(data?.status.wan.identity)}</p>}
           {enabled && <p className="connection-identity"><span>Proxy</span>{identityText(data?.status.proxy.identity)}</p>}
         </div>
 
@@ -304,15 +310,22 @@ export function Dashboard() {
           <div className="power-details">
             <small>{captureText[data?.status.network.capture_mode ?? ""] ?? "Режим не определён"}</small>
           </div>
+          {platform.kind === "android" && enabled && data?.status.mobile?.state === "error" && (
+            <button className="secondary-button" type="button" disabled={busy}
+              onClick={() => void actions.reconnectSelected().then(() => refresh(true)).catch((reason) =>
+                setError(reason instanceof Error ? reason.message : "Не удалось повторить подключение"))}>
+              Повторить подключение к выбранному серверу
+            </button>
+          )}
         </div>
 
         <div className="metrics-grid" aria-label="Состояние системы">
-          <Metric icon={<GlobeIcon />} label="Интернет" value={data?.status.wan.mode === "allowlist" ? "Белые списки" : data?.status.wan.available === true ? "Доступен" : data?.status.wan.available === false ? "Недоступен" : "Проверка"} detail={data?.status.wan.interface ?? "—"} tone={data?.status.wan.mode === "allowlist" ? "neutral" : data?.status.wan.available === true ? "good" : "neutral"} />
+          {platform.kind !== "android" && <Metric icon={<GlobeIcon />} label="Интернет" value={data?.status.wan.mode === "allowlist" ? "Белые списки" : data?.status.wan.available === true ? "Доступен" : data?.status.wan.available === false ? "Недоступен" : "Проверка"} detail={data?.status.wan.interface ?? "—"} tone={data?.status.wan.mode === "allowlist" ? "neutral" : data?.status.wan.available === true ? "good" : "neutral"} />}
           <Metric icon={<ServerIcon />} label="Серверы" value={`${aliveNodes} из ${totalNodes}`} detail={activePool?.id === "primary" ? "Основной список серверов" : activePool?.id === "emergency" ? "Аварийный список серверов" : activePool?.id === "whitelist" ? "Список серверов для белых списков" : "Все списки серверов"} tone={aliveNodes > 0 ? "good" : "neutral"} />
           <Metric icon={<RouteIcon />} label="Маршруты" value={String(routeCount(data))} detail="direct · proxy · block" tone="neutral" />
-          <Metric icon={<SettingsIcon />} label="Управление" value={data?.status.proxy.mode === "manual" ? "Ручное" : data?.status.proxy.mode === "emergency" ? "Только аварийный" : "Автоматически"} detail={<>Переключение<time>{formatTime(data?.status.proxy.last_switch ?? 0)}</time></>} tone="neutral" />
+          {platform.kind !== "android" && <Metric icon={<SettingsIcon />} label="Управление" value={data?.status.proxy.mode === "manual" ? "Ручное" : data?.status.proxy.mode === "emergency" ? "Только аварийный" : "Автоматически"} detail={<>Переключение<time>{formatTime(data?.status.proxy.last_switch ?? 0)}</time></>} tone="neutral" />}
         </div>
-        {(data?.status.wan.mode === "allowlist" || whitelistScanning) && (
+        {platform.kind !== "android" && (data?.status.wan.mode === "allowlist" || whitelistScanning) && (
           <div className={`whitelist-strip ${whitelistScanning ? "is-scanning" : ""}`}>
             <span className="status-dot" />
             <div>

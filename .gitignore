@@ -17,6 +17,7 @@ local.properties
 /PROJECT_STATUS.md
 /ARCHITECTURE_AUDIT.md
 /GO_MIGRATION.md
+/REPORT.md
 
 # Generated packages, binaries and release staging
 /dist/

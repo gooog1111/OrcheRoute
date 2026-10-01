@@ -81,17 +81,17 @@ test("uses an embedded subscription delete confirmation", async () => {
   assert.match(settings, /actions\.deleteSubscription\(deleting\.id\)/);
 });
 
-test("renders automatic and manual modes without a redundant emergency-only setting", async () => {
+test("Android keeps the prior selected server but disables automatic selection", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
-  assert.match(settings, /proxy\.mode === "auto" \? "selected"/);
-  assert.doesNotMatch(settings, /actions\.setEmergency/);
-  assert.doesNotMatch(settings, /emergency-pool-option/);
-  assert.match(settings, /<strong>Ручной режим<\/strong>/);
-  assert.doesNotMatch(settings, /<strong>Ручной сервер<\/strong>/);
-  assert.match(repository, /void setAuto\(\)[\s\S]*root\.remove\("selected_node"\);[\s\S]*selectBestLocked\(\);[\s\S]*save\(\);/);
-  assert.match(repository, /migrateEmergencyOnlyMode\(\);/);
-  assert.match(repository, /migrateEmergencyOnlyMode\(\)[\s\S]*"emergency"\.equals[\s\S]*setAuto\(\);/);
+  const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
+  assert.match(settings, /platformCapabilities\(\)\.kind === "android"[\s\S]*<AndroidServerList/);
+  assert.match(settings, /actions\.checkSubscription\(group\.id\)/);
+  assert.match(repository, /migrateManualSelection\(\)/);
+  assert.match(repository, /root\.put\("mode", "manual"\)/);
+  assert.match(repository, /synchronized JSONObject activeNode\(\)[\s\S]*return selected == null \? null/);
+  assert.match(runtime, /manual_selection_only/);
+  assert.match(runtime, /single_server_list/);
 });
 
 test("android qualification checks the complete parsed set in ordered stages", async () => {
@@ -131,27 +131,16 @@ test("android qualification sockets use the physical network selected by the mon
   assert.match(runtime, /network\.bindSocket\(duplicate\.getFileDescriptor\(\)\)/);
 });
 
-test("android whitelist scan finishes before VPN connect and checks one source contextually", async () => {
+test("Android manual checks target one subscription or the full list without changing VPN", async () => {
   const runtime = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRuntime.java", import.meta.url), "utf8");
   const repository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
-  assert.match(runtime, /private JSONObject scheduleManualCheck\(String onlyId\)[\s\S]*boolean restricted = "allowlist"\.equals\(connectivityState\(\)\)/);
-  assert.match(runtime, /if \(restricted\) enterAllowlistMode\(\)/);
+  assert.match(runtime, /private JSONObject scheduleManualCheck\(String onlyId\)[\s\S]*return scheduleRefresh\(onlyId, true, null\)/);
   assert.match(runtime, /\/v1\/subscriptions\/check[\s\S]*scheduleManualCheck\(null\)/);
   assert.match(runtime, /subscriptionId = subscriptionId\(path, "\/check"\)[\s\S]*scheduleManualCheck\(subscriptionId\)/);
-  assert.match(runtime, /scheduleRefresh\(onlyId, true, null, true, false, false\)/);
-  assert.match(runtime, /boolean restrictedScan = allowlistScan;/);
-  assert.match(runtime, /restrictedScan[\s\S]*effectivePolicy\.put\("skip_speed", true\)/);
-  assert.match(runtime, /restrictedScan[\s\S]*repository\.replaceWhitelistSource/);
-	assert.match(runtime, /awaitStableWhitelistConnection\(45_000\)/);
-	assert.match(runtime, /whitelistHealthSuccesses >= 2/);
-	assert.match(runtime, /if \(desiredEnabled\) onWhitelistPoolEmpty\(\)/);
-	assert.match(runtime, /if \("allowlist"\.equals\(current\.state\)\) enterAllowlistMode\(\)/);
-  assert.doesNotMatch(runtime, /Найден доступный сервер, подключаемся/);
-  assert.match(repository, /\.put\("selected", !whitelistMode && poolSelected\)/);
-	assert.match(repository, /\.put\("selected", whitelistMode\)/);
-	assert.match(runtime, /allowlist_use_emergency_subscriptions/);
-	assert.match(runtime, /!"emergency"\.equals\(item\.optString\("group", "primary"\)\)/);
-	assert.match(repository, /removeEmergencyWhitelistSources/);
+  assert.match(runtime, /onConnectivityChanged\([\s\S]*Network changes update socket binding only/);
+  assert.match(runtime, /automaticFailoverEnabled\(\) \{ return false; \}/);
+  assert.match(repository, /for \(int i = 0; i < nodes\.length\(\); i\+\+\)/);
+  assert.match(repository, /\.put\("total", nodes\.length\(\)\)/);
 });
 
 test("android whitelist health trusts qualification and requires repeated verified-TLS failures", async () => {
@@ -326,13 +315,13 @@ test("android dashboard follows live VPN state and shows direct and proxy identi
   assert.match(dashboard, /className="connected-server"/);
   assert.match(dashboard, /activeServerName/);
   assert.match(dashboard, /activeNode\?\.display_name \|\| data\?\.status\.proxy\.active_node/);
-  assert.match(dashboard, /data\?\.status\.wan\.mode === "allowlist" \? "Недоступен при белых списках"/);
+  assert.match(dashboard, /platform\.kind !== "android" && data\?\.status\.wan\.mode === "allowlist"/);
   assert.match(dashboard, /platform\.dashboardPollMs/);
   assert.match(platform, /kind: "android"[\s\S]*dashboardPollMs: 1000[\s\S]*liveDashboard: true/);
   assert.match(api, /loadLiveDashboard/);
   assert.match(service, /network == null \? url\.openConnection\(\) : network\.openConnection\(url\)/);
   assert.match(service, /Mobilecore\.parseConnectionIdentity/);
-  assert.match(runtime, /"allowlist"\.equals\(connectivitySnapshot\.state\)[\s\S]*new JSONObject\(\) : new JSONObject\(directIdentity\.toString\(\)\)/);
+  assert.match(runtime, /\.put\("identity", new JSONObject\(directIdentity\.toString\(\)\)\)/);
   assert.match(runtime, /\.put\("identity", new JSONObject\(proxyIdentity\.toString\(\)\)\)/);
 });
 
@@ -552,13 +541,17 @@ test("shared UI exposes and persists all seven appearance themes", async () => {
   assert.match(backdrop, /theme === "rick-morty"/);
 });
 
-test("restricted-network server list allows contextual manual selection", async () => {
+test("Linux keeps restricted-network selection while Android selects from its single list", async () => {
   const settings = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
   const mobileRepository = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/MobileRepository.java", import.meta.url), "utf8");
   const serverAPI = await readFile(new URL("../../internal/serverruntime/api.go", import.meta.url), "utf8");
   assert.doesNotMatch(settings, /disabled=\{[^}]*pool === "whitelist"/);
   assert.match(settings, /Сервер \$\{node\.display_name\} выбран для белых списков/);
-  assert.match(mobileRepository, /findWhitelistNode\(id\)[\s\S]*"operation", "select"/);
+  const manualSelection = mobileRepository.match(/synchronized JSONObject select\(String id\)[\s\S]*?(?=synchronized void setAuto)/)?.[0];
+  assert.ok(manualSelection);
+  assert.match(manualSelection, /findNode\(id\)/);
+  assert.match(manualSelection, /"selected_node", id\)\.put\("mode", "manual"\)/);
+  assert.doesNotMatch(manualSelection, /findWhitelistNode|whitelistTransitionLocked|optBoolean\("alive"/);
   assert.match(serverAPI, /selected\.Pool == whitelist\.Pool[\s\S]*Operation: "select"/);
 });
 

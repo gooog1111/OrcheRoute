@@ -171,24 +171,6 @@ public final class OrcheRouteVpnService extends VpnService {
             MobileRuntime runtime = MobileRuntime.get(this);
             Network[] underlying = runtime.selectedUnderlyingNetworks();
             if (underlying != null && underlying.length == 0) throw new IllegalStateException("Выбранный транспорт сейчас недоступен");
-			// NET_CAPABILITY_VALIDATED is not sufficient: mobile operators may
-			// report a validated network while only an allowlist is reachable.
-			String initialNetworkMode = runtime.connectivityState();
-			if ("unknown".equals(initialNetworkMode)) {
-				runtime.onAwaitingNetworkDiagnosis();
-				showWaiting("Определяем состояние сети…");
-				return;
-			}
-			if ("offline".equals(initialNetworkMode)) {
-				runtime.onUnderlyingOfflineDetected();
-				showWaiting("Нет интернета · ожидаем сеть");
-				return;
-			}
-			if ("allowlist".equals(initialNetworkMode) && runtime.prepareAllowlistAtStart()) {
-				showWaiting("Белые списки · ищем доступный сервер");
-				return;
-			}
-			if ("normal".equals(initialNetworkMode)) runtime.leaveAllowlistMode();
             MobileRuntime.EngineProfile profile = runtime.engineProfile();
             Log.i("OrcheRouteEngine", "profile selected proxy=" + profile.proxy() + " node=" + profile.nodeName);
             boolean packetTunnel = profile.packetTunnel();
@@ -246,7 +228,6 @@ public final class OrcheRouteVpnService extends VpnService {
             Log.i("OrcheRouteEngine", "TUN started node=" + profile.nodeName);
             if (profile.proxy()) MobileRuntime.get(this).onProxyConnected(profile.nodeName, profile.nodeID);
             else MobileRuntime.get(this).onDirectTestConnected();
-            if (profile.proxy() && !packetTunnel) startHealthMonitor();
             notificationNode = profile.proxy() ? profile.nodeName : "DIRECT";
             startTrafficMonitor();
             startIdentityMonitor();
@@ -261,25 +242,8 @@ public final class OrcheRouteVpnService extends VpnService {
             }
             stopTunnel();
             MobileRuntime runtime = MobileRuntime.get(this);
-            if (runtime.isWhitelistPoolBuilding()) {
-                notificationNode = "Белые списки";
-                NotificationManager manager = getSystemService(NotificationManager.class);
-                manager.notify(NOTIFICATION_ID, notification("Проверяем серверы и формируем рабочий список серверов…"));
-                return;
-            }
-            if (runtime.isAllowlistModeActive()) {
-                try {
-                    String next = runtime.failoverWhitelistNode();
-                    if (!next.isEmpty() && !stopping) {
-                        runtime.onRestrictedNetworkDetected();
-                        reload(this);
-                        return;
-                    }
-                } catch (Throwable ignored) { }
-            }
             runtime.onEngineError(error.getMessage());
-            stopForeground(true);
-            stopSelf();
+            showWaiting("Не удалось подключить выбранный сервер");
         } finally {
             starting = false;
         }
@@ -316,7 +280,7 @@ public final class OrcheRouteVpnService extends VpnService {
         healthWorker.shutdownNow();
         trafficWorker.shutdownNow();
         identityWorker.shutdownNow();
-        if (connected) MobileRuntime.get(this).onDisabled();
+        if (connected) MobileRuntime.get(this).onTransportError("VPN-служба остановлена системой. Повторите подключение вручную.");
         connected = false;
         super.onDestroy();
     }
@@ -387,17 +351,19 @@ public final class OrcheRouteVpnService extends VpnService {
 			}
 			@Override public void onState(String state, long streams, long total, String error) {
 				Log.i("OrcheRouteFreeTURN", "state=" + state + " streams=" + streams + "/" + total + " error=" + error);
-				// The startup poll in startFreeTURN already throws and reports its own
-				// "error" state. This only reacts to a terminal failure reported after
-				// that poll returned "connected" — otherwise the VPN/UI stayed stuck
-				// showing connected while the transport had actually died. reload()
-				// only posts an Intent, so it is safe to call from this native
-				// callback thread without risking a deadlock against a synchronous
-				// stop on the same FreeTURN session.
-				if (FreeTurnFailurePolicy.shouldRecover(state, connected, stopping)
+				if ("connected".equals(state) && streams > 0
+						&& freeTurnRecoveryTriggered.compareAndSet(true, false)) {
+					MobileRuntime.get(OrcheRouteVpnService.this).onTransportRestored();
+					showWaiting("VPN работает · " + notificationNode);
+				}
+				// A CAPTCHA failure for one stream is not a reason to recreate the
+				// Android TUN. Report a terminal failure and leave server selection
+				// and retry under user control.
+				if (FreeTurnFailurePolicy.shouldReportTerminalFailure(state, streams, connected, stopping)
 						&& freeTurnRecoveryTriggered.compareAndSet(false, true)) {
-					Log.w("OrcheRouteFreeTURN", "post-connect FreeTURN failure, reloading: " + error);
-					reload(OrcheRouteVpnService.this);
+					Log.w("OrcheRouteFreeTURN", "selected FreeTURN failed: " + error);
+					MobileRuntime.get(OrcheRouteVpnService.this).onTransportError(error);
+					showWaiting("Выбранный сервер недоступен · подключите вручную");
 				}
 			}
 		});
@@ -478,7 +444,7 @@ public final class OrcheRouteVpnService extends VpnService {
     }
 
     private void updateTrafficNotification() {
-        if (!connected || stopping) return;
+        if (!connected || stopping || freeTurnRecoveryTriggered.get()) return;
         try {
             long download;
             long upload;

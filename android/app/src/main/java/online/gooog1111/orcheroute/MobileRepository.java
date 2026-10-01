@@ -43,6 +43,7 @@ final class MobileRepository {
         ensure();
 		resetTransientFreeTURNState();
 		migrateEmergencyOnlyMode();
+		migrateManualSelection();
         migrateQualificationPolicy();
         migrateDetectedParsers();
         migrateDisplayNames();
@@ -187,7 +188,8 @@ final class MobileRepository {
 	private void migrateEmergencyOnlyMode() {
 		if (!"emergency".equals(root.optString("mode", "auto"))) return;
 		try {
-			setAuto();
+			root.put("mode", "manual");
+			save();
 		} catch (JSONException error) {
 			throw new IllegalStateException(error);
 		}
@@ -211,6 +213,18 @@ final class MobileRepository {
                 .put("pools", new JSONObject()
                         .put("primary", new JSONObject(unlimited.toString()))
                         .put("emergency", new JSONObject(unlimited.toString()).put("speed_candidates_per_source", 100)));
+    }
+
+    private void migrateManualSelection() {
+        if ("manual".equals(root.optString("mode"))) return;
+        try {
+            // Preserve the currently selected node during an upgrade, but
+            // never choose a replacement without an explicit user action.
+            root.put("mode", "manual");
+            save();
+        } catch (JSONException error) {
+            throw new IllegalStateException(error);
+        }
     }
 
     private void migrateQualificationPolicy() {
@@ -555,7 +569,7 @@ final class MobileRepository {
             result.put(new JSONObject()
                     .put("id", source.getString("id"))
                     .put("display_name", displayName(source.optJSONObject("proxy"), i + 1))
-                    .put("pool", source.getString("pool"))
+                    .put("pool", "primary")
                     .put("priority", source.optInt("priority", i + 1))
                     .put("alive", source.optBoolean("alive", true))
                     .put("delay_ms", source.opt("delay_ms"))
@@ -567,35 +581,17 @@ final class MobileRepository {
                     .put("source_id", source.optString("source_id"))
                     .put("source_name", source.optString("source_name")));
         }
-        JSONArray whitelist = root.getJSONArray("whitelist_nodes");
-        String whitelistSelected = root.optString("selected_whitelist_node", "");
-        for (int i = 0; i < whitelist.length(); i++) {
-            JSONObject source = whitelist.getJSONObject(i);
-            result.put(new JSONObject(source.toString())
-                    .put("display_name", displayName(source.optJSONObject("proxy"), i + 1))
-                    .put("selected", whitelistSelected.equals(source.optString("id"))));
-        }
         return result;
     }
 
     synchronized JSONObject select(String id) throws JSONException {
         JSONObject node = findNode(id);
-        boolean freeturn = node != null && node.optJSONObject("proxy") != null
-                && "freeturn".equals(node.optJSONObject("proxy").optString("type"));
-        if (node != null && (node.optBoolean("alive", false) || freeturn)) {
+        if (node != null) {
             root.put("selected_node", id).put("mode", "manual");
             save();
             return new JSONObject(node.toString());
         }
-        JSONObject whitelistNode = findWhitelistNode(id);
-        if (whitelistNode == null || (!whitelistNode.optBoolean("alive", false)
-                && !whitelistNode.optBoolean("activation_required", false))) return null;
-        JSONObject selected = whitelistTransitionLocked(new JSONObject()
-                .put("operation", "select").put("node_id", id));
-        // This pin belongs only to the derived restricted-network list. Keep
-        // the global controller mode unchanged so normal Internet can resume
-        // its primary/emergency policy as soon as the monitor recovers.
-        return selected == null ? null : new JSONObject(selected.toString());
+        return null;
     }
 
     synchronized void setAuto() throws JSONException {
@@ -620,11 +616,6 @@ final class MobileRepository {
 
     synchronized JSONObject activeNode() throws JSONException {
         JSONObject selected = findNode(root.optString("selected_node", ""));
-        if (selected != null && "emergency".equals(mode()) && !"emergency".equals(selected.optString("pool"))) selected = null;
-        boolean selectedFreeTURN = selected != null && selected.optJSONObject("proxy") != null
-                && "freeturn".equals(selected.optJSONObject("proxy").optString("type"));
-        if (selected != null && !selected.optBoolean("alive", false) && !selectedFreeTURN) selected = null;
-        if (selected == null) selected = selectBestLocked();
         return selected == null ? null : new JSONObject(selected.toString());
     }
 
@@ -797,8 +788,6 @@ final class MobileRepository {
             root.put("nodes", next);
             if (wasSelected) {
                 root.remove("selected_node");
-                if ("manual".equals(mode())) root.put("mode", "auto");
-                selectBestLocked();
             }
             remaining = 0;
             for (int i = 0; i < next.length(); i++) if (pool.equals(next.getJSONObject(i).optString("pool"))) remaining++;
@@ -810,7 +799,6 @@ final class MobileRepository {
         }
         if (normal != null && findNode(root.optString("selected_node", "")) == null) {
             root.remove("selected_node");
-            selectBestLocked();
         }
         clearMissingSelectionLocked();
         save();
@@ -832,15 +820,13 @@ final class MobileRepository {
         int removed = 0;
         for (int i = 0; i < source.length(); i++) {
             JSONObject node = source.getJSONObject(i);
-            if (pool.equals(node.optString("pool", "primary"))) removed++;
+            if ("primary".equals(pool) || pool.equals(node.optString("pool", "primary"))) removed++;
             else next.put(node);
         }
         root.put("nodes", next);
         JSONObject selected = findNode(root.optString("selected_node", ""));
         if (selected == null) {
             root.remove("selected_node");
-            if ("manual".equals(mode())) root.put("mode", "auto");
-            selectBestLocked();
         }
         clearMissingSelectionLocked();
         save();
@@ -848,9 +834,8 @@ final class MobileRepository {
     }
 
     synchronized String selectedPool() throws JSONException {
-        if (!root.optString("selected_whitelist_node", "").isEmpty()) return "whitelist";
         JSONObject selected = findNode(root.optString("selected_node", ""));
-        return selected == null ? "" : selected.optString("pool", "primary");
+        return selected == null ? "" : "primary";
     }
 
     private JSONObject whitelistTransitionLocked(JSONObject command) throws JSONException {
@@ -883,24 +868,13 @@ final class MobileRepository {
     synchronized JSONArray pools(boolean whitelistMode) throws JSONException {
         JSONArray nodes = root.getJSONArray("nodes");
         String selected = root.optString("selected_node", "");
-        JSONArray output = new JSONArray();
-        for (String pool : new String[]{"primary", "emergency"}) {
-            int total = 0, alive = 0; boolean poolSelected = false;
-            for (int i = 0; i < nodes.length(); i++) {
-                JSONObject node = nodes.getJSONObject(i);
-                if (!pool.equals(node.optString("pool"))) continue;
-                total++;
-                if (node.optBoolean("alive", true)) alive++;
-                if (selected.equals(node.optString("id"))) poolSelected = true;
-            }
-            output.put(new JSONObject().put("id", pool).put("priority", "primary".equals(pool) ? 1 : 2)
-                    .put("total", total).put("alive", alive).put("selected", !whitelistMode && poolSelected));
+        int alive = 0;
+        for (int i = 0; i < nodes.length(); i++) {
+            if (nodes.getJSONObject(i).optBoolean("alive", false)) alive++;
         }
-        JSONArray whitelist = root.getJSONArray("whitelist_nodes");
-        output.put(new JSONObject().put("id", "whitelist").put("priority", 0)
-                .put("total", whitelist.length()).put("alive", whitelistVerifiedCount())
-                .put("selected", whitelistMode));
-        return output;
+        return new JSONArray().put(new JSONObject().put("id", "primary").put("priority", 1)
+                .put("total", nodes.length()).put("alive", alive)
+                .put("selected", findNode(selected) != null));
     }
 
     synchronized JSONObject routes() throws JSONException { return new JSONObject(root.getJSONObject("routes").toString()); }
@@ -1197,9 +1171,9 @@ final class MobileRepository {
     private void clearMissingSelectionLocked() throws JSONException {
         String selected = root.optString("selected_node", "");
         JSONObject node = findNode(selected);
-        boolean selectedFreeTURN = node != null && node.optJSONObject("proxy") != null
-                && "freeturn".equals(node.optJSONObject("proxy").optString("type"));
-        if (!selected.isEmpty() && (node == null || (!node.optBoolean("alive", false) && !selectedFreeTURN))) root.remove("selected_node");
+        // A failed qualification must not unpin the user's server. Keep the
+        // ID across refreshes so it can reappear without changing selection.
+        if (!selected.isEmpty() && node == null) return;
     }
 
     private static JSONObject publicSubscription(JSONObject source) throws JSONException {

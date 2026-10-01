@@ -557,6 +557,9 @@ export const actions = {
       { method: "POST", body: "{}" },
     );
   },
+  reconnectSelected() {
+    return request<{ accepted: boolean }>("/v1/service/reconnect", { method: "POST", body: "{}" });
+  },
   setAuto() {
     return request<{ accepted: boolean }>("/v1/control/auto", { method: "POST", body: "{}" });
   },

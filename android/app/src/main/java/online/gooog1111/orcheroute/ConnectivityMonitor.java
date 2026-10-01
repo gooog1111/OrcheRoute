@@ -73,6 +73,7 @@ final class ConnectivityMonitor {
     private final ConnectivityManager manager;
     private final SettingsProvider settingsProvider;
     private final Listener listener;
+    private final boolean diagnoseAccess;
     private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService probeWorkers = Executors.newFixedThreadPool(4);
     private final Object queueLock = new Object();
@@ -91,9 +92,14 @@ final class ConnectivityMonitor {
     };
 
     ConnectivityMonitor(Context context, SettingsProvider settingsProvider, Listener listener) {
+        this(context, settingsProvider, listener, true);
+    }
+
+    ConnectivityMonitor(Context context, SettingsProvider settingsProvider, Listener listener, boolean diagnoseAccess) {
         manager = (ConnectivityManager) context.getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
         this.settingsProvider = settingsProvider;
         this.listener = listener;
+        this.diagnoseAccess = diagnoseAccess;
     }
 
     void start() {
@@ -114,7 +120,10 @@ final class ConnectivityMonitor {
 
     Snapshot snapshot() { return snapshot; }
 
-    Network activePhysicalNetwork() { return activePhysicalNetwork; }
+    Network activePhysicalNetwork() {
+        try { return physicalNetwork(settingsProvider.load().transport); }
+        catch (Exception error) { return null; }
+    }
 
     private void queueProbe(long delayMs) {
         synchronized (queueLock) {
@@ -137,6 +146,13 @@ final class ConnectivityMonitor {
         Snapshot previous = snapshot;
         try {
             Settings settings = settingsProvider.load();
+            if (!diagnoseAccess) {
+                // Manual Android mode needs only a physical underlay for
+                // protected sockets. URL probes must never control the VPN.
+                activePhysicalNetwork = physicalNetwork(settings.transport);
+                snapshot = new Snapshot("unknown", 0, attemptedAt, "");
+                return;
+            }
             JSONObject targetPayload = new JSONObject(Mobilecore.connectivityTargets(
                     settings.allowlistURL, settings.openInternetURL));
             if (!targetPayload.optBoolean("ok")) throw new IllegalStateException(coreError(targetPayload));

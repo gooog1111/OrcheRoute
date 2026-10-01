@@ -83,7 +83,7 @@ final class MobileRuntime {
                     defaults.optString("allowlist_probe_url", "https://ya.ru/"),
                     defaults.optString("open_internet_probe_url", "https://www.cloudflare.com/cdn-cgi/trace"),
                     repository.activeTransport());
-        }, this::onConnectivityChanged);
+        }, this::onConnectivityChanged, false);
         // A process killed during a scan cannot have a live worker after the
         // restart. Clear only the stale activity marker; keep the working pool.
         try { repository.completeWhitelistScan(); } catch (JSONException ignored) { }
@@ -161,10 +161,8 @@ final class MobileRuntime {
 
     synchronized void onEngineError(String detail) {
 		try { repository.deactivateFreeTURNNodes(); } catch (JSONException error) { refreshError = readable(error); }
-        // A node may fail exactly while an allowlist rescan is looking for a
-        // replacement. Keep the user's ON intent so the first verified node
-        // can restart the service without another tap.
-		setDesiredEnabled(allowlistRouteOverride && refreshActive);
+        // Transport failure is not a user request to turn VPN off.
+		setDesiredEnabled(true);
         state = "error";
         whitelistConnectPending = false;
         connectedNodeID = "";
@@ -237,7 +235,7 @@ final class MobileRuntime {
         String verb = method == null ? "GET" : method.toUpperCase(Locale.ROOT);
         try {
             if ("GET".equals(verb) && "/v1/status".equals(path)) return response(200, status());
-            if ("GET".equals(verb) && "/v1/pools".equals(path)) return response(200, new JSONObject().put("pools", repository.pools(allowlistRouteOverride)));
+            if ("GET".equals(verb) && "/v1/pools".equals(path)) return response(200, new JSONObject().put("pools", repository.pools()));
             if ("GET".equals(verb) && "/v1/nodes".equals(path)) return response(200, new JSONObject().put("nodes", repository.nodes()));
             String poolNodeId = entityId(path, "/v1/nodes/");
             if ("DELETE".equals(verb) && poolNodeId != null) return deletePoolNode(poolNodeId);
@@ -249,15 +247,7 @@ final class MobileRuntime {
                 return response(202, cancelRefresh());
             }
             if ("POST".equals(verb) && "/v1/whitelist/scan".equals(path)) {
-                String networkState = connectivityState();
-                if (!desiredEnabled) return error(409, "vpn_not_enabled", "Сначала включите VPN");
-                if (!"allowlist".equals(networkState)) return error(409, "allowlist_not_detected",
-                        "Монитор сети не подтверждает режим белых списков");
-                allowlistRouteOverride = true;
-                allowlistWorkingFound = repository.whitelistCount() > 0;
-                allowlistLastScanAt = 0;
-                message = "Вручную формируем список серверов для белых списков";
-                return response(202, scheduleRefresh(null, true, null, true, false, false));
+                return error(410, "single_server_list", "В Android используется один список серверов. Проверяйте подписку или весь список вручную.");
             }
             if ("GET".equals(verb) && "/v1/qualification".equals(path)) return response(200, qualification());
             if ("GET".equals(verb) && "/v1/routes".equals(path)) return response(200, repository.routes());
@@ -357,15 +347,10 @@ final class MobileRuntime {
                 return response(200, new JSONObject().put("updated", true).put("routes", routes));
             }
             if ("POST".equals(verb) && "/v1/control/auto".equals(path)) {
-                repository.setAuto();
-                restartSelectedIfEnabled();
-                return response(200, new JSONObject().put("accepted", true));
+                return error(410, "manual_selection_only", "На Android сервер выбирается вручную");
             }
             if ("POST".equals(verb) && "/v1/control/emergency".equals(path)) {
-                repository.setEmergency();
-                JSONObject check = scheduleRefresh(null, true, "emergency");
-                restartSelectedIfEnabled();
-                return response(200, new JSONObject().put("accepted", true).put("check_scheduled", check.optBoolean("accepted")));
+                return error(410, "single_server_list", "На Android нет отдельного аварийного списка");
             }
             if ("POST".equals(verb) && "/v1/control/manual".equals(path)) {
                 String nodeId = new JSONObject(emptyObject(body)).optString("node_id");
@@ -450,6 +435,14 @@ final class MobileRuntime {
                 permissionRequester.request();
                 return response(202, new JSONObject().put("accepted", true).put("enabled", true));
             }
+            if ("POST".equals(verb) && "/v1/service/reconnect".equals(path)) {
+                if (!desiredEnabled) return error(409, "vpn_not_enabled", "Сначала включите VPN");
+                if (repository.activeNode() == null) return error(409, "node_not_selected", "Выберите сервер");
+                state = "starting";
+                message = "Повторно подключаем выбранный сервер";
+                OrcheRouteVpnService.reload(context);
+                return response(202, new JSONObject().put("accepted", true));
+            }
             if ("POST".equals(verb) && "/v1/service/disable".equals(path)) {
                 onStopping();
                 OrcheRouteVpnService.stop(context);
@@ -465,23 +458,22 @@ final class MobileRuntime {
     }
 
     synchronized EngineProfile engineProfile() throws Exception {
-        JSONObject node = repository.activeNode(allowlistRouteOverride);
+        JSONObject node = repository.activeNode();
         if (node == null) {
-            if (allowlistRouteOverride) throw new IllegalStateException("Формируется список серверов для белых списков");
-            return new EngineProfile(null, null, null, null);
+            throw new IllegalStateException("Выберите сервер в основном списке перед включением VPN");
         }
 		if (isFreeTURNNode(node)) {
 			String transportProfile = node.getJSONObject("proxy").optString("profile");
 			JSONObject callBuilt = new JSONObject(Mobilecore.buildFreeTURNProfileConfig(
 					transportProfile, "127.0.0.1:19000",
-					repository.routesForEngine(allowlistRouteOverride), repository.activeDNSForEngine()));
+					repository.routesForEngine(false), repository.activeDNSForEngine()));
 			if (!callBuilt.optBoolean("ok")) throw new IllegalStateException("FreeTURN ещё не активирован");
 			String config = callBuilt.getJSONObject("result").getString("config");
 			return new EngineProfile(config, node.optString("display_name", "FreeTURN"),
 					node.optString("id"), node.optString("pool", "primary"), transportProfile);
 		}
         JSONObject built = new JSONObject(Mobilecore.buildMobileProxyConfigWithNetwork(
-                node.getJSONObject("proxy").toString(), repository.routesForEngine(allowlistRouteOverride), repository.activeDNSForEngine()));
+                node.getJSONObject("proxy").toString(), repository.routesForEngine(false), repository.activeDNSForEngine()));
         if (!built.optBoolean("ok")) throw new IllegalStateException(coreError(built));
         String config = built.getJSONObject("result").getString("config");
         return new EngineProfile(config, node.optString("display_name"), node.optString("id"), node.optString("pool"), "");
@@ -528,16 +520,26 @@ final class MobileRuntime {
         boolean packetTunnel() { return freeTURN() && Freeturnbridge.usesPacketTunnel(freeTURNProfile); }
     }
 
+    synchronized void onTransportError(String detail) {
+        if (!desiredEnabled) return;
+        state = "error";
+        message = detail == null || detail.isEmpty()
+                ? "Выбранный сервер потерял соединение. Повторите подключение вручную."
+                : "Выбранный сервер потерял соединение: " + detail;
+    }
+
+    synchronized void onTransportRestored() {
+        if (!desiredEnabled || connectedNodeID.isEmpty()) return;
+        state = "connected";
+        message = "Соединение с выбранным сервером восстановлено";
+    }
+
     private JSONObject scheduleRefresh(String onlyId, boolean checkOnly, String onlyGroup) throws JSONException {
         return scheduleRefresh(onlyId, checkOnly, onlyGroup, false);
     }
 
     private JSONObject scheduleManualCheck(String onlyId) throws JSONException {
-        boolean restricted = "allowlist".equals(connectivityState());
-        if (restricted) enterAllowlistMode();
-        return restricted
-                ? scheduleRefresh(onlyId, true, null, true, false, false)
-                : scheduleRefresh(onlyId, true, null);
+        return scheduleRefresh(onlyId, true, null);
     }
 
     private JSONObject scheduleRefresh(String onlyId, boolean checkOnly, String onlyGroup, boolean allowlistScan) throws JSONException {
@@ -577,13 +579,6 @@ final class MobileRuntime {
             // Use exactly the same physical-underlay classifier as the VPN
             // service. The previous duplicate probe converted an already
             // detected restricted network back to "offline" and aborted scans.
-            String connectivityState = connectivityState();
-            if ("offline".equals(connectivityState)) {
-                updateRefresh("success", "offline", "Интернет недоступен. Статусы серверов не изменены.", 0, items.length(), "");
-                return;
-            }
-            updateRefresh("running", "connectivity", "allowlist".equals(connectivityState)
-                    ? "Обнаружен режим белых списков" : "Доступен обычный интернет", 0, items.length(), "");
             for (int i = 0; i < items.length(); i++) {
                 ensureRefreshContinues(allowlistScan);
                 JSONObject item = items.getJSONObject(i);
@@ -609,11 +604,6 @@ final class MobileRuntime {
                         JSONObject fetchResult = fetched.getJSONObject("result");
                         links = fetchResult.getJSONArray("links");
                         repository.updateDetectedParser(id, fetchResult.optString("parser", item.optString("parser", "standard")));
-                        repository.cacheRefreshSucceeded(id, links);
-						if (!controllerQualificationActive) {
-							success++;
-							continue;
-						}
                     }
                     JSONObject parsed = new JSONObject(Mobilecore.parseSubscription(links.toString(), sourceKey(id)));
                     if (!parsed.optBoolean("ok")) throw new IllegalStateException(coreError(parsed));
@@ -628,6 +618,7 @@ final class MobileRuntime {
 					if (testable.length() == 0 && freeturn.length() > 0) {
 						if (restrictedScan) repository.replaceWhitelistSource(id, new JSONArray(), new JSONArray(), freeturn);
 						else repository.materializeFreeTURNNodes(id, freeturn, links);
+						if (!checkOnly) repository.cacheRefreshSucceeded(id, links);
 						repository.markFreeTURNProfilesChecked(id, freeturn.length());
 						updateRefresh("running", "activation", "Call ожидает проверки подключением · «" + item.optString("name") + "»",
 								freeturn.length(), freeturn.length(), "");
@@ -727,7 +718,7 @@ final class MobileRuntime {
 			}
             String text = success + " из " + items.length() + (checkOnly ? " источников проверено" : " подписок обновлено")
                     + (unavailable > 0 ? " · без доступных серверов: " + unavailable : "")
-                    + ("allowlist".equals(connectivityState) ? " · сеть: белые списки" : " · сеть: обычный интернет");
+                    + " · выбор сервера остаётся ручным";
             String finalError = success < items.length() && items.length() > 0
                     ? (lastError.isEmpty() ? "Часть серверов недоступна" : lastError)
                     : "";
@@ -761,8 +752,6 @@ final class MobileRuntime {
                     }
                 }
                 updateRefresh("success", "complete", "Список для белых списков готов: " + repository.whitelistCount() + " серверов", items.length(), items.length(), "");
-			} else if (checkOnly && success > 0) {
-				restartIfEnabled();
 			}
         } catch (RefreshStopped stopped) {
             updateRefresh("cancelled", "cancelled", stopped.getMessage(), refreshCurrent, refreshTotal, "");
@@ -937,7 +926,7 @@ final class MobileRuntime {
 
     synchronized boolean ipv6Enabled() throws JSONException { return repository.activeIPv6(); }
 
-    synchronized boolean automaticFailoverEnabled() { return !"manual".equals(repository.mode()); }
+    synchronized boolean automaticFailoverEnabled() { return false; }
 
     synchronized boolean enterAllowlistMode() {
         boolean changed = !allowlistRouteOverride;
@@ -1028,50 +1017,8 @@ final class MobileRuntime {
 	}
 
     private synchronized void onConnectivityChanged(ConnectivityMonitor.Snapshot previous, ConnectivityMonitor.Snapshot current) {
-        detectedInternetMode = current.state;
-        Log.i("OrcheRouteNet", "state " + previous.state + " -> " + current.state);
-        if (!desiredEnabled) {
-			if ("allowlist".equals(current.state)) enterAllowlistMode();
-			else if ("normal".equals(current.state) && allowlistRouteOverride) leaveAllowlistMode();
-            return;
-        }
-		try {
-			JSONObject input = new JSONObject()
-					.put("network_mode", current.state).put("desired_enabled", true)
-					.put("connected", "connected".equals(state)).put("whitelist_active", allowlistRouteOverride)
-					.put("whitelist_count", repository.whitelistCount()).put("whitelist_scan_active", refreshActive && refreshAllowlistScan)
-					.put("whitelist_retry_due", allowlistLastScanAt == 0 || now() - allowlistLastScanAt >= 300);
-			JSONObject envelope = new JSONObject(Mobilecore.networkDecision(input.toString()));
-			if (!envelope.optBoolean("ok")) throw new JSONException(coreError(envelope));
-			String action = envelope.getJSONObject("result").optString("action", "none");
-			switch (action) {
-				case "pause_offline" -> onUnderlyingOfflineDetected();
-				case "start_normal" -> { leaveAllowlistMode(); restartIfEnabled(); }
-				case "connect_whitelist" -> {
-					enterAllowlistMode();
-					if (requestWhitelistConnection()) OrcheRouteVpnService.reload(context);
-				}
-				case "scan_whitelist" -> {
-					enterAllowlistMode();
-					scheduleRefresh(null, true, null, true);
-					state = "waiting_network";
-					message = "Формируем список серверов для белых списков";
-					OrcheRouteVpnService.pauseForNetwork(context);
-				}
-				case "wait_whitelist_scan", "wait_whitelist_retry" -> {
-					enterAllowlistMode();
-					boolean alreadyWaiting = "waiting_network".equals(state);
-					state = "waiting_network";
-					message = "wait_whitelist_retry".equals(action)
-							? "В белых списках нет доступных серверов. Повтор через 5 минут"
-							: "Продолжаем формирование списка серверов";
-					if (!alreadyWaiting) OrcheRouteVpnService.pauseForNetwork(context);
-				}
-				default -> { }
-			}
-		} catch (JSONException error) {
-			refreshError = readable(error);
-		}
+        // Network changes update socket binding only. They never change the
+        // selected server or the user's VPN on/off preference.
     }
 
     synchronized void onRestrictedNetworkDetected() {
@@ -1278,27 +1225,15 @@ final class MobileRuntime {
     }
 
     private synchronized String deletePoolNode(String id) throws JSONException {
+        if (desiredEnabled && id.equals(connectedNodeID)) {
+            return error(409, "active_node_in_use", "Сначала выберите другой сервер или выключите VPN");
+        }
         JSONObject deleted = repository.deleteNode(id);
         if (deleted == null) return error(404, "node_not_found", "Сервер не найден");
         String pool = deleted.optString("pool");
         boolean selected = deleted.optBoolean("was_selected");
         if ("whitelist".equals(pool)) allowlistWorkingFound = repository.whitelistCount() > 0;
         if (selected) connectedNodeID = "";
-        if (selected && desiredEnabled) {
-            if ("whitelist".equals(pool) && allowlistRouteOverride) {
-                whitelistConnectPending = false;
-                if (requestWhitelistConnection()) {
-                    OrcheRouteVpnService.reload(context);
-                } else {
-                    allowlistWorkingFound = false;
-                    onWhitelistPoolEmpty();
-                    refreshError = "Список серверов для белых списков пуст после удаления";
-                    OrcheRouteVpnService.stopWithError(context);
-                }
-            } else {
-                restartIfEnabled();
-            }
-        }
         return response(200, new JSONObject().put("deleted", true).put("node", deleted));
     }
 
@@ -1306,13 +1241,12 @@ final class MobileRuntime {
         if (!"primary".equals(pool) && !"emergency".equals(pool) && !"whitelist".equals(pool)) {
             return error(400, "invalid_pool", "Неизвестный список серверов");
         }
-        boolean wasActivePool = pool.equals(repository.selectedPool());
+        if (desiredEnabled) return error(409, "vpn_enabled", "Выключите VPN перед очисткой списка");
         int removed = repository.clearPool(pool);
         if ("whitelist".equals(pool)) {
             allowlistWorkingFound = false;
             whitelistConnectPending = false;
         }
-        if (desiredEnabled && wasActivePool) restartIfEnabled();
         return response(200, new JSONObject().put("cleared", removed > 0).put("pool", pool).put("remaining", 0));
     }
 
@@ -1325,7 +1259,6 @@ final class MobileRuntime {
     private JSONObject status() throws JSONException {
         long now = System.currentTimeMillis() / 1000L;
         ConnectivityMonitor.Snapshot connectivitySnapshot = connectivityMonitor.snapshot();
-        boolean internet = "normal".equals(connectivitySnapshot.state) || "allowlist".equals(connectivitySnapshot.state);
         String connectivity;
         if ("error".equals(state)) connectivity = "controller_error";
         else if ("connected".equals(state)) connectivity = "proxy_ok";
@@ -1342,11 +1275,11 @@ final class MobileRuntime {
                 .put("capture_mode", "system")
                 .put("direct_interface", repository.activeTransport())
                 .put("vpn_underlay_interface", repository.activeTransport());
-        JSONObject active = repository.activeNode(allowlistRouteOverride);
+        JSONObject active = repository.activeNode();
         JSONObject proxy = new JSONObject()
                 .put("mode", repository.mode())
                 .put("active_node", active == null ? JSONObject.NULL : active.optString("display_name"))
-                .put("active_pool", active == null ? JSONObject.NULL : active.optString("pool"))
+                .put("active_pool", active == null ? JSONObject.NULL : "primary")
                 .put("failure_streak", 0)
                 .put("last_switch", repository.lastSwitch())
                 .put("manual_until", 0)
@@ -1358,10 +1291,9 @@ final class MobileRuntime {
                 .put("stale", false)
                 .put("connectivity", connectivity)
                 .put("service", new JSONObject().put("enabled", desiredEnabled))
-                .put("wan", new JSONObject().put("interface", "android").put("available", internet)
-                        .put("mode", connectivitySnapshot.state)
-                        .put("identity", "allowlist".equals(connectivitySnapshot.state)
-                                ? new JSONObject() : new JSONObject(directIdentity.toString()))
+                .put("wan", new JSONObject().put("interface", "android").put("available", JSONObject.NULL)
+                        .put("mode", "unknown")
+                        .put("identity", new JSONObject(directIdentity.toString()))
                         .put("diagnostics", connectivitySnapshot.json()))
                 .put("network", network)
                 .put("proxy", proxy)
