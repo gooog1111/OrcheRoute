@@ -110,6 +110,7 @@ final class VkCaptchaDialog {
         webView.addJavascriptInterface(new CaptchaBridge(), BRIDGE_NAME);
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(webView, CAPTURE_SCRIPT, SCRIPT_ORIGINS);
+            WebViewCompat.addDocumentStartJavaScript(webView, VkCaptchaAutoClick.SCRIPT, SCRIPT_ORIGINS);
         }
         webView.setWebViewClient(new CaptchaClient());
         overlay.addView(webView, new FrameLayout.LayoutParams(
@@ -260,6 +261,13 @@ final class VkCaptchaDialog {
     }
 
     private final class CaptchaClient extends WebViewClient {
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            // Also support WebViews without document-start injection. The
+            // script validates its own origin and is idempotent per document.
+            view.evaluateJavascript(VkCaptchaAutoClick.SCRIPT, null);
+        }
+
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             if (allowedNavigation(request.getUrl())) return false;
