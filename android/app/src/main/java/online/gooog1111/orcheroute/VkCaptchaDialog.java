@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -99,6 +100,13 @@ final class VkCaptchaDialog {
 
         overlay = new FrameLayout(activity);
         overlay.setBackgroundColor(Color.rgb(15, 18, 20));
+        final float density = activity.getResources().getDisplayMetrics().density;
+        final int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
+        final int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
+        final int cardWidth = Math.min(Math.round(360 * density), screenWidth - Math.round(24 * density));
+        final int cardHeight = Math.min(Math.round(480 * density), screenHeight - Math.round(96 * density));
+        final int headerHeight = Math.round(48 * density);
+        overlay.setElevation(12 * density);
         webView = new WebView(activity);
         webView.setBackgroundColor(Color.rgb(15, 18, 20));
         WebSettings settings = webView.getSettings();
@@ -114,21 +122,64 @@ final class VkCaptchaDialog {
                     Set.of("https://id.vk.ru", "https://api.vk.ru", "http://localhost:8765", "http://127.0.0.1:8765"));
         }
         webView.setWebViewClient(new CaptchaClient());
-        overlay.addView(webView, new FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams webLayout = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
-        ));
+        );
+        webLayout.topMargin = headerHeight;
+        overlay.addView(webView, webLayout);
+
+        TextView handle = new TextView(activity);
+        handle.setText("VK CAPTCHA · перетащить");
+        handle.setTextColor(Color.WHITE);
+        handle.setGravity(Gravity.CENTER_VERTICAL);
+        handle.setPadding(Math.round(12 * density), 0, 0, 0);
+        FrameLayout.LayoutParams handleLayout = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, headerHeight, Gravity.TOP);
+        handleLayout.rightMargin = Math.round(96 * density);
+        overlay.addView(handle, handleLayout);
+        handle.setOnTouchListener(new View.OnTouchListener() {
+            float startX, startY, initialX, initialY;
+            @Override public boolean onTouch(View view, MotionEvent event) {
+                if (overlay == null) return false;
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    startX = event.getRawX(); startY = event.getRawY();
+                    if (systemOverlay) {
+                        WindowManager.LayoutParams window = (WindowManager.LayoutParams) overlay.getLayoutParams();
+                        initialX = window.x; initialY = window.y;
+                    } else {
+                        initialX = overlay.getX(); initialY = overlay.getY();
+                    }
+                    return true;
+                }
+                if (event.getActionMasked() == MotionEvent.ACTION_MOVE) {
+                    int width = systemOverlay ? screenWidth : parent.getWidth();
+                    int height = systemOverlay ? screenHeight : parent.getHeight();
+                    int x = Math.round(Math.max(0, Math.min(width - cardWidth,
+                            initialX + event.getRawX() - startX)));
+                    int y = Math.round(Math.max(0, Math.min(height - cardHeight,
+                            initialY + event.getRawY() - startY)));
+                    if (systemOverlay && overlayWindowManager != null) {
+                        WindowManager.LayoutParams window = (WindowManager.LayoutParams) overlay.getLayoutParams();
+                        window.x = x; window.y = y;
+                        overlayWindowManager.updateViewLayout(overlay, window);
+                    } else { overlay.setX(x); overlay.setY(y); }
+                    return true;
+                }
+                if (event.getActionMasked() == MotionEvent.ACTION_UP) view.performClick();
+                return true;
+            }
+        });
 
         Button close = new Button(activity);
         close.setText("Закрыть");
         close.setOnClickListener(view -> close(true));
         FrameLayout.LayoutParams closeLayout = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Math.round(96 * density),
+                headerHeight,
                 Gravity.TOP | Gravity.END
         );
         int margin = Math.round(12 * activity.getResources().getDisplayMetrics().density);
-        closeLayout.setMargins(margin, margin, margin, margin);
         overlay.addView(close, closeLayout);
 
         status = new TextView(activity);
@@ -149,13 +200,16 @@ final class VkCaptchaDialog {
             WindowManager manager = (WindowManager) activity.getApplicationContext()
                     .getSystemService(Context.WINDOW_SERVICE);
             WindowManager.LayoutParams window = new WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.MATCH_PARENT,
+                    cardWidth,
+                    cardHeight,
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-                    PixelFormat.OPAQUE
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    PixelFormat.TRANSLUCENT
             );
             window.gravity = Gravity.TOP | Gravity.START;
+            window.x = (screenWidth - cardWidth) / 2;
+            window.y = (screenHeight - cardHeight) / 2;
             window.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
             window.setTitle("OrcheRoute VK CAPTCHA");
             try {
@@ -168,8 +222,9 @@ final class VkCaptchaDialog {
         }
         if (!systemOverlay) {
             parent.addView(overlay, new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
+                    cardWidth,
+                    cardHeight,
+                    Gravity.CENTER
             ));
         }
         webView.loadUrl(uri.toString());

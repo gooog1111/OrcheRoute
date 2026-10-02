@@ -13,10 +13,14 @@ final class VkCaptchaAutoClick {
               const stop = () => { clearInterval(timer); };
               const tick = () => {
                 if (count >= 3) { stop(); return; }
-                for (const element of document.querySelectorAll('button, [role="checkbox"], input[type="checkbox"]')) {
+                for (const element of document.querySelectorAll('button, [role="checkbox"], input[type="checkbox"], label')) {
                   const text = (element.getAttribute('aria-label') || element.innerText || '').trim().toLowerCase().replace(/\\s+/g, ' ');
                   const checkbox = element.matches('[role="checkbox"], input[type="checkbox"]');
                   if (!checkbox && !['я не робот', 'i am not a robot', "i'm not a robot", 'начать проверку'].includes(text)) continue;
+                  // VK renders the visible control as a label around a hidden input.
+                  // Only activate labels with the recognized CAPTCHA text and an unchecked input.
+                  const input = element.matches('label') ? element.querySelector('input[type="checkbox"]') : null;
+                  if (element.matches('label') && (!input || input.disabled || input.checked)) continue;
                   if (clicked.has(element) || element.disabled || element.checked
                       || element.getAttribute('aria-checked') === 'true'
                       || element.getAttribute('aria-disabled') === 'true') continue;
