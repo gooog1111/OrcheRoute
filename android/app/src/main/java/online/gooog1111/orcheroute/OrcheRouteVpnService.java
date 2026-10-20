@@ -5,7 +5,13 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
+import android.content.BroadcastReceiver;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.net.ConnectivityManager;
+import android.net.LinkProperties;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.VpnService;
 import android.net.Network;
 import android.os.Build;
@@ -28,6 +34,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.TreeSet;
 
 import freeturnbridge.EventSink;
 import freeturnbridge.Freeturnbridge;
@@ -80,6 +87,67 @@ public final class OrcheRouteVpnService extends VpnService {
     private volatile boolean freeTURNActive;
     private volatile boolean packetTunnelActive;
     private final AtomicBoolean freeTurnRecoveryTriggered = new AtomicBoolean(false);
+    private final FreeTurnUnderlayPolicy underlayPolicy = new FreeTurnUnderlayPolicy();
+    private ConnectivityManager underlayManager;
+    private boolean underlayCallbackRegistered;
+    private boolean wakeReceiverRegistered;
+    private final ConnectivityManager.NetworkCallback underlayCallback = new ConnectivityManager.NetworkCallback() {
+        @Override public void onAvailable(Network network) { queueUnderlayCheck(false); }
+        @Override public void onLost(Network network) { queueUnderlayCheck(false); }
+        @Override public void onCapabilitiesChanged(Network network, NetworkCapabilities caps) { queueUnderlayCheck(false); }
+        @Override public void onLinkPropertiesChanged(Network network, LinkProperties properties) { queueUnderlayCheck(false); }
+    };
+    private final BroadcastReceiver wakeReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) { queueUnderlayCheck(true); }
+    };
+
+    @Override public void onCreate() {
+        super.onCreate();
+        underlayManager = getSystemService(ConnectivityManager.class);
+        try {
+            underlayManager.registerNetworkCallback(new NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build(), underlayCallback);
+            underlayCallbackRegistered = true;
+        } catch (RuntimeException error) { Log.w("OrcheRouteFreeTURN", "underlay callback unavailable; polling remains active", error); }
+        IntentFilter filter = new IntentFilter(Intent.ACTION_USER_PRESENT);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(wakeReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(wakeReceiver, filter);
+        wakeReceiverRegistered = true;
+    }
+
+    private void queueUnderlayCheck(boolean afterUnlock) {
+        try { trafficWorker.execute(() -> checkFreeTURNUnderlay(afterUnlock)); }
+        catch (java.util.concurrent.RejectedExecutionException ignored) { /* Service destroyed. */ }
+    }
+
+    private String physicalNetworkKey() {
+        Network network = MobileRuntime.get(this).identityPhysicalNetwork();
+        if (network == null) return "";
+        LinkProperties properties = underlayManager.getLinkProperties(network);
+        TreeSet<String> addresses = new TreeSet<>();
+        if (properties != null) properties.getLinkAddresses().forEach(address -> addresses.add(address.toString()));
+        return network.getNetworkHandle() + ":" + (properties == null ? "" : properties.getInterfaceName()) + ":" + addresses;
+    }
+
+    private void checkFreeTURNUnderlay(boolean afterUnlock) {
+        synchronized (tunnelLock) {
+            if (!connected || starting || stopping || !freeTURNActive) return;
+            try {
+                String network = physicalNetworkKey();
+                if (underlayPolicy.observe(network, SystemClock.elapsedRealtime())) {
+                    // Rebuild allocations, not the TUN, profile, or VPN on/off intent.
+                    Freeturnbridge.reconnect();
+                    Log.i("OrcheRouteFreeTURN", "physical network changed; reconnect requested");
+                } else if (afterUnlock && !network.isEmpty()) {
+                    // The native wake probe checks incoming liveness before
+                    // recycling stale allocations (even if Android kept netId).
+                    Freeturnbridge.wake();
+                    Log.i("OrcheRouteFreeTURN", "unlock; native liveness check requested");
+                }
+            } catch (Throwable error) { Log.w("OrcheRouteFreeTURN", "underlay recovery failed", error); }
+        }
+    }
 
     static void start(Context context) {
         Intent intent = new Intent(context, OrcheRouteVpnService.class).setAction(ACTION_START);
@@ -169,6 +237,7 @@ public final class OrcheRouteVpnService extends VpnService {
             File home = new File(getFilesDir(), "mihomo");
             if (!home.isDirectory() && !home.mkdirs()) throw new IllegalStateException("Не удалось создать каталог Mihomo");
             MobileRuntime runtime = MobileRuntime.get(this);
+            underlayPolicy.reset(physicalNetworkKey());
             Network[] underlying = runtime.selectedUnderlyingNetworks();
             if (underlying != null && underlying.length == 0) throw new IllegalStateException("Выбранный транспорт сейчас недоступен");
             MobileRuntime.EngineProfile profile = runtime.engineProfile();
@@ -273,6 +342,10 @@ public final class OrcheRouteVpnService extends VpnService {
 
     @Override
     public void onDestroy() {
+        try { if (underlayCallbackRegistered) underlayManager.unregisterNetworkCallback(underlayCallback); }
+        catch (RuntimeException error) { Log.w("OrcheRouteFreeTURN", "underlay callback cleanup failed", error); }
+        try { if (wakeReceiverRegistered) unregisterReceiver(wakeReceiver); }
+        catch (RuntimeException error) { Log.w("OrcheRouteFreeTURN", "wake receiver cleanup failed", error); }
         // stopTunnel clears connected. Report unexpected destruction before
         // cleanup, without changing the user's saved manual start/stop intent.
         if (!stopping && (connected || starting)) {
@@ -454,6 +527,7 @@ public final class OrcheRouteVpnService extends VpnService {
 
     private void updateTrafficNotification() {
         if (!connected || stopping) return;
+        checkFreeTURNUnderlay(false);
         try {
             long download;
             long upload;

@@ -4,6 +4,19 @@ import { readFile } from "node:fs/promises";
 
 const service = await readFile(new URL("../../android/app/src/main/java/online/gooog1111/orcheroute/OrcheRouteVpnService.java", import.meta.url), "utf8");
 
+test("Android FreeTURN handover keeps TUN and manual server, with an unlock liveness fallback", () => {
+  const recovery = service.match(/private void checkFreeTURNUnderlay\([\s\S]*?\n    }/)[0];
+  assert.match(recovery, /!connected \|\| starting \|\| stopping \|\| !freeTURNActive/);
+  assert.match(recovery, /Freeturnbridge.reconnect\(\)/);
+  assert.match(recovery, /Freeturnbridge.wake\(\)/);
+  assert.doesNotMatch(recovery, /stopTunnel|stopFreeTURN|reload\(|selectNode|onDisabled|HttpURLConnection/);
+  assert.match(service, /Intent.ACTION_USER_PRESENT/);
+  assert.match(service, /NET_CAPABILITY_NOT_VPN/);
+  assert.match(service, /onLinkPropertiesChanged/);
+  assert.match(service, /unregisterNetworkCallback\(underlayCallback\)/);
+  assert.match(service, /unregisterReceiver\(wakeReceiver\)/);
+});
+
 test("notification restart uses an explicit immutable foreground-service reload intent", () => {
   assert.match(service, /"Перезапустить",\s+restartIntent\(\)/);
   const restart = service.match(/private PendingIntent restartIntent\(\)[\s\S]*?\n    }/)[0];
