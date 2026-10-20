@@ -1,298 +1,98 @@
-<!-- LANG_START -->
-🇬🇧 [English version](README.en.md)
-<!-- LANG_END -->
+# OrcheRoute
 
-<!-- STATS_START -->
-<!-- auto-updated by GitHub Actions · 2026-09-07 01:17 UTC -->
+[English](README.en.md)
 
-[![Views local](https://img.shields.io/badge/Views_local-3-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Views GitHub](https://img.shields.io/badge/Views_GitHub-5-ff6900?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Unique visitors](https://img.shields.io/badge/Unique-3-blue?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Clones](https://img.shields.io/badge/Clones-256-purple?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute)
-[![Stars](https://img.shields.io/badge/Stars-0-yellow?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute/stargazers)
-[![Forks](https://img.shields.io/badge/Forks-0-green?style=for-the-badge&logo=github)](https://github.com/gooog1111/OrcheRoute/network/members)
-[![Downloads latest release](https://img.shields.io/badge/Downloads_latest_release-10-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases/latest)
-[![Downloads total assets](https://img.shields.io/badge/Downloads_total_assets-202-brightgreen?style=for-the-badge)](https://github.com/gooog1111/OrcheRoute/releases)
-
-<!-- STATS_END -->
-
-<!-- GRAPH_START -->
-<p align="center">
-  <img src="./traffic-views.png" width="100%" alt="GitHub Traffic">
-</p>
-<!-- GRAPH_END -->
-
-<!-- ISSUES_START -->
-<!-- auto-updated by GitHub Actions · 2026-09-07 01:17 UTC -->
-
-## Issues
-
-<p>
-  <a href="https://github.com/gooog1111/OrcheRoute/issues">
-    <img alt="Open issues" src="https://img.shields.io/badge/Open_issues-0-blue?style=for-the-badge&logo=github">
-  </a>
-  <a href="https://github.com/gooog1111/OrcheRoute/issues/new/choose">
-    <img alt="Create issue" src="https://img.shields.io/badge/Create_issue-new-success?style=for-the-badge&logo=github">
-  </a>
-</p>
-
-<details open>
-<summary><b>Открытые issues</b></summary>
-
-
-<p align="center">
-  <b>Открытых issues нет.</b><br>
-  <sub>Служебный issue <code>views-counter</code> скрыт из списка.</sub>
-</p>
-
-
-</details>
-
-<p>
-  <a href="https://github.com/gooog1111/OrcheRoute/issues/new/choose">Создать issue</a> ·
-  <a href="https://github.com/gooog1111/OrcheRoute/issues">Все issues</a>
-</p>
-
-<!-- ISSUES_END -->
-
-## OrcheRoute
-
-OrcheRoute — VPN-клиент и контроллер маршрутизации на базе
-[Mihomo](https://github.com/MetaCubeX/mihomo). Приложение принимает обычные
-ссылки на серверы и подписки, проверяет доступность узлов, выбирает
-рабочее соединение и направляет трафик по правилам `direct`, `proxy` и
-`block`.
-
-> Поддерживаемые цели проекта — Android `arm64` и Linux Server `amd64`.
-> Остальные платформенные заготовки временно выведены из разработки, чтобы
-> общий Go-код и два рабочих адаптера развивались без расхождений.
+VPN-клиент для Android и VPN-контроллер с веб-интерфейсом для Linux Server на базе [Mihomo](https://github.com/MetaCubeX/mihomo). Поддерживает подписки, проверку серверов, DNS и маршруты `direct`, `proxy`, `block`.
 
 ## Скачать
 
-- **Текущая стабильная версия: 0.8.1** (Android `versionCode 89`)
-- [Скачать APK для Android arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.1/OrcheRoute-Android-0.8.1-code89-arm64.apk)
-- [Скачать DEB для Linux Server amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.1/OrcheRoute-Linux-Server-0.8.1-amd64.deb)
-- [Страница последнего стабильного выпуска](https://github.com/gooog1111/OrcheRoute/releases/latest)
-- [Все выпуски и beta-версии](https://github.com/gooog1111/OrcheRoute/releases)
+- [Android 0.8.2 — APK, arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.2/OrcheRoute-Android-0.8.2-code92-arm64.apk)
+- [Linux Server 0.8.3 — DEB, amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.3/OrcheRoute-Linux-Server-0.8.3-amd64.deb)
+- [Все выпуски](https://github.com/gooog1111/OrcheRoute/releases)
 
-Для Android требуется Android 8.0 или новее. Root-доступ не нужен.
+## Android
 
-1. Скачайте APK из последнего стабильного выпуска.
-2. Разрешите установку из выбранного браузера или файлового менеджера.
-3. При первом включении подтвердите создание VPN-подключения Android.
-4. Разрешите уведомления и, если Android предложит, исключите OrcheRoute из
-   энергосбережения — это помогает системе не останавливать VPN в фоне.
-5. Добавьте собственную подписку в разделе «Подписки» или включите нужные
-   встроенные аварийные источники.
-6. Обновите или проверьте нужную подписку, выберите сервер в основном списке
-   и нажмите «Включить». Для перехода с beta на stable выключите флажок
-   «Бета-версии» в разделе «Обновления» и проверьте обновление.
+Требуется Android 8.0 или новее; root не нужен.
 
-Обновления устанавливаются из самого приложения через GitHub Releases. Для
-обычных обновлений оставьте флажок «Beta-версии» выключенным.
+1. Установите APK и подтвердите разрешение на создание VPN.
+2. Добавьте подписку, импортируйте файл, ссылку или QR-код. При необходимости включите встроенные аварийные источники.
+3. Обновите подписку и проверьте серверы — отдельно по подписке или весь список.
+4. Выберите сервер вручную и нажмите «Включить».
 
-### Linux Server
+Android использует один основной список с группировкой по подпискам. Автоматического выбора сервера и переключения по статусу сети нет. Для FreeTURN может потребоваться подтверждение VK CAPTCHA; окно можно перемещать за заголовок.
 
-Устанавливайте скачанный DEB через APT, чтобы необходимые сетевые компоненты
-были установлены автоматически:
+В разделе «Обновления» можно проверить и установить новую версию. Флажок «Бета-версии» выбирает тестовый канал; для стабильных обновлений выключите его.
+
+Настройки и подписки хранятся в данных приложения. Удаление приложения удаляет эти данные — заранее экспортируйте важные подписки. Разрешите уведомления и при необходимости исключите приложение из энергосбережения для работы VPN в фоне.
+
+## Linux Server
+
+Установка в Debian/Ubuntu:
 
 ```bash
-sudo apt install ./OrcheRoute-Linux-Server-0.7.5-amd64.deb
+sudo apt install ./OrcheRoute-Linux-Server-0.8.3-amd64.deb
 ```
 
-При прямом `dpkg -i` WebUI также запускается, но для включения VPN-транспорта
-потребуется установленный `nftables`. После установки адреса интерфейса и
-сгенерированные данные входа выводятся в терминал и сохраняются в
-`/etc/orcheroute/initial-credentials`.
+Откройте `http://127.0.0.1:19110/` на сервере либо `http://АДРЕС_СЕРВЕРА:19110/` с другого устройства. Установщик выводит данные первого входа. Авторизация и настройки сохраняются при обычном обновлении пакета.
 
-В beta-канале Linux Server также доступен входящий VPN-сервер. Одна персональная
-подписка содержит FreeTURN, VLESS Reality, Trojan TLS и Hysteria2; по умолчанию
-используется SNI `m.vk.ru` и порты TCP 24443, TCP 24444 и UDP 24445.
-FreeTURN принимает внешний TCP-трафик и передаёт его во встроенный Xray;
-VLESS/Trojan/Hysteria2 listeners работают через изолированный экземпляр
-комплектного Mihomo и не меняют действующую исходящую
-маршрутизацию. Срок действия применяется ко всей подписке. Счётчик трафика точен
-для тракта FreeTURN (берётся из счётчиков AWG-интерфейса) и приблизителен для
-VLESS/Trojan/Hysteria2 (раз в 5 секунд опрашиваются активные соединения
-Mihomo; сессия, успевшая полностью открыться и закрыться между двумя опросами,
-а также «хвост» уже увиденной сессии между последним опросом и её закрытием, в
-счётчик не попадают). Для точных лимитов трафика на этот счётчик полагаться
-нельзя. По умолчанию подключённым клиентам доступен только Интернет — локальная
-сеть сервера и другие подключённые клиенты изолированы; доступ к LAN можно
-включить явно в настройках VPN-сервера.
+Проверить состояние службы:
 
-`sudo apt remove orcheroute` сохраняет настройки, авторизацию, подписки,
-маршруты и состояние. `sudo apt purge orcheroute` полностью удаляет эти данные
-и резервные копии OrcheRoute.
-
-## Что умеет OrcheRoute
-
-- добавлять подписки, отдельные серверы, файлы, списки из буфера и QR-коды;
-- автоматически распознавать поддерживаемый формат подписки;
-- отбрасывать дубликаты серверов и повторяющиеся подписки;
-- проверять серверы по этапам TCP, URL-test и speed-test;
-- ранжировать рабочие серверы по задержке, скорости и стабильности;
-- в Android вручную выбирать сервер из единого списка, сгруппированного по подпискам;
-- в Linux Server переключаться между основным, аварийным и ограниченным списками;
-- применять маршруты по доменам, IP/CIDR, портам, протоколам, GeoIP и GeoSite;
-- перехватывать обычные DNS-запросы внутри Android VPN и применять к ним
-  выбранную маршрутизацию;
-- обновлять GeoIP и GeoSite из выбранного источника;
-- сохранять настройки, подписки и маршруты между перезапусками и обновлениями.
-- менять общую для Android и Linux тему оформления: «Матрица», Hello Kitty,
-  Liquid Glass, Windows 95, тёмную или светлую.
-
-## Ручное управление Android
-
-Android показывает один основной список из включённых встроенных источников
-и пользовательских подписок. Можно проверить одну подписку или весь список.
-Сервер выбирается вручную; проверка, смена сети и ошибка транспорта не выбирают
-замену и не выключают VPN. Для повторной попытки подключения используется
-отдельная кнопка. Маршруты и DNS сохраняют свои настройки.
-
-FreeTURN сначала пытается выполнить встроенную автоматическую проверку VK,
-а при необходимости открывает CAPTCHA для ручного подтверждения. Закрытие
-окна не останавливает VPN; дополнительные проверки не мешают уже подключённым
-потокам. Если рабочих потоков нет и VK требует ручного подтверждения, его всё
-же нужно пройти для установления соединения.
-
-## Как работает автоматика Linux Server
-
-OrcheRoute независимо отслеживает состояние физической сети и различает три
-состояния:
-
-- **Интернет доступен.** Сначала используется лучший рабочий сервер основного
-  списка. Если основных серверов нет, приложение переходит к аварийному списку.
-- **Доступны только белые списки.** Приложение формирует отдельный список из
-  серверов, реально доступных в ограниченной сети. Региональный фильтр при этой
-  проверке не применяется, а весь трафик, кроме явно заблокированного, идёт через VPN.
-- **Сети нет.** VPN отключается, чтобы не удерживать сломанный туннель, и
-  восстанавливается после появления подходящей сети, если до аварии был включён.
-
-В автоматическом режиме сервер удерживается до отказа. Ручной режим закрепляет
-выбранный сервер, пока пользователь снова не включит автоматический режим.
-
-## Маршрутизация
-
-Правило можно направить в одно из трёх действий:
-
-- `direct` — мимо VPN;
-- `proxy` — через выбранный VPN-сервер;
-- `block` — заблокировать соединение.
-
-Поддерживаются отдельные IP-адреса, CIDR и диапазоны IP, доменные маски,
-GeoIP/GeoSite, протоколы и независимые выражения портов, например `:5000`,
-`:5000-6000` или `:5000,5002,5005`.
-
-Перед применением нестандартных правил оставьте доступ к локальной сети и самому
-VPN-серверу: ошибочное правило `block` или `direct` может сделать соединение недоступным.
-
-## Используемые проекты и встроенные источники
-
-### Сетевое ядро
-
-- [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — обработка TUN,
-  прокси-протоколов, DNS и правил маршрутизации. В Android ядро встроено в APK;
-  его версия обновляется вместе с приложением.
-
-### Транспорт FreeTURN
-
-- [samosvalishe/free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy)
-  используется как единый клиентский и серверный FreeTURN runtime;
-- в `third_party/free-turn-proxy` зафиксирована проверенная upstream-ревизия
-  с минимальным патчем изоляции отказов независимых VK Call-провайдеров.
-
-Авторы, лицензия и исходная ревизия указаны в `THIRD_PARTY_NOTICES.md`.
-Прежний собственный VKCall/DTLS/KCP/smux тракт удалён.
-
-### Встроенные аварийные списки серверов
-
-При чистой установке доступны два публичных источника. Их можно выключить в
-разделе «Подписки»:
-
-- [EbraSha/free-v2ray-public-list](https://github.com/ebrasha/free-v2ray-public-list)
-  — [используемый список серверов](https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt);
-- [Au1rxx/free-vpn-subscriptions](https://github.com/Au1rxx/free-vpn-subscriptions)
-  — [используемая V2Ray/Base64-подписка](https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt).
-
-Эти репозитории не принадлежат OrcheRoute. Состав, доступность и безопасность
-публичных серверов контролируются их авторами и владельцами узлов. Рассматривайте
-их как аварийный резерв: для постоянной работы лучше добавить собственную доверенную
-подписку. Не передавайте чувствительные данные через неизвестные серверы без прикладного
-шифрования, например HTTPS.
-
-## GeoIP и GeoSite
-
-Приложение поддерживает три готовых источника:
-
-- [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat) —
-  [GeoIP](https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat)
-  и [GeoSite](https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat);
-- [RunetFreedom/russia-v2ray-rules-dat](https://github.com/runetfreedom/russia-v2ray-rules-dat) —
-  [GeoIP](https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat)
-  и [GeoSite](https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geosite.dat);
-- [Loyalsoldier/v2ray-rules-dat](https://github.com/Loyalsoldier/v2ray-rules-dat) —
-  [GeoIP](https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat)
-  и [GeoSite](https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat).
-
-Также можно указать собственные прямые HTTPS-ссылки на совместимые
-`geoip.dat` и `geosite.dat`. Одновременно используется один выбранный набор.
-
-## Данные и разрешения Android
-
-Настройки, маршруты и импортированные подписки хранятся локально в данных
-приложения. OrcheRoute не требует регистрации. Для работы приложению необходимы доступ к
-сети, системное разрешение VPN, foreground-уведомление и доступ к камере только при сканировании
-QR-кода.
-
-Удаление приложения удаляет его локальные данные. Перед переустановкой с другим
-сертификатом подписи экспортируйте важные подписки и серверы.
-
-## Ограничения
-
-- стабильный Android APK сейчас публикуется только для `arm64`;
-- доступность бесплатных серверов и подписок не гарантируется;
-- некоторые прошивки Android агрессивно закрывают фоновые приложения даже после
-  выдачи разрешений;
-- передача VPN в мобильную точку доступа зависит от реализации прошивки Android и без
-  системных прав может быть недоступна;
-- Linux Server и Android используют разные системные транспортные адаптеры;
-  их общий функционал последовательно переносится в единые Go-модули.
-
-## Документация для разработки
-
-- [API.md](API.md) — локальный HTTP API;
-- [ANDROID_ARCHITECTURE.md](ANDROID_ARCHITECTURE.md) — устройство Android-приложения;
-- [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — сторонние компоненты и лицензии.
-
-## Локальная проверка и сборка
-
-Единая точка входа проверяет только поддерживаемые цели — Android и Linux Server:
-
-```powershell
-.\scripts\build-all.ps1 -Target all
+```bash
+systemctl status orcheroute-go --no-pager
 ```
 
-На Windows Android собирается локально, а Linux Server — в WSL
-`Ubuntu-24.04`. Отдельные цели: `android`, `linux-server`, `web` и `common`.
-На Linux используется `./scripts/build-all.sh all`. Сборка через GitHub Actions
-в проекте запрещена.
+Добавьте подписки в веб-интерфейсе, задайте интервалы обновления, проверьте серверы и включите VPN. Плановое обновление загружает подписки без полной квалификации; после ошибки загрузки действует пауза перед повтором.
 
-Android собирается вариантом `release`, без `debuggable`. Перед сборкой задайте
-переменные окружения `ORCHEROUTE_ANDROID_KEYSTORE`, `ORCHEROUTE_ANDROID_KEY_ALIAS`,
-`ORCHEROUTE_ANDROID_STORE_PASSWORD` и `ORCHEROUTE_ANDROID_KEY_PASSWORD`.
-Используйте **тот же сертификат подписи, которым подписано установленное приложение**:
-новый ключ не позволит обновиться поверх него. Keystore и пароли не добавляйте в Git.
-Без явных параметров подписи сборщик завершится ошибкой, а не создаст debug-APK
-под видом релиза. Для проверки Java-кода без выпуска пакета можно запускать
-`:app:compileDebugJavaWithJavac` из каталога `android`.
+В автоматическом режиме используется основной список, при его недоступности — аварийный. При ограниченном доступе формируется отдельный список доступных серверов. Во время неподтверждённой смены состояния внешней сети выбор сервера удерживается. Автоматика может перейти на заметно более рейтинговый основной сервер после повторного наблюдения; небольшая разница рейтинга не вызывает переключение. Ручной выбор остаётся закреплённым.
 
-Актуальная разработка ведётся в единственной ветке `main`. Стабильные версии
-зафиксированы тегами `v*`, а тестовые Android-сборки — тегом `android-beta`.
-Сборки и проверки выполняются только локально; workflow GitHub Actions удалены.
+### Квалификация серверов
 
-## Лицензии и авторство
+Проверки включают TCP, открытие контрольных URL, регион и скорость. Рейтинг учитывает задержку, скорость и стабильность. Можно проверить одну подписку, не пересчитывая остальные.
 
-OrcheRoute использует сторонние проекты и данные на условиях их собственных лицензий.
-Ссылки выше ведут на исходные репозитории, где указаны авторы, лицензии и правила
-использования каждого компонента.
+В разделе «Квалификация» настраиваются контрольные URL, таймауты и фильтры. Дополнительный фильтр открытия адреса поддерживает три режима:
+
+- выключен;
+- допускать сервер, если адрес открывается;
+- отклонять сервер, если адрес открывается.
+
+Адрес, например `youtube.com`, проверяется через каждый VPN-сервер после обычного URL-test. Успешным считается HTTP `2xx`; `403` не подходит. Этот дополнительный фильтр доступен в Linux Server.
+
+### Собственный VPN-сервер
+
+Раздел «VPN-сервер» позволяет выдавать персональные подписки с FreeTURN, VLESS Reality, Trojan TLS и Hysteria2. Для подписки можно задать срок действия, лимит трафика и доступ к локальной сети сервера: наследовать общую настройку, разрешить или запретить отдельно.
+
+Стандартные порты: FreeTURN UDP `4443`, VLESS TCP `24443`, Trojan TCP `24444`, Hysteria2 UDP `24445`. Откройте используемые порты в своём firewall. Публичный адрес может быть IP или доменным именем; адрес HTTPS-подписки задаётся отдельно. Стандартный SNI — `m.vk.ru`.
+
+Учёт трафика VLESS/Trojan/Hysteria2 основан на периодическом опросе соединений и может недосчитывать короткие сессии. Не используйте его как точный биллинговый счётчик.
+
+### Обновление и удаление
+
+Обновление доступно в разделе «Обновления» веб-интерфейса или установкой нового DEB поверх предыдущего. Перед сменой настроек сети сохраните доступ к самому серверу.
+
+```bash
+sudo apt remove orcheroute  # сохранить настройки и авторизацию
+sudo apt purge orcheroute   # удалить настройки, состояние и резервные копии
+```
+
+## Маршруты и GEO
+
+Правила поддерживают IP, CIDR, диапазоны адресов, домены, GeoIP/GeoSite, протоколы и порты. Действия: `direct` — напрямую, `proxy` — через VPN, `block` — блокировать.
+
+Источник GeoIP/GeoSite и расписание обновлений выбираются в настройках. Доступны:
+
+- [MetaCubeX/meta-rules-dat](https://github.com/MetaCubeX/meta-rules-dat): [GeoIP](https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.dat), [GeoSite](https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat);
+- [RunetFreedom/russia-v2ray-rules-dat](https://github.com/runetfreedom/russia-v2ray-rules-dat): [GeoIP](https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat), [GeoSite](https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geosite.dat);
+- [Loyalsoldier/v2ray-rules-dat](https://github.com/Loyalsoldier/v2ray-rules-dat): [GeoIP](https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat), [GeoSite](https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat).
+
+Можно указать свои HTTPS-ссылки на совместимые базы.
+
+## Источники и лицензии
+
+- [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — сетевое ядро, протоколы, DNS и маршрутизация.
+- [samosvalishe/free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy) — транспорт FreeTURN.
+- [EbraSha/free-v2ray-public-list](https://github.com/ebrasha/free-v2ray-public-list) — [встроенный список серверов](https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt).
+- [Au1rxx/free-vpn-subscriptions](https://github.com/Au1rxx/free-vpn-subscriptions) — [встроенная подписка](https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt).
+
+Встроенные подписки можно отключить. Доступность публичных серверов не гарантируется; для постоянного использования предпочтительны доверенные источники. Защищайте чувствительные данные прикладным шифрованием, например HTTPS.
+
+Авторы, лицензии и сведения о сторонних компонентах: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Лицензия проекта: [LICENSE](LICENSE).
