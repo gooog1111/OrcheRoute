@@ -6,7 +6,7 @@ An Android VPN client and Linux Server VPN controller built on [Mihomo](https://
 
 ## Downloads
 
-- [Android 0.8.2 — arm64 APK](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.2/OrcheRoute-Android-0.8.2-code92-arm64.apk)
+- [Android 0.8.3 — arm64 APK](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.3/OrcheRoute-Android-0.8.3-code93-arm64.apk)
 - [Linux Server 0.8.3 — amd64 DEB](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.3/OrcheRoute-Linux-Server-0.8.3-amd64.deb)
 - [All releases](https://github.com/gooog1111/OrcheRoute/releases)
 
