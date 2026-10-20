@@ -14,4 +14,11 @@ final class FreeTurnFailurePolicy {
     static boolean shouldReportTerminalFailure(String state, long streams, boolean connected, boolean stopping) {
         return "error".equals(state) && streams == 0 && connected && !stopping;
     }
+
+    static boolean shouldReportUnavailable(String state, long streams, boolean connected, boolean stopping) {
+        if (!connected || stopping || streams != 0) return false;
+        return shouldReportTerminalFailure(state, streams, connected, stopping)
+                || "connecting".equals(state) || "connected".equals(state)
+                || "captcha".equals(state) || "idle".equals(state);
+    }
 }

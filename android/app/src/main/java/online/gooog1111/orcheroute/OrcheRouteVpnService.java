@@ -356,20 +356,7 @@ public final class OrcheRouteVpnService extends VpnService {
 			}
 			@Override public void onState(String state, long streams, long total, String error) {
 				Log.i("OrcheRouteFreeTURN", "state=" + state + " streams=" + streams + "/" + total + " error=" + error);
-				if ("connected".equals(state) && streams > 0
-						&& freeTurnRecoveryTriggered.compareAndSet(true, false)) {
-					MobileRuntime.get(OrcheRouteVpnService.this).onTransportRestored();
-					showWaiting("VPN работает · " + notificationNode);
-				}
-				// A CAPTCHA failure for one stream is not a reason to recreate the
-				// Android TUN. Report a terminal failure and leave server selection
-				// and retry under user control.
-				if (FreeTurnFailurePolicy.shouldReportTerminalFailure(state, streams, connected, stopping)
-						&& freeTurnRecoveryTriggered.compareAndSet(false, true)) {
-					Log.w("OrcheRouteFreeTURN", "selected FreeTURN failed: " + error);
-					MobileRuntime.get(OrcheRouteVpnService.this).onTransportError(error);
-					showWaiting("Выбранный сервер недоступен · подключите вручную");
-				}
+				reportFreeTURNState(state, streams, error);
 			}
 		});
 		String config = Freeturnbridge.configFromOrcheRouteProfile(encodedProfile, "127.0.0.1:19000");
@@ -418,6 +405,23 @@ public final class OrcheRouteVpnService extends VpnService {
 		MainActivity.showFreeTURNCaptcha(this, "");
 	}
 
+    private void reportFreeTURNState(String state, long streams, String error) {
+        if (!connected || stopping) return;
+        if ("connected".equals(state) && streams > 0
+                && freeTurnRecoveryTriggered.compareAndSet(true, false)) {
+            MobileRuntime.get(this).onTransportRestored();
+            showWaiting("VPN работает · " + notificationNode);
+        }
+        // Keep the TUN and manual selection, but do not describe a zero-stream
+        // reconnect/CAPTCHA wait as working traffic. One surviving stream wins.
+        if (FreeTurnFailurePolicy.shouldReportUnavailable(state, streams, connected, stopping)
+                && freeTurnRecoveryTriggered.compareAndSet(false, true)) {
+            MobileRuntime.get(this).onTransportError(error == null || error.isBlank()
+                    ? "FreeTURN ожидает восстановление соединения" : error);
+            showWaiting("FreeTURN: нет рабочих потоков · Перезапустить");
+        }
+    }
+
     /**
      * Keeps every Mihomo outbound socket outside the Android TUN and on the
      * physical network selected by the connectivity monitor. Protecting the
@@ -449,12 +453,14 @@ public final class OrcheRouteVpnService extends VpnService {
     }
 
     private void updateTrafficNotification() {
-        if (!connected || stopping || freeTurnRecoveryTriggered.get()) return;
+        if (!connected || stopping) return;
         try {
             long download;
             long upload;
             if (packetTunnelActive) {
                 JSONObject traffic = new JSONObject(Freeturnbridge.stateJSON());
+                reportFreeTURNState(traffic.optString("state"), traffic.optLong("streams"), traffic.optString("error"));
+                if (freeTurnRecoveryTriggered.get()) return;
                 download = traffic.optLong("rx_rate");
                 upload = traffic.optLong("tx_rate");
             } else {
@@ -676,6 +682,11 @@ public final class OrcheRouteVpnService extends VpnService {
                 .setOnlyAlertOnce(true)
                 .setShowWhen(false)
                 .addAction(new Notification.Action.Builder(
+                        android.R.drawable.ic_popup_sync,
+                        "Перезапустить",
+                        restartIntent()
+                ).build())
+                .addAction(new Notification.Action.Builder(
                         android.R.drawable.ic_menu_close_clear_cancel,
                         "Выключить",
                         stopIntent()
@@ -696,5 +707,16 @@ public final class OrcheRouteVpnService extends VpnService {
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
         return PendingIntent.getService(this, 1, stop, flags);
+    }
+
+    private PendingIntent restartIntent() {
+        // Reuse the same reload path as the application: restart only the
+        // selected transport, without changing subscriptions or selection.
+        Intent restart = new Intent(this, OrcheRouteVpnService.class).setAction(ACTION_RELOAD);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return PendingIntent.getForegroundService(this, 2, restart, flags);
+        }
+        return PendingIntent.getService(this, 2, restart, flags);
     }
 }
