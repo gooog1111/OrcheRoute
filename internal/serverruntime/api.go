@@ -100,7 +100,7 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			events, err := runtime.Store.Events(ctx, limit)
 			return result(200, map[string]any{"events": events}, err)
 		case "/v1/policy":
-			return 200, map[string]any{"pool_order": []string{"primary", "emergency"}, "pool_priority": map[string]int{"primary": 0, "emergency": 1}, "sticky": true, "failure_limit": 2, "retry_after_seconds": 30, "switch_retry_seconds": 30, "cooldown_seconds": 900, "health_interval_seconds": 10, "max_candidates_per_incident": 3, "failed_nodes_before_requalification": 3, "qualification_retry_seconds": 300, "failback_probe_seconds": 20, "failback_stable_checks": 2, "runtime": "go"}
+			return 200, map[string]any{"pool_order": []string{"primary", "emergency"}, "pool_priority": map[string]int{"primary": 0, "emergency": 1}, "sticky": false, "rank_upgrade_interval_seconds": 20, "rank_upgrade_stable_checks": 2, "rank_upgrade_min_points": 75, "rank_upgrade_cooldown_seconds": 60, "failure_limit": 2, "retry_after_seconds": 30, "switch_retry_seconds": 30, "cooldown_seconds": 900, "health_interval_seconds": 10, "max_candidates_per_incident": 3, "failed_nodes_before_requalification": 3, "qualification_retry_seconds": 300, "failback_probe_seconds": 20, "failback_stable_checks": 2, "runtime": "go"}
 		case "/v1/qualification":
 			return runtime.getQualification()
 		case "/v1/subscriptions":
@@ -267,7 +267,11 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			if limit < 0 {
 				return 400, map[string]any{"error": "invalid_traffic_limit"}
 			}
-			client, err := runtime.CallServer.CreateClient(callserver.CreateClientInput{Name: stringValue(body["name"]), ExpiresAt: int64Value(body["expires_at"]), TrafficLimitBytes: uint64(limit)})
+			lan, lanErr := optionalLANPermission(body)
+			if lanErr != nil {
+				return 400, map[string]any{"error": lanErr.Error()}
+			}
+			client, err := runtime.CallServer.CreateClient(callserver.CreateClientInput{Name: stringValue(body["name"]), ExpiresAt: int64Value(body["expires_at"]), TrafficLimitBytes: uint64(limit), AllowLAN: lan})
 			if err != nil {
 				return backendError(err)
 			}
@@ -353,7 +357,12 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 		if limit < 0 {
 			return 400, map[string]any{"error": "invalid_traffic_limit"}
 		}
-		client, err := runtime.CallServer.UpdateClient(id, callserver.UpdateClientInput{Name: stringValue(body["name"]), Enabled: boolValue(body["enabled"]), ExpiresAt: int64Value(body["expires_at"]), TrafficLimitBytes: uint64(limit), ResetTraffic: boolValue(body["reset_traffic"]), RotateToken: boolValue(body["rotate_token"])})
+		lan, lanErr := optionalLANPermission(body)
+		if lanErr != nil {
+			return 400, map[string]any{"error": lanErr.Error()}
+		}
+		_, setLAN := body["allow_lan"]
+		client, err := runtime.CallServer.UpdateClient(id, callserver.UpdateClientInput{Name: stringValue(body["name"]), Enabled: boolValue(body["enabled"]), ExpiresAt: int64Value(body["expires_at"]), TrafficLimitBytes: uint64(limit), ResetTraffic: boolValue(body["reset_traffic"]), RotateToken: boolValue(body["rotate_token"]), AllowLAN: lan, SetLAN: setLAN})
 		if err == nil && runtime.CallServer.PublicConfig().Enabled && runtime.CallTransport != nil {
 			err = runtime.CallTransport.Apply(runtime.CallServer)
 		}

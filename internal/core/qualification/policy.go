@@ -18,13 +18,15 @@ func DefaultPolicy() map[string]any {
 	return map[string]any{
 		"version": float64(1),
 		"defaults": map[string]any{
-			"excluded_countries": []any{},
-			"min_speed_mbps":     float64(10),
-			"stability_ratio":    0.65,
-			"tcp_timeout_ms":     float64(2000),
-			"url_timeout_ms":     float64(3000),
-			"geo_timeout_ms":     float64(5000),
-			"speed_timeout_ms":   float64(15000),
+			"opening_filter_mode": "off",
+			"opening_filter_url":  "",
+			"excluded_countries":  []any{},
+			"min_speed_mbps":      float64(10),
+			"stability_ratio":     0.65,
+			"tcp_timeout_ms":      float64(2000),
+			"url_timeout_ms":      float64(3000),
+			"geo_timeout_ms":      float64(5000),
+			"speed_timeout_ms":    float64(15000),
 			"url_test_urls": []any{
 				"https://www.gstatic.com/generate_204",
 				"https://cp.cloudflare.com/generate_204",
@@ -89,6 +91,21 @@ func Validate(policy map[string]any) (map[string]any, error) {
 		"speed_timeout_ms": {5000, 120000},
 	}
 	defaultValues := DefaultPolicy()["defaults"].(map[string]any)
+	openingMode := valueString(valueOr(defaults, "opening_filter_mode", "off"))
+	if openingMode != "off" && openingMode != "require" && openingMode != "exclude" {
+		return nil, validation("invalid_opening_filter_mode")
+	}
+	openingURL := strings.TrimSpace(valueString(valueOr(defaults, "opening_filter_url", "")))
+	if openingURL != "" && !strings.Contains(openingURL, "://") {
+		openingURL = "https://" + openingURL
+	}
+	if openingMode != "off" || openingURL != "" {
+		parsed, err := url.Parse(openingURL)
+		if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Hostname() == "" || parsed.User != nil {
+			return nil, validation("invalid_opening_filter_url")
+		}
+	}
+	defaults["opening_filter_mode"], defaults["opening_filter_url"] = openingMode, openingURL
 	for key, limits := range timeoutRanges {
 		value, conversionErr := valueInt(valueOr(defaults, key, defaultValues[key]))
 		if conversionErr != nil {

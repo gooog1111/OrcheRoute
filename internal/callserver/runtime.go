@@ -45,6 +45,7 @@ type Runtime struct {
 	relayRun   io.Closer
 	backendRun io.Closer
 	status     RuntimeStatus
+	statusMu   sync.RWMutex
 	snapshot   RuntimeSnapshot
 	generation uint64
 }
@@ -58,9 +59,17 @@ func newRuntimeWithRelay(backend Backend, relay relayStarter) *Runtime {
 }
 
 func (runtime *Runtime) Status() RuntimeStatus {
-	runtime.mu.Lock()
-	defer runtime.mu.Unlock()
+	runtime.statusMu.RLock()
+	defer runtime.statusMu.RUnlock()
 	return runtime.status
+}
+
+// Transport start/stop may wait on external processes. Status readers must
+// never join that wait; writers are serialized separately by runtime.mu.
+func (runtime *Runtime) setStatus(status RuntimeStatus) {
+	runtime.statusMu.Lock()
+	runtime.status = status
+	runtime.statusMu.Unlock()
 }
 
 func (runtime *Runtime) Apply(manager *Manager) error {
@@ -76,7 +85,7 @@ func (runtime *Runtime) Apply(manager *Manager) error {
 	if err != nil {
 		return err
 	}
-	if reflect.DeepEqual(runtime.snapshot, snapshot) && runtime.status.Active == snapshot.Enabled {
+	if reflect.DeepEqual(runtime.snapshot, snapshot) && runtime.Status().Active == snapshot.Enabled {
 		if !snapshot.Enabled || runtime.healthyLocked() {
 			return nil
 		}
@@ -84,11 +93,13 @@ func (runtime *Runtime) Apply(manager *Manager) error {
 	runtime.stopLocked()
 	if !snapshot.Enabled {
 		runtime.snapshot = snapshot
-		runtime.status = RuntimeStatus{}
+		runtime.setStatus(RuntimeStatus{})
 		return nil
 	}
 	if err := runtime.startLocked(snapshot); err != nil {
-		runtime.status.LastError = err.Error()
+		status := runtime.Status()
+		status.LastError = err.Error()
+		runtime.setStatus(status)
 		return err
 	}
 	return nil
@@ -129,7 +140,7 @@ func (runtime *Runtime) Close() error {
 	defer runtime.mu.Unlock()
 	runtime.stopLocked()
 	runtime.snapshot = RuntimeSnapshot{}
-	runtime.status = RuntimeStatus{}
+	runtime.setStatus(RuntimeStatus{})
 	return nil
 }
 
@@ -159,11 +170,14 @@ func (runtime *Runtime) startLocked(snapshot RuntimeSnapshot) error {
 	}
 	runtime.generation++
 	runtime.cancel, runtime.relayRun, runtime.backendRun, runtime.snapshot = cancel, relayRun, backendRun, snapshot
-	runtime.status = RuntimeStatus{Active: true, ListenAddress: snapshot.ListenAddress, BackendAddress: snapshot.BackendAddress, Clients: len(snapshot.Clients), StartedAt: time.Now().Unix()}
+	runtime.setStatus(RuntimeStatus{Active: true, ListenAddress: snapshot.ListenAddress, BackendAddress: snapshot.BackendAddress, Clients: len(snapshot.Clients), StartedAt: time.Now().Unix()})
 	return nil
 }
 
 func (runtime *Runtime) stopLocked() {
+	status := runtime.Status()
+	status.Active = false
+	runtime.setStatus(status)
 	runtime.generation++
 	if runtime.cancel != nil {
 		runtime.cancel()
@@ -175,5 +189,4 @@ func (runtime *Runtime) stopLocked() {
 		_ = runtime.backendRun.Close()
 	}
 	runtime.cancel, runtime.relayRun, runtime.backendRun = nil, nil, nil
-	runtime.status.Active = false
 }

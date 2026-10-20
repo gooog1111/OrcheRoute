@@ -13,6 +13,8 @@ type Config struct {
 	TCPWorkers   int
 	URLWorkers   int
 	SpeedWorkers int
+	OpeningURL   string
+	OpeningMode  string
 }
 
 type URLTarget struct {

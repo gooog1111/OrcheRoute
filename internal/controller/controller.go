@@ -62,6 +62,9 @@ type State struct {
 	FailureWindowStart  int64            `json:"failure_window_start"`
 	QualificationSince  int64            `json:"qualification_since"`
 	Cooldowns           map[string]int64 `json:"cooldowns"`
+	RankTarget          string           `json:"rank_target,omitempty"`
+	RankStreak          int              `json:"rank_streak,omitempty"`
+	NextRankCheck       int64            `json:"next_rank_check,omitempty"`
 }
 
 type Decision struct {
@@ -83,6 +86,7 @@ type Policy struct {
 	FailureWindow        time.Duration
 	QualificationRetry   time.Duration
 	SuspendOnExhaustion  bool
+	RankUpgradeInterval  time.Duration
 }
 
 func DefaultPolicy() Policy {
@@ -98,6 +102,7 @@ func ManagedPolicy() Policy {
 	policy := DefaultPolicy()
 	policy.PoolFailureLimit = 3
 	policy.SuspendOnExhaustion = true
+	policy.RankUpgradeInterval = 20 * time.Second
 	return policy
 }
 
@@ -198,9 +203,31 @@ func Step(previous State, observation Observation, policy Policy) (State, Decisi
 			currentPool = node.Pool
 		}
 	}
+	if state.Active != observation.Active {
+		state.RankTarget, state.RankStreak = "", 0
+	}
 	state.Active, state.ActivePool = observation.Active, currentPool
 	if observation.Active != "" && observation.Active != "DIRECT-EGRESS" && observation.ActiveOK {
 		state.Status, state.FailureStreak = "proxy_ok", 0
+		if currentPool == Primary && policy.RankUpgradeInterval > 0 && now >= state.NextRankCheck {
+			state.NextRankCheck = now + int64(policy.RankUpgradeInterval.Seconds())
+			current, exists := nodeByName(observation.Nodes, observation.Active)
+			better := candidates(observation.Nodes, Primary, state.Cooldowns, observation.Active)
+			if exists && len(better) > 0 && rankScore(better[0]) >= rankScore(current)+75 {
+				if state.RankTarget == better[0].Name {
+					state.RankStreak++
+				} else {
+					state.RankTarget, state.RankStreak = better[0].Name, 1
+				}
+				if state.RankStreak >= 2 {
+					state.RankTarget, state.RankStreak = "", 0
+					state.NextRankCheck = now + 60
+					return state, Decision{Action: "select", Target: better[0].Name, Pool: Primary, Reason: "higher_rank_stable"}
+				}
+			} else {
+				state.RankTarget, state.RankStreak = "", 0
+			}
+		}
 		if state.FailedNodes > 0 && state.FailureWindowStart > 0 && now-state.FailureWindowStart >= int64(policy.FailureWindow.Seconds()) {
 			state.FailedNodes, state.FailureWindowStart = 0, 0
 		}
@@ -240,6 +267,7 @@ func Step(previous State, observation Observation, policy Policy) (State, Decisi
 	}
 
 	state.Status = "proxy_degraded"
+	state.RankTarget, state.RankStreak = "", 0
 	state.FailureStreak++
 	if observation.Active == "" || observation.Active == "DIRECT-EGRESS" {
 		state.FailureStreak = policy.FailureLimit
@@ -271,6 +299,10 @@ func Step(previous State, observation Observation, policy Policy) (State, Decisi
 		return state, Decision{Action: "refresh", Reason: "no_working_candidate"}
 	}
 	return state, Decision{Action: "keep", Reason: "no_working_candidate"}
+}
+
+func rankScore(node Node) float64 {
+	return noderank.Score(noderank.Node{ID: node.Name, Pool: node.Pool, Alive: node.Alive, DelayMS: node.Delay, SpeedMbps: node.SpeedMbps, StabilityRatio: node.StabilityRatio, HealthSuccesses: node.HealthSuccesses, HealthFailures: node.HealthFailures})
 }
 
 func stepEmergency(state State, observation Observation, policy Policy, now int64) (State, Decision) {

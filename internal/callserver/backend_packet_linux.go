@@ -37,6 +37,7 @@ type embeddedPacketRuntime struct {
 	interfaceName     string
 	forwardingChanged bool
 	forwardRules      [][]string
+	inputRules        [][]string
 	peerClients       map[string]string
 	lastTraffic       map[string]Traffic
 }
@@ -68,7 +69,7 @@ func (backend EmbeddedPacketBackend) Start(ctx context.Context, snapshot Runtime
 		running.Close()
 		return nil, fmt.Errorf("call_server_packet_configure: %w", err)
 	}
-	if err := running.configureNetwork(snapshot.Packet.InterfaceAddress, snapshot.Packet.AllowLAN); err != nil {
+	if err := running.configureNetwork(snapshot.Packet.InterfaceAddress, snapshot.Packet.AllowLAN, snapshot.Packet.Peers); err != nil {
 		running.Close()
 		return nil, err
 	}
@@ -91,7 +92,7 @@ func (backend EmbeddedPacketBackend) Start(ctx context.Context, snapshot Runtime
 	return running, nil
 }
 
-func (runtime *embeddedPacketRuntime) configureNetwork(address string, allowLAN bool) error {
+func (runtime *embeddedPacketRuntime) configureNetwork(address string, allowLAN bool, peers []PacketPeer) error {
 	for _, binary := range []string{"ip", "nft", "iptables"} {
 		if _, err := exec.LookPath(binary); err != nil {
 			return fmt.Errorf("call_server_dependency_missing:%s", binary)
@@ -128,7 +129,7 @@ func (runtime *embeddedPacketRuntime) configureNetwork(address string, allowLAN 
 	// LAN block (S5) are always evaluated before the generic accept further
 	// down. Rules that already existed remain owned by the administrator and
 	// are not removed on shutdown.
-	for index, rule := range packetForwardRules(runtime.interfaceName, allowLAN) {
+	for index, rule := range packetClientForwardRules(runtime.interfaceName, allowLAN, peers) {
 		check := append([]string{"-w", "5", "-C", "FORWARD"}, rule...)
 		if exec.Command("iptables", check...).Run() == nil {
 			continue
@@ -138,6 +139,15 @@ func (runtime *embeddedPacketRuntime) configureNetwork(address string, allowLAN 
 			return err
 		}
 		runtime.forwardRules = append(runtime.forwardRules, append([]string(nil), rule...))
+	}
+	for index, rule := range packetClientInputRules(runtime.interfaceName, allowLAN, peers) {
+		if exec.Command("iptables", append([]string{"-w", "5", "-C", "INPUT"}, rule...)...).Run() == nil {
+			continue
+		}
+		if err := runPacketCommand("iptables", append([]string{"-w", "5", "-I", "INPUT", strconv.Itoa(index + 1)}, rule...)...); err != nil {
+			return err
+		}
+		runtime.inputRules = append(runtime.inputRules, append([]string(nil), rule...))
 	}
 	_ = exec.Command("nft", "delete", "table", "inet", packetNATTable).Run()
 	commands := [][]string{
@@ -215,6 +225,46 @@ func packetForwardRules(interfaceName string, allowLAN bool) [][]string {
 		[]string{"-i", interfaceName, "-j", "ACCEPT"},
 		[]string{"-o", interfaceName, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"},
 	)
+}
+
+func packetClientForwardRules(interfaceName string, allowLAN bool, peers []PacketPeer) [][]string {
+	base := packetForwardRules(interfaceName, allowLAN)
+	rules := append([][]string{}, base[0]) // Peer isolation always wins.
+	for _, peer := range peers {
+		if peer.AllowLAN == nil || *peer.AllowLAN == allowLAN {
+			continue
+		}
+		action := "DROP"
+		if *peer.AllowLAN {
+			action = "ACCEPT"
+		}
+		for _, cidr := range privateIPv4CIDRs {
+			rules = append(rules, []string{"-i", interfaceName, "-s", peer.Address.String(), "-d", cidr, "-j", action})
+		}
+	}
+	return append(rules, base[1:]...)
+}
+
+func packetClientInputRules(interfaceName string, allowLAN bool, peers []PacketPeer) [][]string {
+	rules := [][]string{}
+	for _, peer := range peers {
+		if peer.AllowLAN == nil || *peer.AllowLAN == allowLAN {
+			continue
+		}
+		action := "DROP"
+		if *peer.AllowLAN {
+			action = "ACCEPT"
+		}
+		for _, cidr := range privateIPv4CIDRs {
+			rules = append(rules, []string{"-i", interfaceName, "-s", peer.Address.String(), "-d", cidr, "-j", action})
+		}
+	}
+	if !allowLAN {
+		for _, cidr := range privateIPv4CIDRs {
+			rules = append(rules, []string{"-i", interfaceName, "-d", cidr, "-j", "DROP"})
+		}
+	}
+	return rules
 }
 
 func runPacketCommand(name string, arguments ...string) error {
@@ -307,6 +357,10 @@ func (runtime *embeddedPacketRuntime) Close() error {
 			_ = exec.Command("iptables", arguments...).Run()
 		}
 		runtime.forwardRules = nil
+		for index := len(runtime.inputRules) - 1; index >= 0; index-- {
+			_ = exec.Command("iptables", append([]string{"-w", "5", "-D", "INPUT"}, runtime.inputRules[index]...)...).Run()
+		}
+		runtime.inputRules = nil
 		if runtime.forwardingChanged {
 			_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("0\n"), 0o644)
 		}

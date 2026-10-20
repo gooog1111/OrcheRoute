@@ -85,7 +85,7 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 			</div>
 			<details className="advanced-settings"><summary>Ручная настройка сети</summary><div className="form-grid two">
 				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.ordinary_enabled} onChange={event => update("ordinary_enabled", event.target.checked)} disabled={busy}/><span><strong>VLESS, Trojan и Hysteria2</strong><small>Добавлять эти серверы в персональную подписку.</small></span></label>
-				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.allow_lan} onChange={event => update("allow_lan", event.target.checked)} disabled={busy}/><span><strong>Доступ клиентов к локальной сети сервера</strong><small>По умолчанию клиентам виден только Интернет. Включите, только если это действительно нужно — это открывает LAN сервера всем подключённым клиентам.</small></span></label>
+				<label className="checkbox-card form-field-wide"><input type="checkbox" checked={config.allow_lan} onChange={event => update("allow_lan", event.target.checked)} disabled={busy}/><span><strong>Доступ клиентов к локальной сети сервера</strong><small>Общая настройка. Для каждой подписки ниже можно отдельно разрешить или запретить LAN; без исключения действует эта настройка.</small></span></label>
 				<label className="form-field"><span>Публичный адрес FreeTURN</span><input value={config.public_endpoint ?? ""} onChange={event => update("public_endpoint", event.target.value)} placeholder="vpn.example.ru:4443" disabled={busy}/><small>Публичный IP или доменное имя и UDP-порт.</small></label>
 				<label className="form-field"><span>Адрес подписок</span><input type="url" value={config.subscription_base_url ?? ""} onChange={event => update("subscription_base_url", event.target.value)} placeholder="Необязательно" disabled={busy}/><small>Нужен только для обновляемой HTTPS-ссылки. Файл и QR работают без домена.</small></label>
 				<label className="form-field"><span>Слушать FreeTURN UDP</span><input value={config.listen_address} onChange={event => update("listen_address", event.target.value)} placeholder="0.0.0.0:4443" disabled={busy}/></label>
@@ -115,6 +115,7 @@ export function CallServerPanel({ state, busy, run, onReload }: {
 function CallServerClientCard({ client, busy, run, onReload }: { client: CallServerClient; busy: boolean; run: Runner; onReload: () => Promise<void> }) {
 	const [name, setName] = useState(client.name);
 	const [enabled, setEnabled] = useState(client.enabled);
+	const [lanMode, setLANMode] = useState(client.allow_lan == null ? "inherit" : client.allow_lan ? "allow" : "deny");
 	const [expires, setExpires] = useState(client.expires_at ? localDateTime(client.expires_at) : "");
 	const [limitGB, setLimitGB] = useState(client.traffic_limit_bytes ? String(Math.round(client.traffic_limit_bytes / 1024 ** 3 * 10) / 10) : "");
 	const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -122,7 +123,7 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 	const [profileQR, setProfileQR] = useState("");
 	const [subscriptionURL, setSubscriptionURL] = useState("");
 	const [subscriptionLinkError, setSubscriptionLinkError] = useState(false);
-	const payload = (extra: { reset_traffic?: boolean; rotate_token?: boolean } = {}) => ({ name, enabled, expires_at: expires ? Math.floor(new Date(expires).getTime() / 1000) : 0, traffic_limit_bytes: limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : 0, ...extra });
+	const payload = (extra: { reset_traffic?: boolean; rotate_token?: boolean } = {}) => ({ name, enabled, allow_lan: lanMode === "inherit" ? null : lanMode === "allow", expires_at: expires ? Math.floor(new Date(expires).getTime() / 1000) : 0, traffic_limit_bytes: limitGB ? Math.round(Number(limitGB) * 1024 ** 3) : 0, ...extra });
 	const reloadAfter = async (operation: () => Promise<unknown>, message: string, title: string) => { if (await run(operation, message, { title })) await onReload(); };
 	const loadSubscriptionURL = async () => {
 		if (subscriptionURL) return subscriptionURL;
@@ -170,6 +171,7 @@ function CallServerClientCard({ client, busy, run, onReload }: { client: CallSer
 	return <details className="call-client-card">
 		<summary><span className={`node-status ${client.available ? "alive" : ""}`}/><span><strong>{client.name}</strong><small>{formatBytes(client.traffic_used_bytes)}{client.traffic_limit_bytes ? ` из ${formatBytes(client.traffic_limit_bytes)}` : ""}</small></span><em>{client.available ? "Доступен" : "Отключён"}</em></summary>
 		<div className="call-client-body">
+			<label className="form-field"><span>Доступ этой подписки к LAN сервера</span><select value={lanMode} onChange={event => setLANMode(event.target.value)} disabled={busy}><option value="inherit">Общая настройка сервера</option><option value="allow">Разрешить</option><option value="deny">Запретить</option></select></label>
 			<div className="form-grid two"><label className="form-field"><span>Название</span><input value={name} onChange={event => setName(event.target.value)} placeholder="Необязательно" disabled={busy}/></label><label className="choice-row"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={busy}/><span><strong>Клиент включён</strong></span></label><label className="form-field"><span>Действует до</span><input type="datetime-local" value={expires} onChange={event => setExpires(event.target.value)} disabled={busy}/></label><label className="form-field"><span>Лимит, ГБ</span><input type="number" min={0} step="0.1" value={limitGB} onChange={event => setLimitGB(event.target.value)} disabled={busy}/></label></div>
 			<div className="pool-audit"><div><span>Получено <strong>{formatBytes(client.traffic_rx_bytes)}</strong></span><span>Отправлено <strong>{formatBytes(client.traffic_tx_bytes)}</strong></span><span>Последняя связь <strong>{client.last_seen_at ? new Date(client.last_seen_at * 1000).toLocaleString("ru-RU") : "—"}</strong></span></div></div>
 			{(profileQR || subscriptionURL) && <div className="call-subscription-summary">

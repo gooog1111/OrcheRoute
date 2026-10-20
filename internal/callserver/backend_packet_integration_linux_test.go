@@ -4,11 +4,33 @@ package callserver
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
 )
+
+func TestPacketPerClientLANKeepsIsolationFirst(t *testing.T) {
+	allow := true
+	rules := packetClientForwardRules("orchecall0", false, []PacketPeer{{Address: netip.MustParseAddr("10.77.0.2"), AllowLAN: &allow}})
+	if strings.Join(rules[0], " ") != "-i orchecall0 -o orchecall0 -j DROP" {
+		t.Fatal(rules)
+	}
+	if strings.Join(rules[1], " ") != "-i orchecall0 -s 10.77.0.2 -d 10.0.0.0/8 -j ACCEPT" {
+		t.Fatal(rules)
+	}
+	if indexOfRule(rules, []string{"-i", "orchecall0", "-d", "10.0.0.0/8", "-j", "DROP"}) < 2 {
+		t.Fatal("global block must follow client override")
+	}
+	input := packetClientInputRules("orchecall0", false, []PacketPeer{{Address: netip.MustParseAddr("10.77.0.2"), AllowLAN: &allow}})
+	if strings.Join(input[0], " ") != "-i orchecall0 -s 10.77.0.2 -d 10.0.0.0/8 -j ACCEPT" {
+		t.Fatal(input)
+	}
+	if indexOfRule(input, []string{"-i", "orchecall0", "-d", "10.0.0.0/8", "-j", "DROP"}) < 1 {
+		t.Fatal("server-local address bypass")
+	}
+}
 
 func TestPacketForwardRulesAreScopedToTunnelInterface(t *testing.T) {
 	rules := packetForwardRules("orchecall0", false)
@@ -92,22 +114,34 @@ func TestPacketForwardingLifecycle(t *testing.T) {
 	}
 
 	runtime := &embeddedPacketRuntime{interfaceName: interfaceName}
-	if err := runtime.configureNetwork("10.77.0.1/16", false); err != nil {
+	allow := true
+	peers := []PacketPeer{{Address: netip.MustParseAddr("10.77.0.2"), AllowLAN: &allow}}
+	if err := runtime.configureNetwork("10.77.0.1/16", false, peers); err != nil {
 		t.Fatal(err)
 	}
-	for _, rule := range packetForwardRules(interfaceName, false) {
+	for _, rule := range packetClientForwardRules(interfaceName, false, peers) {
 		arguments := append([]string{"-C", "FORWARD"}, rule...)
 		if output, err := exec.Command("iptables", arguments...).CombinedOutput(); err != nil {
 			t.Fatalf("forward rule was not installed: %v: %s", err, output)
 		}
 	}
+	for _, rule := range packetClientInputRules(interfaceName, false, peers) {
+		if output, err := exec.Command("iptables", append([]string{"-C", "INPUT"}, rule...)...).CombinedOutput(); err != nil {
+			t.Fatalf("input rule missing: %v %s", err, output)
+		}
+	}
 	if err := runtime.Close(); err != nil {
 		t.Fatal(err)
 	}
-	for _, rule := range packetForwardRules(interfaceName, false) {
+	for _, rule := range packetClientForwardRules(interfaceName, false, peers) {
 		arguments := append([]string{"-C", "FORWARD"}, rule...)
 		if exec.Command("iptables", arguments...).Run() == nil {
 			t.Fatalf("forward rule remained after shutdown: %v", rule)
+		}
+	}
+	for _, rule := range packetClientInputRules(interfaceName, false, peers) {
+		if exec.Command("iptables", append([]string{"-C", "INPUT"}, rule...)...).Run() == nil {
+			t.Fatal("input rule remained after shutdown", rule)
 		}
 	}
 }

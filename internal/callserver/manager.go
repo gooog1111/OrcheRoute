@@ -20,12 +20,15 @@ import (
 )
 
 type CreateClientInput struct {
+	AllowLAN          *bool  `json:"allow_lan,omitempty"`
 	Name              string `json:"name"`
 	ExpiresAt         int64  `json:"expires_at,omitempty"`
 	TrafficLimitBytes uint64 `json:"traffic_limit_bytes,omitempty"`
 }
 
 type UpdateClientInput struct {
+	SetLAN            bool   `json:"-"`
+	AllowLAN          *bool  `json:"allow_lan"`
 	Name              string `json:"name"`
 	Enabled           bool   `json:"enabled"`
 	ExpiresAt         int64  `json:"expires_at,omitempty"`
@@ -203,7 +206,7 @@ func (manager *Manager) CreateClient(input CreateClientInput) (Client, error) {
 	if err := manager.attachPacketProfileLocked(&manager.data, &profile); err != nil {
 		return Client{}, err
 	}
-	client := Client{ID: id, Name: name, Enabled: true, CreatedAt: now.Unix(), SubscriptionToken: token, Profile: profile}
+	client := Client{ID: id, Name: name, Enabled: true, CreatedAt: now.Unix(), SubscriptionToken: token, Profile: profile, AllowLAN: input.AllowLAN}
 	candidate := manager.data
 	candidate.Clients = append(append([]Client(nil), manager.data.Clients...), client)
 	if err := candidate.Validate(); err != nil {
@@ -234,6 +237,9 @@ func (manager *Manager) UpdateClient(id string, input UpdateClientInput) (Client
 			continue
 		}
 		client.Name, client.Enabled = name, input.Enabled
+		if input.SetLAN || input.AllowLAN != nil {
+			client.AllowLAN = input.AllowLAN
+		}
 		client.Profile.Name, client.Profile.ExpiresAt, client.Profile.TrafficLimitBytes = name, input.ExpiresAt, input.TrafficLimitBytes
 		if input.ResetTraffic {
 			client.TrafficRXBytes, client.TrafficTXBytes = 0, 0
@@ -408,8 +414,9 @@ func (manager *Manager) RuntimeSnapshot() (RuntimeSnapshot, error) {
 		if err != nil {
 			return RuntimeSnapshot{}, err
 		}
+		peer.AllowLAN = client.AllowLAN
 		snapshot.Packet.Peers = append(snapshot.Packet.Peers, peer)
-		snapshot.Ordinary.Clients = append(snapshot.Ordinary.Clients, OrdinaryClient{ID: client.ID, Name: client.Name,
+		snapshot.Ordinary.Clients = append(snapshot.Ordinary.Clients, OrdinaryClient{ID: client.ID, Name: client.Name, AllowLAN: client.AllowLAN,
 			VLESSUUID: client.Profile.VLESSUUID, TrojanPassword: protocolPassword(client.Profile.PSK, "trojan"),
 			HysteriaPassword: protocolPassword(client.Profile.PSK, "hysteria2")})
 	}

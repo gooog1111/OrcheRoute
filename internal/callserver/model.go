@@ -41,6 +41,7 @@ type Config struct {
 }
 
 type Client struct {
+	AllowLAN          *bool               `json:"allow_lan,omitempty"`
 	ID                string              `json:"id"`
 	Name              string              `json:"name"`
 	Enabled           bool                `json:"enabled"`
@@ -71,6 +72,7 @@ type PublicConfig struct {
 }
 
 type PublicClient struct {
+	AllowLAN          *bool  `json:"allow_lan,omitempty"`
 	ID                string `json:"id"`
 	Name              string `json:"name"`
 	Enabled           bool   `json:"enabled"`
@@ -288,7 +290,7 @@ func (client Client) AvailableAt(now time.Time) bool {
 }
 
 func (client Client) PublicAt(now time.Time) PublicClient {
-	return PublicClient{ID: client.ID, Name: client.Name, Enabled: client.Enabled, CreatedAt: client.CreatedAt,
+	return PublicClient{ID: client.ID, Name: client.Name, Enabled: client.Enabled, CreatedAt: client.CreatedAt, AllowLAN: client.AllowLAN,
 		ExpiresAt: client.Profile.ExpiresAt, TrafficLimitBytes: client.Profile.TrafficLimitBytes,
 		TrafficUsedBytes: client.TrafficUsed(), TrafficRXBytes: client.TrafficRXBytes, TrafficTXBytes: client.TrafficTXBytes,
 		LastSeenAt: client.LastSeenAt, Available: client.AvailableAt(now)}

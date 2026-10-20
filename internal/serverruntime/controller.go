@@ -46,6 +46,17 @@ func (runtime *Runtime) controllerCycle(ctx context.Context) {
 		return
 	}
 	physical := runtime.connectivitySnapshot()
+	if controlValue.Enabled && deferNodeHealth(physical, time.Now().Unix(), runtime.Config.ConnectivityEvery) {
+		// Do not blacklist a working node because its underlay is fluctuating.
+		// Reset consecutive node failures, but keep the selected transport and
+		// existing qualification/rating data unchanged.
+		previous.FailureStreak = 0
+		previous.RankTarget, previous.RankStreak = "", 0
+		if err := atomicJSON(statePath, previous); err != nil {
+			runtime.recordControllerError(err)
+		}
+		return
+	}
 	if controlValue.Enabled && (physical.State == mobileconnectivity.Allowlist || physical.State == mobileconnectivity.Offline) {
 		runtime.restrictedNetworkCycle(cycleContext, physical.State)
 		return

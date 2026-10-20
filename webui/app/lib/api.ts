@@ -175,7 +175,7 @@ export type WebAccess = {
 
 export type QualificationPolicy = {
   version: 1;
-  defaults: { excluded_countries: string[]; min_speed_mbps: number; stability_ratio: number; tcp_timeout_ms: number; url_timeout_ms: number; geo_timeout_ms: number; speed_timeout_ms: number; url_test_urls: string[]; allowlist_probe_url: string; open_internet_probe_url: string; allowlist_use_emergency_subscriptions: boolean };
+  defaults: { opening_filter_mode?: "off" | "require" | "exclude"; opening_filter_url?: string; excluded_countries: string[]; min_speed_mbps: number; stability_ratio: number; tcp_timeout_ms: number; url_timeout_ms: number; geo_timeout_ms: number; speed_timeout_ms: number; url_test_urls: string[]; allowlist_probe_url: string; open_internet_probe_url: string; allowlist_use_emergency_subscriptions: boolean };
   pools: Record<"primary" | "emergency", { url_limit: number; speed_candidates: number; speed_candidates_per_source: number; keep: number; excluded_countries?: string[] | null; min_speed_mbps?: number | null; stability_ratio?: number | null }>;
 };
 
@@ -247,6 +247,7 @@ export type DashboardData = {
 };
 
 export type CallServerClient = {
+	allow_lan?: boolean | null;
 	id: string;
 	name: string;
 	enabled: boolean;
@@ -539,7 +540,7 @@ export const actions = {
 	createCallServerClient(payload: { name: string; expires_at?: number; traffic_limit_bytes?: number }) {
 		return request<{ client: CallServerClient; subscription_path: string; subscription_url: string }>("/v1/call-server/clients", { method: "POST", body: JSON.stringify(payload) });
 	},
-	updateCallServerClient(id: string, payload: { name: string; enabled: boolean; expires_at?: number; traffic_limit_bytes?: number; reset_traffic?: boolean; rotate_token?: boolean }) {
+	updateCallServerClient(id: string, payload: { name: string; enabled: boolean; expires_at?: number; traffic_limit_bytes?: number; reset_traffic?: boolean; rotate_token?: boolean; allow_lan?: boolean | null }) {
 		return request<{ updated: boolean; client: CallServerClient }>(`/v1/call-server/clients/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) });
 	},
 	deleteCallServerClient(id: string) {

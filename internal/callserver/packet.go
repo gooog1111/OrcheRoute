@@ -22,6 +22,7 @@ type PacketSnapshot struct {
 }
 
 type PacketPeer struct {
+	AllowLAN  *bool
 	ClientID  string
 	PublicKey []byte
 	Address   netip.Addr

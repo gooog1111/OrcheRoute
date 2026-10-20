@@ -1,12 +1,20 @@
 package mobilecore
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 	"testing"
 
 	mobiletransport "github.com/gooog1111/orcheroute/internal/core/transport"
 )
+
+func TestUnsupportedOpeningFilterDoesNotSilentlyQualifyAndroid(t *testing.T) {
+	backend := &mobileQualificationBackend{settings: map[string]any{"opening_filter_mode": "require"}}
+	if _, err := backend.URL(context.Background(), nil); err == nil || err.Error() != "opening_filter_unavailable_android" {
+		t.Fatal(err)
+	}
+}
 
 type qualificationTransport struct{ speedAvailable bool }
 

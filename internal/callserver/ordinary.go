@@ -8,6 +8,7 @@ import (
 )
 
 type OrdinaryClient struct {
+	AllowLAN         *bool
 	ID               string
 	Name             string
 	VLESSUUID        string
@@ -68,7 +69,7 @@ func ordinaryMihomoConfig(snapshot OrdinarySnapshot) ([]byte, error) {
 			"alpn": []string{"h3"}, "masquerade": "https://" + snapshot.FakeSNI},
 	}
 	config := map[string]any{"mode": "rule", "log-level": "warning", "ipv6": true,
-		"listeners": listeners, "rules": ordinaryEgressRules(snapshot.AllowLAN)}
+		"listeners": listeners, "rules": ordinaryClientEgressRules(snapshot)}
 	if snapshot.ControllerAddress != "" {
 		config["external-controller"] = snapshot.ControllerAddress
 		config["secret"] = snapshot.ControllerSecret
@@ -93,6 +94,23 @@ func ordinaryEgressRules(allowLAN bool) []string {
 		rules = append(rules, "IP-CIDR6,"+cidr+",REJECT-DROP")
 	}
 	return append(rules, "MATCH,DIRECT")
+}
+
+func ordinaryClientEgressRules(snapshot OrdinarySnapshot) []string {
+	rules := []string{}
+	for _, client := range snapshot.Clients {
+		if client.AllowLAN == nil || *client.AllowLAN == snapshot.AllowLAN {
+			continue
+		}
+		if *client.AllowLAN {
+			rules = append(rules, "IN-USER,"+client.ID+",DIRECT")
+			continue
+		}
+		for _, cidr := range append(append([]string{}, privateIPv4CIDRs...), privateIPv6CIDRs...) {
+			rules = append(rules, "AND,((IN-USER,"+client.ID+"),(IP-CIDR,"+cidr+")),REJECT-DROP")
+		}
+	}
+	return append(rules, ordinaryEgressRules(snapshot.AllowLAN)...)
 }
 
 func splitListener(endpoint string) (string, int, error) {

@@ -979,6 +979,8 @@ function QualificationForm({
 }) {
   const androidManual = platformCapabilities().kind === "android";
   const policy = data?.qualification?.policy;
+  const [openingMode, setOpeningMode] = useState<"off" | "require" | "exclude">("off");
+  const [openingURL, setOpeningURL] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
   const [speed, setSpeed] = useState("10");
   const [stability, setStability] = useState("65");
@@ -1002,6 +1004,8 @@ function QualificationForm({
     setSpeed(String(policy.defaults.min_speed_mbps));
     setStability(String(Math.round(policy.defaults.stability_ratio * 100)));
     setTcpTimeout(String((policy.defaults.tcp_timeout_ms ?? 2000) / 1000));
+    setOpeningMode(policy.defaults.opening_filter_mode ?? "off");
+    setOpeningURL(policy.defaults.opening_filter_url ?? "");
     setUrlTimeout(String((policy.defaults.url_timeout_ms ?? 3000) / 1000));
     setGeoTimeout(String((policy.defaults.geo_timeout_ms ?? 5000) / 1000));
     setSpeedTimeout(String((policy.defaults.speed_timeout_ms ?? 15000) / 1000));
@@ -1020,6 +1024,8 @@ function QualificationForm({
   const nextDefaults = policy
     ? {
         ...policy.defaults,
+        opening_filter_mode: openingMode,
+        opening_filter_url: openingURL.trim(),
         excluded_countries: countries,
         min_speed_mbps: Number(speed),
         stability_ratio: Number(stability) / 100,
@@ -1040,6 +1046,8 @@ function QualificationForm({
     ? {
         defaults: {
           ...policy.defaults,
+          opening_filter_mode: policy.defaults.opening_filter_mode ?? "off",
+          opening_filter_url: policy.defaults.opening_filter_url ?? "",
           tcp_timeout_ms: policy.defaults.tcp_timeout_ms ?? 2000,
           url_timeout_ms: policy.defaults.url_timeout_ms ?? 3000,
           geo_timeout_ms: policy.defaults.geo_timeout_ms ?? 5000,
@@ -1118,6 +1126,19 @@ function QualificationForm({
           <input type="number" min="5" max="120" step="1" value={speedTimeout} onChange={(event) => setSpeedTimeout(event.target.value)} />
         </Field>
       </div>
+      {!androidManual && <>
+        <Heading eyebrow="Дополнительный фильтр" title="Открытие адреса через сервер" compact />
+        <Field label="Условие допуска" hint="Проверяется через каждый VPN-сервер после обычного URL-test. Только HTTP 2xx считается открытием; 403 не подходит.">
+          <select value={openingMode} onChange={event => setOpeningMode(event.target.value as "off" | "require" | "exclude")}>
+            <option value="off">Выключено</option>
+            <option value="require">Допускать, если открывается</option>
+            <option value="exclude">Не допускать, если открывается</option>
+          </select>
+        </Field>
+        <Field label="Адрес для проверки" hint="Например youtube.com или https://youtube.com/">
+          <input value={openingURL} onChange={event => setOpeningURL(event.target.value)} placeholder="youtube.com" disabled={openingMode === "off"} />
+        </Field>
+      </>}
       <Heading eyebrow="URL-test" title="Контрольные ссылки" compact />
       <div className="url-test-editor">
         <p>Сервер считается доступным, когда отвечает большинство указанных адресов.</p>

@@ -66,6 +66,9 @@ func (backend *Backend) URL(ctx context.Context, proxies []map[string]any) ([]qu
 		err := withCore(ctx, item, config, func(client *http.Client, proxyAddress string) error {
 			latency, probeErr := probeURLMajority(ctx, client, proxyAddress, config.URLTests)
 			if probeErr == nil {
+				if !qualification.OpeningAllowed(ctx, client, config.OpeningURL, config.OpeningMode) {
+					return fmt.Errorf("opening_filter_rejected")
+				}
 				result = qualification.Latency{Alive: true, Seconds: latency}
 			}
 			return probeErr

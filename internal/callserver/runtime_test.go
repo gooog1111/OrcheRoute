@@ -5,7 +5,23 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 )
+
+func TestStatusDoesNotWaitForTransportOperation(t *testing.T) {
+	runtime := newRuntimeWithRelay(nil, nil)
+	runtime.mu.Lock() // Apply/Close hold this lock while a transport blocks.
+	done := make(chan RuntimeStatus, 1)
+	go func() { done <- runtime.Status() }()
+	select {
+	case <-done:
+		runtime.mu.Unlock()
+	case <-time.After(time.Second):
+		runtime.mu.Unlock()
+		<-done
+		t.Fatal("status was blocked by transport lifecycle mutex")
+	}
+}
 
 type testBackend struct {
 	listener net.Listener

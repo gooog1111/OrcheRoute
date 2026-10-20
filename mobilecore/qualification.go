@@ -100,6 +100,9 @@ func (backend *mobileQualificationBackend) TCP(ctx context.Context, proxies []ma
 }
 
 func (backend *mobileQualificationBackend) URL(ctx context.Context, proxies []map[string]any) ([]qualification.Latency, error) {
+	if mode, _ := backend.settings["opening_filter_mode"].(string); mode != "" && mode != "off" {
+		return nil, fmt.Errorf("opening_filter_unavailable_android")
+	}
 	urls, _ := json.Marshal(backend.settings["url_test_urls"])
 	probes, err := backend.probeBatches(ctx, "url_test", proxies, 80, func(payload string) string {
 		return activeTransport.TestProxiesMulti(payload, string(urls), valueInt(backend.settings["url_timeout_ms"], 3000), 80)

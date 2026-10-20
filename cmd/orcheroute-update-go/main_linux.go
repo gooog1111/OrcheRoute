@@ -192,6 +192,9 @@ func run(ctx context.Context, options options) error {
 		backendConfig.URLTests = append(backendConfig.URLTests, linuxqualify.URLTarget{URL: target})
 	}
 	backendConfig.MihomoBinary = options.Mihomo
+	filterDefaults := validatedPolicy["defaults"].(map[string]any)
+	backendConfig.OpeningURL, _ = filterDefaults["opening_filter_url"].(string)
+	backendConfig.OpeningMode, _ = filterDefaults["opening_filter_mode"].(string)
 	backendConfig.Interface = vpnRole.Interface
 	backendConfig.Mark = 0x5352
 	backendConfig.DNS = linuxqualify.DNSConfig{CacheAlgorithm: profile.DNS.CacheAlgorithm, Bootstrap: profile.DNS.Bootstrap, Proxy: profile.DNS.Proxy, VPNUnderlay: profile.DNS.VPNUnderlay}
