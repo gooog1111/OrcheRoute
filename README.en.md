@@ -6,8 +6,8 @@ An Android VPN client and Linux Server VPN controller built on [Mihomo](https://
 
 ## Downloads
 
-- [Android 0.8.3 — arm64 APK](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.3/OrcheRoute-Android-0.8.3-code93-arm64.apk)
-- [Linux Server 0.8.5 — amd64 DEB](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.5/OrcheRoute-Linux-Server-0.8.5-amd64.deb)
+- [Android — arm64 APK](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.3/OrcheRoute-Android-0.8.3-code93-arm64.apk)
+- [Linux Server — amd64 DEB](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.5/OrcheRoute-Linux-Server-0.8.5-amd64.deb)
 - [All releases](https://github.com/gooog1111/OrcheRoute/releases)
 
 ## Android
@@ -19,11 +19,13 @@ Requires Android 8.0 or later, without root.
 3. Refresh and check an individual subscription or the full list.
 4. Select a server manually and enable the VPN.
 
-Android has one server list grouped by subscription, without automatic server selection or network-state switching. FreeTURN may require a VK CAPTCHA confirmation; drag the window by its header to move it.
+The server list is grouped by subscription. Your manually selected server stays pinned. The notification provides Restart and Disable actions.
 
-Use Updates to install new versions. Enable Beta versions for the test channel, or disable it for stable updates. Allow notifications and adjust battery optimization if needed to keep the VPN running in the background.
+For FreeTURN, confirm the VK CAPTCHA when prompted. Drag the window by its header to move it.
 
-Settings and subscriptions are stored in application data. Uninstalling the app removes that data; export important subscriptions first.
+Use Updates to install new versions. Enable Beta versions for the test channel, or disable it for stable updates.
+
+Allow notifications and background operation. Subscription export is available in Settings.
 
 ## Linux Server
 
@@ -35,19 +37,32 @@ Install on Debian/Ubuntu:
 sudo apt install ./OrcheRoute-Linux-Server-0.8.5-amd64.deb
 ```
 
-Open `http://127.0.0.1:19110/` on the server, or `http://SERVER_ADDRESS:19110/` from another device. The installer prints initial login credentials. Normal package upgrades preserve authentication and settings.
+Open `http://127.0.0.1:19110/` on the server, or `http://SERVER_ADDRESS:19110/` from another device. The installer prints initial credentials and saves them to `/etc/orcheroute/initial-credentials`. Configure HTTPS in Access settings for external access.
 
 ```bash
 systemctl status orcheroute-go --no-pager
 ```
 
-Add subscriptions in the WebUI, configure refresh intervals, qualify servers, and enable the VPN. Scheduled refreshes download subscriptions without a full qualification run; failed downloads are retried after a delay.
+1. In Network and DNS, select the interfaces for direct access, VPN-server connections, and traffic capture.
+2. Add subscriptions and configure their refresh intervals.
+3. Check an individual subscription or the full server list.
+4. Select manual or automatic control and enable the VPN.
 
-Automatic mode prefers the primary list, falling back to emergency servers. Restricted networks use a separate qualified list. Pending changes in physical-network state do not immediately replace the selected server. A substantially higher-rated primary server can be selected after repeated observations; small score differences do not trigger switching. Manual selections remain pinned.
+Scheduled refreshes download subscriptions; server qualification is a separate operation.
+
+Automatic mode uses the primary list, followed by emergency servers. Restricted networks use a separate qualified list. Selection considers rating and connection stability. Manual selections remain pinned.
+
+### DNS and time
+
+DNS settings are separate for Direct, Proxy, VPN-server resolution, and Bootstrap. The network monitor and Direct IP lookup use DNS from the selected physical interface, with Bootstrap as the fallback. Interface DNS changes are picked up automatically.
+
+The dashboard shows the server's date, time, and timezone. Select Synchronize time in Updates to enable system NTP synchronization. Its status is displayed alongside the clock.
 
 ### Qualification
 
-Qualification includes TCP, URL checks, region, and speed tests. Ratings use latency, speed, and stability. Checking one subscription does not requalify all other subscriptions.
+Qualification includes TCP, URL checks, the actual exit region, and speed tests. Ratings use latency, speed, and stability. Checking one subscription preserves the ratings of other subscriptions.
+
+Speed providers: Cachefly, Cloudflare, and OVH. When measurement is unavailable, a repeated URL check confirms connectivity and the speed remains unknown.
 
 The Qualification section offers timeouts, test URLs, and filters. Linux Server also provides an optional target-opening filter:
 
@@ -55,7 +70,7 @@ The Qualification section offers timeouts, test URLs, and filters. Linux Server 
 - admit a server if the target opens;
 - reject a server if the target opens.
 
-The target, such as `youtube.com`, is requested through each candidate VPN after the ordinary URL test. Only HTTP `2xx` counts as successful opening; `403` does not.
+The target, such as `youtube.com`, is requested through each candidate VPN after the ordinary URL test. HTTP `2xx` counts as successful opening.
 
 ### VPN server
 
@@ -63,11 +78,9 @@ Create personal subscriptions containing FreeTURN, VLESS Reality, Trojan TLS, an
 
 Default ports: FreeTURN UDP `4443`, VLESS TCP `24443`, Trojan TCP `24444`, Hysteria2 UDP `24445`. Open the required ports in your firewall. The public endpoint accepts an IP address or hostname; configure the HTTPS subscription address separately. Default SNI: `m.vk.ru`.
 
-VLESS/Trojan/Hysteria2 traffic accounting polls active connections and may miss short sessions. It is not an exact billing counter.
-
 ### Updates and removal
 
-Update from the WebUI or install the new DEB over the existing package. Preserve access to the server before changing network settings.
+Update from the WebUI or install the new DEB over the existing package. Authentication, subscriptions, and settings are preserved.
 
 ```bash
 sudo apt remove orcheroute  # keep settings and authentication
@@ -86,12 +99,16 @@ Select a GeoIP/GeoSite source and update schedule in Settings:
 
 Custom HTTPS links to compatible databases are also supported.
 
+## Appearance
+
+Choose a theme in Appearance settings. Display preferences are saved on the device.
+
 ## Sources and licenses
 
 - [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — networking core, protocols, DNS, and routing.
 - [samosvalishe/free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy) — FreeTURN transport.
 - [Au1rxx/free-vpn-subscriptions](https://github.com/Au1rxx/free-vpn-subscriptions) — [built-in subscription](https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt).
 
-Built-in subscriptions can be disabled. Public server availability is not guaranteed; prefer trusted sources for regular use and protect sensitive data with application-layer encryption such as HTTPS.
+Enable or disable the built-in subscription in subscription settings.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for authors, licenses, and component details, and [LICENSE](LICENSE) for the project license.
