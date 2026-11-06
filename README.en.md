@@ -27,6 +27,8 @@ Settings and subscriptions are stored in application data. Uninstalling the app 
 
 ## Linux Server
 
+Required packages: `ca-certificates`, `iproute2`, `systemd`, `nftables`, `iptables`, `curl`, `tar`, `gzip`, `dpkg`, `apt`, and one time service: `systemd-timesyncd`, `chrony`, `ntpsec`, or `ntp`. APT installs dependencies with the DEB.
+
 Install on Debian/Ubuntu:
 
 ```bash
@@ -88,7 +90,6 @@ Custom HTTPS links to compatible databases are also supported.
 
 - [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — networking core, protocols, DNS, and routing.
 - [samosvalishe/free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy) — FreeTURN transport.
-- [EbraSha/free-v2ray-public-list](https://github.com/ebrasha/free-v2ray-public-list) — [built-in server list](https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt).
 - [Au1rxx/free-vpn-subscriptions](https://github.com/Au1rxx/free-vpn-subscriptions) — [built-in subscription](https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt).
 
 Built-in subscriptions can be disabled. Public server availability is not guaranteed; prefer trusted sources for regular use and protect sensitive data with application-layer encryption such as HTTPS.

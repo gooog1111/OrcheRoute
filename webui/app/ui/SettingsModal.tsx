@@ -19,6 +19,7 @@ import {
   dismissAndroidKeyboard,
   getAndroidAppUpdateStatus,
   getServerAppUpdateStatus,
+  getServerSystemTime,
   installAndroidAppUpdate,
   loadOperations,
   openTextFile,
@@ -38,6 +39,7 @@ import { ChevronIcon, CloseIcon } from "./Icons";
 import { OperationPanel, type OperationView } from "./OperationPanel";
 import { themes, type ThemeID } from "./theme";
 import { CallServerPanel } from "./CallServerPanel";
+import { ServerClock } from "./ServerClock";
 
 export type SettingsTab =
   "general" | "appearance" | "access" | "call-server" | "network" | "routes" | "sources" | "qualification" | "components";
@@ -3344,6 +3346,24 @@ function ComponentsForm({
 }) {
   const components = data?.components;
   const embedded = platformCapabilities().appUpdater === "android";
+  const [systemTime, setSystemTime] = useState(() => data?.status.system_time);
+  useEffect(() => {
+    if (embedded) return;
+    let active = true;
+    let pending = false;
+    const refreshTime = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const value = await getServerSystemTime();
+        if (active) setSystemTime(value);
+      } catch { /* Keep the last server timestamp during temporary API loss. */ }
+      finally { pending = false; }
+    };
+    void refreshTime();
+    const timer = window.setInterval(refreshTime, 3000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [embedded]);
   const [geoEnabled, setGeoEnabled] = useState(true);
   const [geoInterval, setGeoInterval] = useState(24);
   const [geoSource, setGeoSource] = useState("metacubex");
@@ -3492,6 +3512,17 @@ function ComponentsForm({
           }
         />
       </div>
+      {!embedded && (
+        <div className="editor-card">
+          <strong>Время сервера</strong>
+          <ServerClock value={systemTime} />
+          <button className="secondary-button" type="button"
+            disabled={busy || Boolean(systemTime?.syncing)}
+            onClick={() => void run(() => actions.syncSystemTime(), "", { title: "Синхронизация времени" })}>
+            Синхронизировать время
+          </button>
+        </div>
+      )}
       {(embedded || appUpdate?.supported) && (
         <div className="editor-card">
           <strong>Обновление OrcheRoute</strong>

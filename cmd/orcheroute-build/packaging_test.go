@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestDebianPackageStartsControlPlaneWithoutOptionalNftables(t *testing.T) {
+func TestDebianPackageDeclaresRequiredRuntimeDependencies(t *testing.T) {
 	root, err := repositoryRoot()
 	if err != nil {
 		t.Fatal(err)
@@ -17,13 +17,16 @@ func TestDebianPackageStartsControlPlaneWithoutOptionalNftables(t *testing.T) {
 		t.Fatal(err)
 	}
 	control := string(payload)
+	var dependencies string
 	for _, line := range strings.Split(control, "\n") {
-		if strings.HasPrefix(line, "Depends:") && strings.Contains(line, "nftables") {
-			t.Fatalf("nftables must not prevent clean WebUI configuration: %s", line)
+		if strings.HasPrefix(line, "Depends:") {
+			dependencies = line
 		}
 	}
-	if !strings.Contains(control, "Recommends: nftables, iptables") {
-		t.Fatal("nftables and iptables must remain recommended VPN routing dependencies")
+	for _, required := range []string{"ca-certificates", "iproute2", "systemd", "nftables", "iptables", "curl", "tar", "gzip", "dpkg", "apt", "systemd-timesyncd | chrony | ntpsec | ntp"} {
+		if !strings.Contains(dependencies, required) {
+			t.Fatalf("required runtime dependency missing: %s", required)
+		}
 	}
 	for _, obsolete := range []string{"wireguard-tools"} {
 		if strings.Contains(control, obsolete) {

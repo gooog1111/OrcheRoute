@@ -9,6 +9,7 @@ import { ChevronIcon, CloseIcon, GlobeIcon, PowerIcon, RefreshIcon, RouteIcon, S
 import { SettingsModal as EditableSettingsModal, type SettingsTab } from "./SettingsModal";
 import { OperationPanel, type OperationView } from "./OperationPanel";
 import { ThemeBackdrop } from "./ThemeBackdrop";
+import { ServerClock } from "./ServerClock";
 import { defaultTheme, isThemeID, themeStorageKey, type ThemeID } from "./theme";
 
 
@@ -280,6 +281,8 @@ export function Dashboard() {
           </button>
         </div>
       </header>
+
+      {platform.kind !== "android" && <ServerClock value={data?.status.system_time} />}
 
       <section className="dashboard">
         <div className="hero-copy">

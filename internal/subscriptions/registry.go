@@ -58,17 +58,17 @@ type BuiltinSource struct {
 
 var defaultEmergencySources = []BuiltinSource{
 	{
-		ID: "ebrasha-public", Name: "EbraSha — проверенный список",
-		URL:         "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt",
-		Repository:  "https://github.com/ebrasha/free-v2ray-public-list",
-		Description: "Обновляемый универсальный список; уже использовался как аварийный источник.", IntervalSeconds: 3600,
-	},
-	{
 		ID: "default-au1rxx", Name: "Au1rxx — универсальная подписка",
 		URL:         "https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt",
 		Repository:  "https://github.com/Au1rxx/free-vpn-subscriptions",
 		Description: "Умеренный V2Ray/Base64-набор вместо крупных Clash и sing-box выгрузок.", IntervalSeconds: 3600,
 	},
+}
+
+// RetiredDefault only matches the original built-in record, not a user-edited
+// subscription. Cached links and providers remain available after retirement.
+func RetiredDefault(item Subscription) bool {
+	return item.ID == "ebrasha-public" && strings.TrimSpace(item.Secret) == "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt"
 }
 
 func DefaultEmergencySources() []BuiltinSource {

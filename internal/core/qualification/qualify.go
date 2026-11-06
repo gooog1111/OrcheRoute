@@ -35,10 +35,11 @@ type Download struct {
 }
 
 type SpeedEvidence struct {
-	CoreOK    bool       `json:"core_ok"`
-	GeoStatus string     `json:"geo_status,omitempty"`
-	Country   string     `json:"country,omitempty"`
-	Downloads []Download `json:"downloads"`
+	CoreOK      bool       `json:"core_ok"`
+	Unavailable bool       `json:"unavailable,omitempty"`
+	GeoStatus   string     `json:"geo_status,omitempty"`
+	Country     string     `json:"country,omitempty"`
+	Downloads   []Download `json:"downloads"`
 }
 
 type GeoEvidence struct {
@@ -386,7 +387,7 @@ func Qualify(ctx context.Context, pool string, proxies []map[string]any, setting
 		if measurement.BytesPerSecond > fastest {
 			fastest = measurement.BytesPerSecond
 		}
-		if measurement.Status == "qualified" {
+		if measurement.Status == "qualified" || measurement.Status == "speed_unavailable" {
 			fast = append(fast, rankedProxy{measurement.BytesPerSecond, proxy})
 		}
 	}
@@ -431,6 +432,14 @@ func EvaluateSpeed(evidence SpeedEvidence, threshold int, stabilityRatio float64
 		if excluded[country] {
 			return Measurement{Status: "country_excluded", Country: country}
 		}
+	}
+	if evidence.Unavailable {
+		for _, download := range evidence.Downloads {
+			if download.OK && download.BytesPerSecond > 0 && download.BytesPerSecond < float64(threshold) {
+				return Measurement{Status: "slow", BytesPerSecond: download.BytesPerSecond, Country: country}
+			}
+		}
+		return Measurement{Status: "speed_unavailable", Country: country}
 	}
 	speeds := []float64{}
 	for _, download := range evidence.Downloads {

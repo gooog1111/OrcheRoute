@@ -54,6 +54,21 @@ func TestDefaultsDoNotOverwriteExisting(t *testing.T) {
 	}
 }
 
+func TestRetiredDefaultPreservesCustomSubscriptions(t *testing.T) {
+	oldURL := "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt"
+	if !RetiredDefault(Subscription{ID: "ebrasha-public", Secret: oldURL}) {
+		t.Fatal("original unavailable built-in must be retired")
+	}
+	if RetiredDefault(Subscription{ID: "ebrasha-public", Secret: "https://example.com/custom"}) || RetiredDefault(Subscription{ID: "custom", Secret: oldURL}) {
+		t.Fatal("custom subscription must not be changed")
+	}
+	for _, item := range DefaultEmergencySources() {
+		if item.ID == "ebrasha-public" {
+			t.Fatal("retired source must not return on a clean install")
+		}
+	}
+}
+
 func TestCacheAndRefreshDecision(t *testing.T) {
 	now := time.Unix(10_000, 0)
 	cache := NewCache([]string{"vless://one", "vless://one", "bad"}, now)

@@ -93,7 +93,7 @@ func (backend *Backend) Baseline(ctx context.Context) (qualification.Download, e
 	config := backend.normalized()
 	client, closeClient := directClient(config)
 	defer closeClient()
-	download := downloadSpeed(client, config.SpeedURL, qualification.SpeedBytes)
+	download := downloadSpeedTargets(ctx, client, "", speedTargets(config), qualification.SpeedBytes)
 	if !download.OK || (download.HTTPCode != http.StatusOK && download.HTTPCode != http.StatusPartialContent) || download.Bytes < qualification.SpeedBytes || download.BytesPerSecond <= 0 {
 		return qualification.Download{}, fmt.Errorf("direct speed baseline failed")
 	}
@@ -128,14 +128,18 @@ func (backend *Backend) Speed(ctx context.Context, proxies []map[string]any) ([]
 		evidence := qualification.SpeedEvidence{}
 		err := withCore(ctx, item, config, func(client *http.Client, proxyAddress string) error {
 			evidence.CoreOK = true
+			samples, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
 			for index := 0; index < 2; index++ {
-				download := downloadSpeed(client, config.SpeedURL, speedBytes)
-				if !download.OK || (download.HTTPCode != http.StatusOK && download.HTTPCode != http.StatusPartialContent) || download.Bytes < speedBytes {
-					if fallback, fallbackErr := curlSpeed(ctx, proxyAddress, config.SpeedURL, speedBytes); fallbackErr == nil {
-						download = fallback
-					}
-				}
+				download := downloadSpeedTargets(samples, client, proxyAddress, speedTargets(config), speedBytes)
 				evidence.Downloads = append(evidence.Downloads, download)
+				if !usableSpeed(download, speedBytes) {
+					// A failed speed provider must not disqualify a tunnel that
+					// can still open the ordinary independent URL-test targets.
+					_, probeErr := probeURLMajority(ctx, client, proxyAddress, config.URLTests)
+					evidence.Unavailable = probeErr == nil && ctx.Err() == nil
+					break
+				}
 			}
 			return nil
 		})
@@ -167,6 +171,9 @@ func (backend *Backend) normalized() Config {
 	}
 	if config.SpeedURL == "" {
 		config.SpeedURL = defaults.SpeedURL
+	}
+	if config.SpeedURLs == nil {
+		config.SpeedURLs = defaults.SpeedURLs
 	}
 	if config.TCPWorkers <= 0 {
 		config.TCPWorkers = defaults.TCPWorkers
@@ -390,7 +397,7 @@ func curlCountry(ctx context.Context, proxyAddress, target string) (string, stri
 
 func curlSpeed(ctx context.Context, proxyAddress, target string, limit int64) (qualification.Download, error) {
 	byteRange := fmt.Sprintf("0-%d", limit-1)
-	output, err := exec.CommandContext(ctx, "curl", "--silent", "--show-error", "--location", "--range", byteRange, "--proxy", "socks5h://"+proxyAddress, "--connect-timeout", "4", "--max-time", "15", "--output", "/dev/null", "--write-out", "%{http_code} %{size_download} %{speed_download}", target).Output()
+	output, err := exec.CommandContext(ctx, "curl", "--silent", "--show-error", "--location", "--range", byteRange, "--max-filesize", strconv.FormatInt(limit, 10), "--proxy", "socks5h://"+proxyAddress, "--connect-timeout", "2", "--max-time", "3", "--output", "/dev/null", "--write-out", "%{http_code} %{size_download} %{speed_download}", target).Output()
 	if err != nil {
 		return qualification.Download{}, err
 	}
@@ -485,14 +492,69 @@ func traceCountry(client *http.Client, url string) (string, string) {
 	return "", "country_unknown"
 }
 func downloadSpeed(client *http.Client, url string, limit int64) qualification.Download {
-	request, _ := http.NewRequest(http.MethodGet, url, nil)
+	return downloadSpeedContext(context.Background(), client, url, limit)
+}
+
+func speedTargets(config Config) []string {
+	result := []string{}
+	seen := map[string]bool{}
+	for _, target := range append([]string{config.SpeedURL}, config.SpeedURLs...) {
+		target = strings.TrimSpace(target)
+		if target != "" && !seen[target] {
+			result = append(result, target)
+			seen[target] = true
+		}
+	}
+	return result
+}
+
+func usableSpeed(sample qualification.Download, limit int64) bool {
+	return sample.OK && (sample.HTTPCode == 200 || sample.HTTPCode == 206) && sample.Bytes >= limit && sample.BytesPerSecond > 0
+}
+
+func downloadSpeedTargets(ctx context.Context, client *http.Client, proxyAddress string, targets []string, limit int64) qualification.Download {
+	budget, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	for _, target := range targets {
+		if budget.Err() != nil {
+			break
+		}
+		target = strings.ReplaceAll(target, "{bytes}", strconv.FormatInt(limit, 10))
+		attempt, done := context.WithTimeout(budget, 4*time.Second)
+		sample := downloadSpeedContext(attempt, client, target, limit)
+		done()
+		if usableSpeed(sample, limit) {
+			return sample
+		}
+		// Preserve the alternate TLS implementation for connection failures,
+		// but do not retry HTTP 403/404/error pages with the same provider.
+		if sample.HTTPCode == 0 && proxyAddress != "" && budget.Err() == nil {
+			fallback, err := curlSpeed(budget, proxyAddress, target, limit)
+			if err == nil && usableSpeed(fallback, limit) {
+				return fallback
+			}
+		}
+	}
+	return qualification.Download{ExpectedBytes: limit}
+}
+
+func downloadSpeedContext(ctx context.Context, client *http.Client, url string, limit int64) qualification.Download {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return qualification.Download{ExpectedBytes: limit}
+	}
 	request.Header.Set("Range", fmt.Sprintf("bytes=0-%d", limit-1))
+	request.Header.Set("Accept-Encoding", "identity")
 	started := time.Now()
 	response, err := client.Do(request)
 	if err != nil {
 		return qualification.Download{}
 	}
 	defer response.Body.Close()
+	contentType := strings.ToLower(response.Header.Get("Content-Type"))
+	if (response.StatusCode != 200 && response.StatusCode != 206) || strings.Contains(contentType, "text/html") || strings.Contains(contentType, "application/json") {
+		return qualification.Download{HTTPCode: response.StatusCode, ExpectedBytes: limit}
+	}
 	written, copyErr := io.Copy(io.Discard, io.LimitReader(response.Body, limit))
 	elapsed := time.Since(started).Seconds()
 	speed := float64(0)

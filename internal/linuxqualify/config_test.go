@@ -61,6 +61,56 @@ func TestDefaultQualificationConcurrencyAndURLs(t *testing.T) {
 	if len(config.URLTests) != 3 {
 		t.Fatalf("URL targets = %d, want 3", len(config.URLTests))
 	}
+	if len(speedTargets(config)) < 3 {
+		t.Fatal("independent speed targets missing")
+	}
+}
+
+func TestSpeedTargetFallbackAndBoundedSamples(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests++
+		switch request.URL.Path {
+		case "/blocked":
+			writer.WriteHeader(403)
+		case "/html":
+			writer.Header().Set("Content-Type", "text/html")
+			writer.Write([]byte("not a speed sample"))
+		case "/short":
+			writer.Header().Set("Content-Type", "application/octet-stream")
+			writer.Write([]byte("x"))
+		default:
+			if request.Header.Get("Range") != "bytes=0-63" || request.URL.Query().Get("bytes") != "64" {
+				t.Error("sample request is not bounded")
+			}
+			writer.Header().Set("Content-Type", "application/octet-stream")
+			writer.Write(make([]byte, 128))
+		}
+	}))
+	defer server.Close()
+	targets := []string{server.URL + "/blocked", server.URL + "/html", server.URL + "/short", server.URL + "/ok?bytes={bytes}"}
+	sample := downloadSpeedTargets(context.Background(), server.Client(), "", targets, 64)
+	if !usableSpeed(sample, 64) || sample.Bytes != 64 || requests != 4 {
+		t.Fatalf("fallback failed: %+v requests=%d", sample, requests)
+	}
+	failed := downloadSpeedTargets(context.Background(), server.Client(), "", targets[:3], 64)
+	if failed.OK {
+		t.Fatal("unavailable providers were accepted as speed samples")
+	}
+}
+
+func TestSpeedTargetCancellationAndMalformedURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) { <-request.Context().Done() }))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	if downloadSpeedTargets(ctx, server.Client(), "", []string{"%", server.URL}, 64).OK {
+		t.Fatal("cancelled request succeeded")
+	}
+	if time.Since(started) > time.Second {
+		t.Fatal("speed test ignored cancellation")
+	}
 }
 
 func TestCustomURLAcceptsAnySuccessfulHTTPStatus(t *testing.T) {

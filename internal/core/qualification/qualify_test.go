@@ -67,6 +67,31 @@ func TestEvaluateSpeed(t *testing.T) {
 	}
 }
 
+func TestSpeedUnavailableKeepsURLProvenNodesWithoutInventingSpeed(t *testing.T) {
+	backend := &fakeBackend{
+		tcp:   []Latency{{Alive: true, Seconds: .1}, {Alive: true, Seconds: .2}},
+		url:   []Latency{{Alive: true, Seconds: .1}, {Alive: true, Seconds: .2}},
+		speed: []SpeedEvidence{{CoreOK: true, Unavailable: true}, {CoreOK: true, Downloads: goodDownloads(2_000_000, 1_900_000)}},
+	}
+	settings := map[string]any{"min_speed_mbps": 1, "stability_ratio": .65, "excluded_countries": []any{}, "url_limit": 0, "speed_candidates": 0, "keep": 0}
+	result, err := Qualify(context.Background(), "primary", []map[string]any{{"name": "unmeasured"}, {"name": "measured"}}, settings, nil, backend, time.Now)
+	if err != nil || len(result.Proxies) != 2 {
+		t.Fatalf("URL-proven node lost: %+v %v", result, err)
+	}
+	if result.Proxies[0]["name"] != "measured" || result.Metrics["unmeasured"].SpeedMbps != 0 || result.Report.Outcomes["speed_unavailable"] != 1 {
+		t.Fatalf("invalid ranking/report: %+v", result)
+	}
+	if EvaluateSpeed(SpeedEvidence{Unavailable: true}, 1000, .65, nil).Status != "core_failed" {
+		t.Fatal("unavailable must not bypass a core failure")
+	}
+	if EvaluateSpeed(SpeedEvidence{CoreOK: true, Unavailable: true, Country: "RU"}, 1000, .65, map[string]bool{"RU": true}).Status != "country_excluded" {
+		t.Fatal("unavailable must not bypass country filter")
+	}
+	if EvaluateSpeed(SpeedEvidence{CoreOK: true, Unavailable: true, Downloads: goodDownloads(500, 500)}, 1000, .65, nil).Status != "slow" {
+		t.Fatal("known slow measurement must not be ignored")
+	}
+}
+
 func TestQualificationPipelineAndReport(t *testing.T) {
 	proxies := []map[string]any{{"name": "A"}, {"name": "B"}, {"name": "C"}}
 	backend := &fakeBackend{

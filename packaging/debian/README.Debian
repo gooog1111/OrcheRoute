@@ -1,15 +1,14 @@
 OrcheRoute for Debian and Astra Linux
 =====================================
 
-Install the downloaded package through APT so recommended routing components
+Install the downloaded package through APT so required dependencies
 are resolved automatically:
 
   sudo apt install ./OrcheRoute-Linux-Server-VERSION-amd64.deb
 
-Direct `dpkg -i` installation still starts the WebUI. If nftables or iptables
-is absent, install them before enabling VPN routing or the inbound AWG server:
-
-  sudo apt install nftables iptables
+Required packages: ca-certificates, iproute2, systemd, nftables, iptables,
+curl, tar, gzip, dpkg, apt; and one time service: systemd-timesyncd, chrony,
+ntpsec or ntp. APT selects an available time service if none is installed.
 
 The package installs the unified Go implementation and does not overwrite or
 remove host-specific configuration and state:

@@ -10,6 +10,7 @@ type Config struct {
 	URLTests     []URLTarget
 	TraceURL     string
 	SpeedURL     string
+	SpeedURLs    []string
 	TCPWorkers   int
 	URLWorkers   int
 	SpeedWorkers int
@@ -39,6 +40,7 @@ func DefaultConfig() Config {
 		},
 		TraceURL: "https://www.cloudflare.com/cdn-cgi/trace",
 		SpeedURL: "https://cachefly.cachefly.net/10mb.test", TCPWorkers: 128, URLWorkers: 80, SpeedWorkers: 6,
+		SpeedURLs: []string{"https://speed.cloudflare.com/__down?bytes={bytes}", "https://proof.ovh.net/files/100Mb.dat"},
 	}
 }
 

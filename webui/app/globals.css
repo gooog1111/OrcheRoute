@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+.server-clock {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  color: var(--text);
+  text-align: center;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.server-clock small { color: var(--muted); }
+
 :root {
   --canvas: #020706;
   --surface: #08110f;

@@ -29,6 +29,8 @@ Android использует один основной список с груп�
 
 Установка в Debian/Ubuntu:
 
+Обязательные пакеты: `ca-certificates`, `iproute2`, `systemd`, `nftables`, `iptables`, `curl`, `tar`, `gzip`, `dpkg`, `apt` и одна служба времени: `systemd-timesyncd`, `chrony`, `ntpsec` или `ntp`. APT устанавливает зависимости вместе с DEB.
+
 ```bash
 sudo apt install ./OrcheRoute-Linux-Server-0.8.3-amd64.deb
 ```
@@ -90,7 +92,6 @@ sudo apt purge orcheroute   # удалить настройки, состоян�
 
 - [MetaCubeX/mihomo](https://github.com/MetaCubeX/mihomo) — сетевое ядро, протоколы, DNS и маршрутизация.
 - [samosvalishe/free-turn-proxy](https://github.com/samosvalishe/free-turn-proxy) — транспорт FreeTURN.
-- [EbraSha/free-v2ray-public-list](https://github.com/ebrasha/free-v2ray-public-list) — [встроенный список серверов](https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/refs/heads/main/V2Ray-Config-By-EbraSha.txt).
 - [Au1rxx/free-vpn-subscriptions](https://github.com/Au1rxx/free-vpn-subscriptions) — [встроенная подписка](https://raw.githubusercontent.com/Au1rxx/free-vpn-subscriptions/main/output/v2ray-base64.txt).
 
 Встроенные подписки можно отключить. Доступность публичных серверов не гарантируется; для постоянного использования предпочтительны доверенные источники. Защищайте чувствительные данные прикладным шифрованием, например HTTPS.

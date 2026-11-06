@@ -8,12 +8,25 @@ export type ConnectionIdentity = {
   updated_at?: number;
 };
 
+export type SystemTimeStatus = {
+  unix: number;
+  timezone: string;
+  status: "checking" | "synchronized" | "unsynchronized" | "unavailable" | "invalid_date";
+  ntp_enabled: boolean;
+  synchronized: boolean;
+  supported: boolean;
+  checked_at: number;
+  syncing: boolean;
+  error?: string;
+};
+
 export type OrcheRouteStatus = {
   version: number;
   timestamp: number;
   updated_at: number;
   stale: boolean;
   connectivity: string;
+  system_time?: SystemTimeStatus;
   service?: { enabled: boolean };
   wan: { interface: string; available: boolean | null; mode?: "normal" | "allowlist" | "offline" | "unknown"; identity?: ConnectionIdentity };
   network: {
@@ -440,6 +453,7 @@ export function setAndroidAppUpdateBetaEnabled(enabled: boolean) {
 }
 
 export function getServerAppUpdateStatus() { return request<AndroidAppUpdateStatus>("/v1/app-update"); }
+export function getServerSystemTime() { return request<SystemTimeStatus>("/v1/system/time"); }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const android = androidBridge();
@@ -528,6 +542,9 @@ export function loadOperations(): Promise<OperationSnapshot> {
 }
 
 export const actions = {
+  syncSystemTime() {
+    return request<{ accepted: boolean }>("/v1/system/time/sync", { method: "POST", body: "{}" });
+  },
 	autoConfigureCallServer(browserOrigin: string) {
 		return request<CallServerAutoConfigResult>("/v1/call-server/auto-configure", { method: "POST", body: JSON.stringify({ browser_origin: browserOrigin }) });
 	},

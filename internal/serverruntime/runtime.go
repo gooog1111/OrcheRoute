@@ -75,6 +75,9 @@ type Runtime struct {
 	connectivityTopologyLookup connectivityTopologyLookup
 	startedAt                  int64
 	webAuthAttempts            webAuthLimiter
+	timeMu                     sync.RWMutex
+	timeState                  SystemTimeStatus
+	timeCommand                func(context.Context, ...string) ([]byte, error)
 }
 
 func New(config Config) (*Runtime, error) {
@@ -143,6 +146,13 @@ func (runtime *Runtime) bootstrap(ctx context.Context, freshState bool) error {
 	for _, item := range subscriptions.MissingDefaults(items, true) {
 		if _, err := runtime.Store.Create(ctx, item); err != nil {
 			return err
+		}
+	}
+	for _, item := range items {
+		if item.Enabled && subscriptions.RetiredDefault(item) {
+			if _, err := runtime.Store.Update(ctx, item.ID, map[string]any{"enabled": false}); err != nil {
+				return err
+			}
 		}
 	}
 
