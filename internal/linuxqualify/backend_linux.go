@@ -105,10 +105,7 @@ func (backend *Backend) Geo(ctx context.Context, proxies []map[string]any) ([]qu
 	return parallel(proxies, config.SpeedWorkers, func(_ int, item map[string]any) qualification.GeoEvidence {
 		evidence := qualification.GeoEvidence{}
 		err := withCore(ctx, item, config, func(client *http.Client, proxyAddress string) error {
-			country, status := traceCountry(client, config.TraceURL)
-			if status != "" {
-				country, status = curlCountry(ctx, proxyAddress, config.TraceURL)
-			}
+			country, status := geoCountry(ctx, client, proxyAddress, config.TraceURL)
 			evidence.Country = country
 			evidence.Status = status
 			evidence.OK = status == "" && country != ""
@@ -377,22 +374,22 @@ func directClient(config Config) (*http.Client, func()) {
 	return &http.Client{Transport: transport, Timeout: 60 * time.Second}, transport.CloseIdleConnections
 }
 
-func curlCountry(ctx context.Context, proxyAddress, target string) (string, string) {
-	output, err := exec.CommandContext(ctx, "curl", "--silent", "--show-error", "--location", "--proxy", "socks5h://"+proxyAddress, "--connect-timeout", "4", "--max-time", "12", target).Output()
+func curlCountry(ctx context.Context, proxyAddress, target string) (string, string, bool) {
+	output, err := exec.CommandContext(ctx, "curl", "--silent", "--show-error", "--fail", "--location", "--max-filesize", "1048576", "--proxy", "socks5h://"+proxyAddress, "--connect-timeout", "2", "--max-time", "4", target).Output()
 	if err != nil {
-		return "", "geo_failed"
+		return "", "geo_failed", ctx.Err() == nil && temporaryCurlGeoError(err)
 	}
 	for _, line := range strings.Split(string(output), "\n") {
 		key, value, found := strings.Cut(line, "=")
 		if found && strings.TrimSpace(key) == "loc" {
 			country := strings.ToUpper(strings.TrimSpace(value))
 			if country == "" {
-				return "", "country_unknown"
+				return "", "country_unknown", false
 			}
-			return country, ""
+			return country, "", false
 		}
 	}
-	return "", "country_unknown"
+	return "", "country_unknown", false
 }
 
 func curlSpeed(ctx context.Context, proxyAddress, target string, limit int64) (qualification.Download, error) {
@@ -466,14 +463,18 @@ func freePort() (int, error) {
 	return listener.Addr().(*net.TCPAddr).Port, nil
 }
 
-func traceCountry(client *http.Client, url string) (string, string) {
-	response, err := client.Get(url)
+func traceCountry(ctx context.Context, client *http.Client, url string) (string, string, bool) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return "", "geo_failed"
+		return "", "geo_failed", false
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return "", "geo_failed", ctx.Err() == nil && temporaryGeoError(err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", "geo_failed"
+		return "", "geo_failed", false
 	}
 	scanner := bufio.NewScanner(io.LimitReader(response.Body, 1<<20))
 	for scanner.Scan() {
@@ -481,15 +482,15 @@ func traceCountry(client *http.Client, url string) (string, string) {
 		if found && strings.TrimSpace(key) == "loc" {
 			country := strings.ToUpper(strings.TrimSpace(value))
 			if country == "" {
-				return "", "country_unknown"
+				return "", "country_unknown", false
 			}
-			return country, ""
+			return country, "", false
 		}
 	}
 	if scanner.Err() != nil {
-		return "", "geo_failed"
+		return "", "geo_failed", ctx.Err() == nil && temporaryGeoError(scanner.Err())
 	}
-	return "", "country_unknown"
+	return "", "country_unknown", false
 }
 func downloadSpeed(client *http.Client, url string, limit int64) qualification.Download {
 	return downloadSpeedContext(context.Background(), client, url, limit)

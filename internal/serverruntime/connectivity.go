@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"net"
 	"net/http"
 	"path/filepath"
 	"time"
 
 	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
 	corevalidator "github.com/gooog1111/orcheroute/internal/core/validator"
+	"github.com/gooog1111/orcheroute/internal/linuxnetwork"
 	"github.com/gooog1111/orcheroute/internal/network"
 )
 
@@ -78,7 +78,14 @@ func (runtime *Runtime) connectivityCycle(ctx context.Context) {
 	interfaceName := profile.Roles["direct"].Interface
 	factory := runtime.connectivityProbeFactory
 	if factory == nil {
-		factory = boundConnectivityProbe
+		fallback := profile.DNS.Bootstrap
+		if len(fallback) == 0 {
+			fallback = network.DefaultDNS.Bootstrap
+		}
+		servers := linuxnetwork.PhysicalNameServers(cycle, interfaceName, fallback)
+		factory = func(iface string, timeout time.Duration) mobileconnectivity.Probe {
+			return boundConnectivityProbeWithDNS(iface, timeout, servers)
+		}
 	}
 	observed, err := mobileconnectivity.Diagnose(cycle, mobileconnectivity.Config{
 		AllowlistURL: allowlistURL, OpenInternetURL: openURL,
@@ -179,13 +186,16 @@ func (runtime *Runtime) recordConnectivityError(previous ConnectivitySnapshot, e
 }
 
 func boundConnectivityProbe(interfaceName string, timeout time.Duration) mobileconnectivity.Probe {
+	return boundConnectivityProbeWithDNS(interfaceName, timeout, nil)
+}
+
+func boundConnectivityProbeWithDNS(interfaceName string, timeout time.Duration, servers []string) mobileconnectivity.Probe {
+	resolverDialer := platformDialer(interfaceName, 0)
+	resolver := linuxnetwork.BoundResolver(resolverDialer.DialContext, servers, interfaceName != "")
 	return func(ctx context.Context, target mobileconnectivity.Target) bool {
-		resolverDialer := platformDialer(interfaceName, 0)
 		dialer := platformDialer(interfaceName, 0)
 		dialer.Timeout = timeout
-		dialer.Resolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			return resolverDialer.DialContext(ctx, network, address)
-		}}
+		dialer.Resolver = resolver
 		transport := &http.Transport{
 			DialContext:       dialer.DialContext,
 			TLSClientConfig:   &tls.Config{MinVersion: tls.VersionTLS12},

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	mobileconnectivity "github.com/gooog1111/orcheroute/internal/core/connectivity"
+	"github.com/gooog1111/orcheroute/internal/linuxnetwork"
 	"github.com/gooog1111/orcheroute/internal/network"
 	"golang.org/x/net/proxy"
 )
@@ -47,7 +48,13 @@ func (runtime *Runtime) identityCycle(ctx context.Context) {
 		_ = atomicJSON(runtime.identityPath(), value)
 		return
 	}
-	if identity, err := directIdentity(cycle, profile.Roles["direct"].Interface); err == nil {
+	fallback := profile.DNS.Bootstrap
+	if len(fallback) == 0 {
+		fallback = network.DefaultDNS.Bootstrap
+	}
+	iface := profile.Roles["direct"].Interface
+	servers := linuxnetwork.PhysicalNameServers(cycle, iface, fallback)
+	if identity, err := directIdentityWithDNS(cycle, iface, servers); err == nil {
 		value.Direct = &identity
 	} else {
 		value.Error = err.Error()
@@ -70,8 +77,14 @@ func (runtime *Runtime) identitySnapshot() IdentitySnapshot {
 }
 
 func directIdentity(ctx context.Context, interfaceName string) (mobileconnectivity.Identity, error) {
+	return directIdentityWithDNS(ctx, interfaceName, nil)
+}
+
+func directIdentityWithDNS(ctx context.Context, interfaceName string, servers []string) (mobileconnectivity.Identity, error) {
 	dialer := platformDialer(interfaceName, 0)
 	dialer.Timeout = 6 * time.Second
+	resolverDialer := platformDialer(interfaceName, 0)
+	dialer.Resolver = linuxnetwork.BoundResolver(resolverDialer.DialContext, servers, interfaceName != "")
 	return fetchIdentity(ctx, dialer.DialContext)
 }
 
