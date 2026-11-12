@@ -27,6 +27,7 @@ import {
   scanQr,
 	setAndroidAppUpdateBetaEnabled,
   type DashboardData,
+  type AndroidAppUpdateStatus,
   type DnsConfig,
   type NetworkProfile,
   type Node,
@@ -41,6 +42,7 @@ import { themes, type ThemeID } from "./theme";
 import { CallServerPanel } from "./CallServerPanel";
 import { ServerClock } from "./ServerClock";
 import { HWIDSettingsPanel, SubscriptionHWID } from "./SubscriptionHWID";
+import { createUpdateStatusSync } from "../lib/updateStatusSync";
 
 export type SettingsTab =
   "general" | "appearance" | "access" | "call-server" | "network" | "routes" | "sources" | "qualification" | "components";
@@ -3378,6 +3380,21 @@ function ComponentsForm({
   const [geoIPURL, setGeoIPURL] = useState("");
   const [geoSiteURL, setGeoSiteURL] = useState("");
   const [appUpdate, setAppUpdate] = useState(() => embedded ? getAndroidAppUpdateStatus() : data?.appUpdate ?? null);
+	const updateStatusSync = useRef<ReturnType<typeof createUpdateStatusSync<AndroidAppUpdateStatus>> | null>(null);
+	const runServerUpdate = (action: () => Promise<unknown>, message: string, beta = Boolean(appUpdate?.beta_enabled)) => {
+		const sync = updateStatusSync.current;
+		if (!sync || !appUpdate) return;
+		void sync.command(action, {
+			...appUpdate, beta_enabled: beta, state: "checking", active: true, message,
+			latest_version: undefined, update_available: false, error: undefined,
+		}).catch((error: unknown) => {
+			if (updateStatusSync.current !== sync) return;
+			setAppUpdate((value) => value ? {
+				...value, state: "error", active: false, message: "Не удалось обновить статус",
+				error: error instanceof Error ? error.message : "Ошибка запроса",
+			} : value);
+		});
+	};
 	const [betaWarning, setBetaWarning] = useState(false);
 	const setBetaChannel = (enabled: boolean) => {
 		if (embedded) {
@@ -3385,16 +3402,24 @@ function ComponentsForm({
 			setAppUpdate(getAndroidAppUpdateStatus());
 			return;
 		}
-		setAppUpdate((value) => value ? {...value, beta_enabled: enabled} : value);
-		void actions.setAppUpdateChannel(enabled).then(setAppUpdate).catch(() => {
-			void getServerAppUpdateStatus().then(setAppUpdate).catch(() => {});
-		});
+		runServerUpdate(() => actions.setAppUpdateChannel(enabled), "Меняем канал обновлений", enabled);
 	};
   useEffect(() => {
-    const refresh = () => embedded ? setAppUpdate(getAndroidAppUpdateStatus()) : void getServerAppUpdateStatus().then(setAppUpdate).catch(() => {});
+    const sync = embedded ? null : createUpdateStatusSync(getServerAppUpdateStatus, setAppUpdate);
+    updateStatusSync.current = sync;
+    const refresh = () => embedded ? setAppUpdate(getAndroidAppUpdateStatus()) : void sync?.refresh().catch(() => {});
+    const visible = () => { if (document.visibilityState === "visible") refresh(); };
     refresh();
     const timer = window.setInterval(refresh, 750);
-    return () => window.clearInterval(timer);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", visible);
+      sync?.dispose();
+      if (updateStatusSync.current === sync) updateStatusSync.current = null;
+    };
   }, [embedded]);
   useEffect(() => {
     if (components) {
@@ -3579,7 +3604,7 @@ function ComponentsForm({
               className="secondary-button"
               type="button"
               disabled={Boolean(appUpdate?.active)}
-              onClick={() => embedded ? checkAndroidAppUpdate() : void actions.checkAppUpdate(Boolean(appUpdate?.beta_enabled))}
+              onClick={() => embedded ? checkAndroidAppUpdate() : runServerUpdate(() => actions.checkAppUpdate(Boolean(appUpdate?.beta_enabled)), "Проверяем обновления")}
             >
               Проверить обновление
             </button>
@@ -3587,7 +3612,7 @@ function ComponentsForm({
               className="primary-button"
               type="button"
               disabled={Boolean(appUpdate?.active) || appUpdate?.state !== "available"}
-              onClick={() => embedded ? installAndroidAppUpdate() : void actions.installAppUpdate(Boolean(appUpdate?.beta_enabled))}
+              onClick={() => embedded ? installAndroidAppUpdate() : runServerUpdate(() => actions.installAppUpdate(Boolean(appUpdate?.beta_enabled)), "Запускаем обновление")}
             >
               Скачать и установить
             </button>
