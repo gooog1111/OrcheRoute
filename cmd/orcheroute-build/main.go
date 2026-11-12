@@ -103,7 +103,9 @@ func (b *builder) common() error {
 			}
 			return b.testFreeTURNBridge()
 		}
-		listed, err := outputIn(b.root, "go", append([]string{"list"}, patterns...)...)
+		// Enumerate before filtering Linux-only runtime tests. Without -e an
+		// unavailable Linux dependency aborts enumeration on Windows.
+		listed, err := outputIn(b.root, "go", append([]string{"list", "-e"}, patterns...)...)
 		if err != nil {
 			return err
 		}
