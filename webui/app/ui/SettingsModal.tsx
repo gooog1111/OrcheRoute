@@ -3042,7 +3042,6 @@ function SubscriptionsForm({
           </span>
         </div>
       )}
-      <HWIDSettingsPanel disabled={changesLocked} />
       <div className="default-source-card">
         <div className="default-source-head">
           <div>
@@ -3341,6 +3340,7 @@ function SubscriptionsForm({
           </article>
         ))}
       </div>
+      <HWIDSettingsPanel disabled={changesLocked} />
     </div>
   );
 }

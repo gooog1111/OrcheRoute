@@ -54,3 +54,19 @@ test("saved HWIDs and choices share the subscription settings on both platforms"
   assert.match(java, /\/v1\/subscription-hwid/);
   assert.doesNotMatch(java, /Mobilecore.fetchSubscription\(/);
 });
+
+test("HWID controls use themed fields and the device catalog is collapsed below subscriptions", async () => {
+  for (const mode of ["none", "current", "custom"]) {
+    const html = renderToStaticMarkup(createElement(Choice, { mode, value: "x".repeat(256), settings, onChange() {} }));
+    assert.match(html, /class="form-field"/);
+    assert.match(html, /class="input-wrap"><select/);
+    if (mode !== "none") assert.match(html, /class="input-wrap"><input/);
+  }
+  const panel = renderToStaticMarkup(createElement(component.exports.HWIDSettingsPanel, { disabled: false }));
+  assert.match(panel, /^<details class="editor-card hwid-catalog">/);
+  assert.match(panel, /<summary><strong>HWID устройств/);
+  const modal = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  assert.ok(modal.indexOf("<HWIDSettingsPanel") > modal.indexOf('className="subscription-list editable"'));
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.hwid-fields \{[^}]*grid-template-columns: minmax\(0, 1fr\)[^}]*min-inline-size: 0/);
+});

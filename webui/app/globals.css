@@ -1,11 +1,5 @@
 @import "tailwindcss";
 
-.hwid-fields { display: grid; gap: 0.75rem; min-width: 0; border: 0; padding: 0; }
-.hwid-fields label { display: grid; gap: 0.5rem; color: var(--text); }
-.hwid-record { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 0.5rem; }
-.hwid-fields input, .hwid-fields select { min-width: 0; width: 100%; }
-@media (max-width: 600px) { .hwid-record { grid-template-columns: minmax(0, 1fr); } }
-
 .server-clock {
   display: grid;
   gap: 0.25rem;
@@ -303,6 +297,24 @@ button.node-row { cursor: pointer; }
 .role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .role-card, .editor-card { padding: 16px; display: grid; gap: 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-soft); }
 .role-card > strong, .editor-card > strong { font-size: 13px; font-weight: 600; }
+.hwid-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; min-inline-size: 0; width: 100%; max-width: 100%; border: 0; padding: 0; margin: 0; }
+.hwid-fields > strong { color: var(--text); font-size: 11px; font-weight: 600; }
+.hwid-record { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 8px; }
+.hwid-fields :is(input, select) { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+.hwid-fields .input-wrap:has(select) { position: relative; }
+.hwid-fields .input-wrap select { background-image: none; }
+.hwid-fields .input-wrap:has(select)::after { content: ""; position: absolute; right: 14px; top: 50%; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: translateY(-65%) rotate(45deg); pointer-events: none; }
+.hwid-fields input[readonly] { font-family: ui-monospace, monospace; font-size: 11px; }
+.hwid-catalog { display: block; min-width: 0; }
+.hwid-catalog > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; cursor: pointer; list-style: none; color: var(--text); }
+.hwid-catalog > summary::-webkit-details-marker { display: none; }
+.hwid-catalog > summary strong { font-size: 12px; font-weight: 600; }
+.hwid-catalog > summary small { grid-column: 1; color: var(--muted); font-size: 10px; }
+.hwid-catalog > summary::after { content: "›"; grid-column: 2; grid-row: 1 / 3; align-self: center; font-size: 22px; color: var(--muted); }
+.hwid-catalog[open] > summary { margin-bottom: 14px; }
+.hwid-catalog[open] > summary::after { transform: rotate(90deg); }
+.hwid-catalog > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+@media (max-width: 600px) { .hwid-record { grid-template-columns: minmax(0, 1fr); } }
 .toggle-grid { display: flex; flex-wrap: wrap; gap: 9px; }
 .mode-choice-grid { display: grid; gap: 10px; }
 .mode-choice-grid.control-modes { grid-template-columns: 1fr 1fr; }

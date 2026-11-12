@@ -24,17 +24,17 @@ export function HWIDSettingsPanel({ disabled }: { disabled: boolean }) {
     } catch { setError("Проверьте названия и HWID. Повторяющиеся идентификаторы не допускаются."); }
     finally { setBusy(false); }
   };
-  return <section className="editor-card">
-    <strong>HWID</strong>
+  return <details className="editor-card hwid-catalog">
+    <summary><strong>HWID устройств</strong><small>{saved.length ? `Сохранено: ${saved.length}` : "Текущее устройство и сохранённые"}</small></summary>
     <fieldset disabled={disabled || busy || !settings} className="hwid-fields">
-      <label>Текущее устройство<input aria-label="HWID текущего устройства" readOnly value={settings?.current ?? ""} /></label>
+      <label className="form-field"><span>Текущее устройство</span><div className="input-wrap"><input aria-label="HWID текущего устройства" readOnly value={settings?.current ?? ""} /></div></label>
       <button type="button" className="secondary-button" onClick={() => void copyText(settings?.current ?? "")}>Скопировать HWID</button>
       <strong>Сохранённые HWID</strong>
       {saved.map((item, index) => <div className="hwid-record" key={item.id || `new-${index}`}>
-        <input aria-label="Название HWID" placeholder="Название" maxLength={64} value={item.name}
-          onChange={(event) => setSaved((items) => items.map((current, position) => position === index ? { ...current, name: event.target.value } : current))} />
-        <input aria-label="Сохранённый HWID" placeholder="HWID" maxLength={256} spellCheck={false} value={item.value}
-          onChange={(event) => setSaved((items) => items.map((current, position) => position === index ? { ...current, value: event.target.value } : current))} />
+        <div className="input-wrap"><input aria-label="Название HWID" placeholder="Название" maxLength={64} value={item.name}
+          onChange={(event) => setSaved((items) => items.map((current, position) => position === index ? { ...current, name: event.target.value } : current))} /></div>
+        <div className="input-wrap"><input aria-label="Сохранённый HWID" placeholder="HWID" maxLength={256} spellCheck={false} value={item.value}
+          onChange={(event) => setSaved((items) => items.map((current, position) => position === index ? { ...current, value: event.target.value } : current))} /></div>
         <button type="button" className="secondary-button" onClick={() => setSaved((items) => items.filter((_, position) => position !== index))}>Удалить</button>
       </div>)}
       <div className="import-actions">
@@ -44,7 +44,7 @@ export function HWIDSettingsPanel({ disabled }: { disabled: boolean }) {
       </div>
     </fieldset>
     {error && <div className="inline-feedback error" role="alert">{error}</div>}
-  </section>;
+  </details>;
 }
 
 type SelectionProps = {
@@ -66,8 +66,8 @@ export function HWIDChoice({ mode, value, onChange, settings }: SelectionProps &
   const existing = mode === "custom" ? settings?.saved.find((item) => item.value === value) : undefined;
   const selected = existing ? `saved:${existing.id}` : mode;
   return <div className="hwid-fields">
-    <label>HWID подписки
-      <select value={selected} onChange={(event) => {
+    <label className="form-field"><span>HWID подписки</span>
+      <div className="input-wrap"><select aria-label="HWID подписки" value={selected} onChange={(event) => {
         const choice = event.target.value;
         if (choice.startsWith("saved:")) {
           const item = settings?.saved.find((candidate) => `saved:${candidate.id}` === choice);
@@ -78,10 +78,10 @@ export function HWIDChoice({ mode, value, onChange, settings }: SelectionProps &
         <option value="current" disabled={!settings?.current}>Текущее устройство</option>
         {settings?.saved.map((item) => <option key={item.id} value={`saved:${item.id}`}>{item.name}</option>)}
         <option value="custom">Свой HWID</option>
-      </select>
+      </select></div>
     </label>
-    {mode === "current" && <input aria-label="Выбранный HWID устройства" readOnly value={settings?.current ?? ""} />}
-    {mode === "custom" && <input aria-label="HWID подписки" maxLength={256} spellCheck={false} value={value} placeholder="HWID"
-      onChange={(event) => onChange("custom", event.target.value)} />}
+    {mode === "current" && <div className="input-wrap"><input aria-label="Выбранный HWID устройства" readOnly value={settings?.current ?? ""} /></div>}
+    {mode === "custom" && <div className="input-wrap"><input aria-label="Значение HWID подписки" maxLength={256} spellCheck={false} value={value} placeholder="HWID"
+      onChange={(event) => onChange("custom", event.target.value)} /></div>}
   </div>;
 }
