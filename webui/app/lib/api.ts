@@ -76,11 +76,17 @@ export type Node = {
   source_name?: string | null;
 };
 
+export type SavedHWID = { id: string; name: string; value: string };
+export type SubscriptionHWIDs = { current: string; saved: SavedHWID[] };
+export function getSubscriptionHWIDs() { return request<SubscriptionHWIDs>("/v1/subscription-hwid"); }
+
 export type Subscription = {
   id: string;
   name: string;
   group: "primary" | "emergency";
   parser: string;
+  hwid_mode?: "none" | "current" | "custom";
+  hwid?: string;
   enabled: boolean;
   interval_seconds: number;
   last_status: string;
@@ -542,6 +548,9 @@ export function loadOperations(): Promise<OperationSnapshot> {
 }
 
 export const actions = {
+  saveSubscriptionHWIDs(saved: SavedHWID[]) {
+    return request<SubscriptionHWIDs>("/v1/subscription-hwid", { method: "PUT", body: JSON.stringify({ saved }) });
+  },
   syncSystemTime() {
     return request<{ accepted: boolean }>("/v1/system/time/sync", { method: "POST", body: "{}" });
   },
@@ -665,13 +674,13 @@ export const actions = {
   saveRoutes(revision: number, defaultAction: RouteState["default"], lists: RouteState["lists"]) {
     return request<{ updated: boolean; applied: boolean; apply_pending?: boolean; routes: RouteState }>("/v1/routes", { method: "PUT", body: JSON.stringify({ revision, default: defaultAction, lists }) });
   },
-  createSubscription(payload: { name: string; group: "primary" | "emergency"; parser: string; secret: string; enabled: boolean; interval_seconds: number }) {
+  createSubscription(payload: { name: string; group: "primary" | "emergency"; parser: string; secret: string; enabled: boolean; interval_seconds: number; hwid_mode?: string; hwid?: string }) {
     return request<{ subscription: Subscription }>("/v1/subscriptions", { method: "POST", body: JSON.stringify(payload) });
   },
-  importSubscriptions(subscriptions: { name: string; group: "primary" | "emergency"; parser: string; secret: string; enabled: boolean; interval_seconds: number }[]) {
+  importSubscriptions(subscriptions: { name: string; group: "primary" | "emergency"; parser: string; secret: string; enabled: boolean; interval_seconds: number; hwid_mode?: string; hwid?: string }[]) {
     return request<{ created: Subscription[]; skipped: { name: string; reason: string }[]; refresh_scheduled: boolean }>("/v1/subscriptions/import", { method: "POST", body: JSON.stringify({ subscriptions }) });
   },
-  updateSubscription(id: string, payload: Partial<{ name: string; group: "primary" | "emergency"; parser: string; secret: string; enabled: boolean; interval_seconds: number }>) {
+  updateSubscription(id: string, payload: Partial<{ name: string; group: "primary" | "emergency"; parser: string; secret: string; enabled: boolean; interval_seconds: number; hwid_mode?: string; hwid?: string }>) {
     return request<{ subscription: Subscription }>(`/v1/subscriptions/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) });
   },
   updateDefaultEmergency(enabledIds: string[]) {

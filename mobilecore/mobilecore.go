@@ -135,6 +135,10 @@ func DecodeSubscriptionBody(body string) string {
 // desktop clients. It supports ordinary HTTP/base64 subscriptions, raw share
 // links and the authenticated BlackTemple protocol used by OrcheRoute.
 func FetchSubscription(parser, secret, stateDir string) string {
+	return FetchSubscriptionWithHWID(parser, secret, stateDir, "none", "", "")
+}
+
+func FetchSubscriptionWithHWID(parser, secret, stateDir, mode, value, current string) string {
 	parser = strings.ToLower(strings.TrimSpace(parser))
 	secret = strings.TrimSpace(secret)
 	if secret == "" {
@@ -147,13 +151,15 @@ func FetchSubscription(parser, secret, stateDir string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	subscription := subscriptions.Subscription{Parser: subscriptions.Parser(parser), Secret: secret}
+	subscription.HWIDMode = mode
+	subscription.HWID = value
 	var fetcher subscriptions.Fetcher
 	switch subscription.Parser {
 	case subscriptions.Standard:
 		if parsed, err := url.ParseRequestURI(secret); err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return encode(map[string]any{"ok": false, "error": map[string]string{"error": "invalid_subscription_url"}})
 		}
-		standard := subscriptions.HTTPFetcher{UserAgent: "OrcheRoute Mobile/0.2"}
+		standard := subscriptions.HTTPFetcher{UserAgent: "OrcheRoute Mobile/0.2", DeviceHWID: current}
 		blackTemple := subscriptions.BlackTempleFetcher{CredentialsPath: filepath.Join(stateDir, "blacktemple_credentials.json")}
 		result, err := subscriptions.DetectAndFetch(ctx, subscription, standard, blackTemple)
 		if err != nil {

@@ -83,6 +83,9 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 		switch path {
 		case "/v1/status":
 			return runtime.getStatus(ctx)
+		case "/v1/subscription-hwid":
+			settings, err := runtime.loadHWIDSettings()
+			return result(200, settings, err)
 		case "/v1/system/time":
 			return 200, runtime.systemTimeSnapshot()
 		case "/v1/pools":
@@ -321,6 +324,8 @@ func (runtime *Runtime) dispatch(ctx context.Context, method string, parsed *url
 			return runtime.saveQualification(body)
 		case "/v1/app-update/channel":
 			return runtime.saveAppUpdateChannel(body)
+		case "/v1/subscription-hwid":
+			return runtime.saveHWIDSettings(body)
 		case "/v1/routes":
 			return runtime.saveRoutes(body)
 		case "/v1/network/profile":
@@ -592,6 +597,7 @@ func (runtime *Runtime) getSubscriptions(ctx context.Context) (int, any) {
 
 func subscriptionPublic(item subscriptions.Subscription) map[string]any {
 	result := map[string]any{"id": item.ID, "name": item.Name, "group": string(item.GroupName), "parser": string(item.Parser), "enabled": item.Enabled, "interval_seconds": item.IntervalSeconds, "last_attempt": item.LastAttempt, "last_success": item.LastSuccess, "last_status": item.LastStatus, "last_error": item.LastError, "last_links": item.LastLinks, "last_tested": item.LastTested, "last_available": item.LastAvailable, "created_at": item.CreatedAt, "updated_at": item.UpdatedAt, "secret_configured": true}
+	result["hwid_mode"], result["hwid"] = item.HWIDMode, item.HWID
 	if next := subscriptions.NextUpdate(item.LastSuccess, item.IntervalSeconds, item.Enabled); next > 0 {
 		result["next_update"] = next
 	} else {
@@ -986,6 +992,11 @@ func (runtime *Runtime) createSubscription(ctx context.Context, body map[string]
 	}
 	item := subscriptions.Subscription{Name: stringValue(values["name"]), GroupName: subscriptions.Group(stringValue(values["group_name"])), Parser: subscriptions.Parser(stringValue(values["parser"])), Secret: stringValue(values["secret"]), Enabled: true, IntervalSeconds: 3600}
 	duplicatesRemoved, duplicateCode, err := runtime.normalizeSubscription(ctx, "", item.Parser, &item.Secret)
+	item.HWIDMode = stringValue(values["hwid_mode"])
+	item.HWID = stringValue(values["hwid"])
+	if validationErr := subscriptions.ValidateHWIDSelection(item.HWIDMode, item.HWID); validationErr != nil {
+		return 400, map[string]any{"error": validationErr.Error()}
+	}
 	if err != nil {
 		return backendError(err)
 	}
@@ -1049,6 +1060,16 @@ func (runtime *Runtime) updateSubscription(ctx context.Context, id string, body 
 	}
 	if current == nil {
 		return 404, map[string]any{"error": "subscription_not_found"}
+	}
+	mode, value := current.HWIDMode, current.HWID
+	if changed, ok := values["hwid_mode"].(string); ok {
+		mode = changed
+	}
+	if changed, ok := values["hwid"].(string); ok {
+		value = changed
+	}
+	if err := subscriptions.ValidateHWIDSelection(mode, value); err != nil {
+		return 400, map[string]any{"error": err.Error()}
 	}
 	parser := current.Parser
 	if value, ok := values["parser"]; ok {

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -78,6 +79,7 @@ type Runtime struct {
 	timeMu                     sync.RWMutex
 	timeState                  SystemTimeStatus
 	timeCommand                func(context.Context, ...string) ([]byte, error)
+	hwidMu                     sync.Mutex
 }
 
 func New(config Config) (*Runtime, error) {
@@ -131,6 +133,9 @@ func New(config Config) (*Runtime, error) {
 // creates missing state and never overwrites a profile or subscription that
 // the user has already changed.
 func (runtime *Runtime) bootstrap(ctx context.Context, freshState bool) error {
+	if _, err := runtime.loadHWIDSettings(); err != nil {
+		log.Printf("HWID settings unavailable: %v", err)
+	}
 	// The database schema historically defaults to enabled for migration
 	// compatibility. A genuinely new installation must never capture traffic
 	// before the user presses Enable.

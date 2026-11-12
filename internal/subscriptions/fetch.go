@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -12,8 +14,9 @@ import (
 const maxSubscriptionBody = 64 << 20
 
 type HTTPFetcher struct {
-	Client    *http.Client
-	UserAgent string
+	Client     *http.Client
+	UserAgent  string
+	DeviceHWID string
 }
 
 type InlineFetcher struct{}
@@ -58,8 +61,49 @@ func (fetcher HTTPFetcher) Fetch(ctx context.Context, subscription Subscription)
 		userAgent = "orcheroute/0.2"
 	}
 	request.Header.Set("User-Agent", userAgent)
+	hwid, err := SelectedHWID(subscription, fetcher.DeviceHWID)
+	if err != nil {
+		return nil, err
+	}
+	if hwid != "" {
+		if request.URL.Scheme != "https" {
+			return nil, fmt.Errorf("hwid_requires_https")
+		}
+		request.Header.Set("X-Hwid", hwid)
+		deviceOS := runtime.GOOS
+		if deviceOS == "android" {
+			deviceOS = "Android"
+		} else if deviceOS == "linux" {
+			deviceOS = "Linux"
+		}
+		request.Header.Set("X-Device-OS", deviceOS)
+		copyClient := *client
+		previous := copyClient.CheckRedirect
+		copyClient.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+			if previous != nil {
+				if err := previous(next, via); err != nil {
+					return err
+				}
+			}
+			if next.URL.Scheme != request.URL.Scheme || next.URL.Host != request.URL.Host {
+				next.Header.Del("X-Hwid")
+				next.Header.Del("X-Device-OS")
+			}
+			if next.URL.Scheme != "https" {
+				return fmt.Errorf("hwid_redirect_requires_https")
+			}
+			if previous == nil && len(via) >= 10 {
+				return fmt.Errorf("too_many_redirects")
+			}
+			return nil
+		}
+		client = &copyClient
+	}
 	response, err := client.Do(request)
 	if err != nil {
+		if failure, ok := err.(*url.Error); ok {
+			return nil, fmt.Errorf("subscription_request_failed: %w", failure.Err)
+		}
 		return nil, err
 	}
 	defer response.Body.Close()
@@ -74,10 +118,27 @@ func (fetcher HTTPFetcher) Fetch(ctx context.Context, subscription Subscription)
 		return nil, fmt.Errorf("subscription_too_large")
 	}
 	links := Decode(payload)
+	if strings.EqualFold(response.Header.Get("X-Hwid-Not-Supported"), "true") || hwidNotice(links) {
+		if hwid != "" {
+			return nil, fmt.Errorf("subscription_hwid_rejected")
+		}
+		return nil, fmt.Errorf("subscription_hwid_required")
+	}
 	if len(links) == 0 {
 		return nil, fmt.Errorf("subscription_returned_no_supported_links")
 	}
 	return unique(links), nil
+}
+
+func hwidNotice(links []string) bool {
+	if len(links) != 1 {
+		return false
+	}
+	parsed, err := url.Parse(links[0])
+	if err != nil {
+		return false
+	}
+	return parsed.Hostname() == "0.0.0.0" && parsed.Port() == "1" && strings.Contains(strings.ToLower(parsed.Fragment), "hwid")
 }
 
 type FetcherMap map[Parser]Fetcher

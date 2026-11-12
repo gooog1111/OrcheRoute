@@ -40,6 +40,7 @@ import { OperationPanel, type OperationView } from "./OperationPanel";
 import { themes, type ThemeID } from "./theme";
 import { CallServerPanel } from "./CallServerPanel";
 import { ServerClock } from "./ServerClock";
+import { HWIDSettingsPanel, SubscriptionHWID } from "./SubscriptionHWID";
 
 export type SettingsTab =
   "general" | "appearance" | "access" | "call-server" | "network" | "routes" | "sources" | "qualification" | "components";
@@ -136,6 +137,12 @@ function errorText(reason: unknown) {
       "Все серверы из списка уже существуют в других локальных источниках.",
     subscription_returned_no_supported_links:
       "Не найдено поддерживаемых серверов или конфигураций WireGuard/AmneziaWG.",
+    subscription_hwid_required: "Подписка требует HWID. Выберите его в настройках подписки.",
+    subscription_hwid_rejected: "Провайдер не принял выбранный HWID.",
+    invalid_hwid_selection: "Укажите HWID или выберите текущее устройство.",
+    invalid_hwid: "Недопустимый HWID.",
+    hwid_requires_https: "Для отправки HWID нужна HTTPS-ссылка.",
+    current_hwid_unavailable: "HWID текущего устройства недоступен.",
     invalid_wireguard_config:
       "Конфигурация WireGuard/AmneziaWG неполная или имеет неверный формат.",
     invalid_country_code: "Коды стран должны состоять из двух латинских букв.",
@@ -3033,6 +3040,7 @@ function SubscriptionsForm({
           </span>
         </div>
       )}
+      <HWIDSettingsPanel disabled={changesLocked} />
       <div className="default-source-card">
         <div className="default-source-head">
           <div>
@@ -3750,6 +3758,8 @@ type SubscriptionPayload = {
   secret: string;
   enabled: boolean;
   interval_seconds: number;
+  hwid_mode?: "none" | "current" | "custom";
+  hwid?: string;
 };
 const proxyLinkPattern =
   /^(vless|vmess|trojan|ss|hysteria2|hy2|wireguard|wg|amneziawg|awg):\/\//i;
@@ -3934,6 +3944,8 @@ function SubscriptionEditor({
     String(Math.round((item?.interval_seconds ?? 3600) / 60)),
   );
   const [loadingSecret, setLoadingSecret] = useState(Boolean(item));
+  const [hwidMode, setHWIDMode] = useState<"none" | "current" | "custom">(item?.hwid_mode || "none");
+  const [hwidValue, setHWIDValue] = useState(item?.hwid ?? "");
   const [scanError, setScanError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -3989,7 +4001,7 @@ function SubscriptionEditor({
   );
   const callProfile = !item && callProfilePattern.test(secret.trim());
   const submit = () => {
-    void onSave(item ? preview.payloads.slice(0, 1) : preview.payloads);
+    void onSave((item ? preview.payloads.slice(0, 1) : preview.payloads).map((payload) => ({ ...payload, hwid_mode: payload.parser === "standard" ? hwidMode : "none", hwid: payload.parser === "standard" && hwidMode === "custom" ? hwidValue.trim() : "" })));
   };
   const paste = async () => setSecret(await navigator.clipboard.readText());
   const loadFile = async (file?: File) => {
@@ -4071,6 +4083,7 @@ function SubscriptionEditor({
               }
             />
           </Field>
+          {preview.payloads.some((payload) => payload.parser === "standard") && <SubscriptionHWID mode={hwidMode} value={hwidValue} onChange={(mode, value) => { setHWIDMode(mode); setHWIDValue(value); }} />}
           <div className="import-actions">
             <button
               className="secondary-button"
@@ -4136,6 +4149,7 @@ function SubscriptionEditor({
               busy ||
               loadingSecret ||
               !secret.trim() ||
+              (preview.payloads.some((payload) => payload.parser === "standard") && hwidMode === "custom" && !hwidValue.trim()) ||
               !preview.payloads.length
             }
             onClick={submit}

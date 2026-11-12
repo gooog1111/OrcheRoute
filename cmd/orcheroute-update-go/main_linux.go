@@ -179,6 +179,9 @@ func run(ctx context.Context, options options) error {
 		requestedIDs[id] = true
 	}
 	standard := subscriptions.HTTPFetcher{}
+	if settings, err := subscriptions.ReadHWIDSettings(filepath.Join(options.StateDirectory, "subscription-hwid.json")); err == nil {
+		standard.DeviceHWID = settings.Current
+	}
 	credentialsPath := filepath.Join(options.OutputStateDirectory, "blacktemple_credentials.json")
 	blacktemple := subscriptions.BlackTempleFetcher{CredentialsPath: credentialsPath}
 	var fetcher subscriptions.Fetcher = subscriptions.FetcherMap{subscriptions.Standard: standard, subscriptions.BlackTemple: blacktemple, subscriptions.Inline: subscriptions.InlineFetcher{}, subscriptions.WireGuard: subscriptions.WireGuardFetcher{}}

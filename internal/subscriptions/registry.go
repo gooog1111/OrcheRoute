@@ -34,6 +34,8 @@ type Subscription struct {
 	Parser           Parser  `json:"parser"`
 	Secret           string  `json:"secret,omitempty"`
 	SecretConfigured bool    `json:"secret_configured,omitempty"`
+	HWIDMode         string  `json:"hwid_mode"`
+	HWID             string  `json:"hwid"`
 	Enabled          bool    `json:"enabled"`
 	IntervalSeconds  int     `json:"interval_seconds"`
 	LastAttempt      int64   `json:"last_attempt"`
@@ -130,6 +132,20 @@ func ValidateFields(payload map[string]any, partial bool) (map[string]any, error
 		}
 	}
 	result := map[string]any{}
+	if value, ok := payload["hwid_mode"]; ok {
+		mode := strings.ToLower(strings.TrimSpace(valueString(value)))
+		if mode != "none" && mode != "current" && mode != "custom" {
+			return nil, &ValidationError{Code: "invalid_hwid_selection"}
+		}
+		result["hwid_mode"] = mode
+	}
+	if value, ok := payload["hwid"]; ok {
+		hwid := strings.TrimSpace(valueString(value))
+		if hwid != "" && !ValidHWID(hwid) {
+			return nil, &ValidationError{Code: "invalid_hwid"}
+		}
+		result["hwid"] = hwid
+	}
 	if value, ok := payload["name"]; ok {
 		name := strings.TrimSpace(valueString(value))
 		if length := len([]rune(name)); length < 1 || length > 100 {

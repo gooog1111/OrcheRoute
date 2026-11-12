@@ -224,6 +224,13 @@ final class MobileRuntime {
 
     Network identityPhysicalNetwork() { return connectivityMonitor.activePhysicalNetwork(); }
 
+    private String fetchSubscription(JSONObject item) throws JSONException {
+        String mode = item.optString("hwid_mode", "none");
+        String current = "current".equals(mode) ? repository.hwidSettings().optString("current") : "";
+        return Mobilecore.fetchSubscriptionWithHWID(item.optString("parser", "standard"), item.optString("secret"),
+                new java.io.File(context.getFilesDir(), "subscriptions").getAbsolutePath(), mode, item.optString("hwid", ""), current);
+    }
+
     synchronized void updateConnectionIdentity(String route, JSONObject identity) throws JSONException {
         JSONObject value = identity == null ? new JSONObject() : new JSONObject(identity.toString());
         value.put("updated_at", now());
@@ -235,6 +242,8 @@ final class MobileRuntime {
         String verb = method == null ? "GET" : method.toUpperCase(Locale.ROOT);
         try {
             if ("GET".equals(verb) && "/v1/status".equals(path)) return response(200, status());
+            if ("GET".equals(verb) && "/v1/subscription-hwid".equals(path)) return response(200, repository.hwidSettings());
+            if ("PUT".equals(verb) && "/v1/subscription-hwid".equals(path)) return response(200, repository.saveHWIDSettings(new JSONObject(emptyObject(body))));
             if ("GET".equals(verb) && "/v1/pools".equals(path)) return response(200, new JSONObject().put("pools", repository.pools()));
             if ("GET".equals(verb) && "/v1/nodes".equals(path)) return response(200, new JSONObject().put("nodes", repository.nodes()));
             String poolNodeId = entityId(path, "/v1/nodes/");
@@ -598,8 +607,7 @@ final class MobileRuntime {
                         links = item.optJSONArray("cached_links");
                         if (links == null || links.length() == 0) throw new IllegalStateException("Нет сохранённых серверов. Сначала обновите подписку");
                     } else {
-                        JSONObject fetched = new JSONObject(Mobilecore.fetchSubscription(
-                                item.optString("parser", "standard"), item.optString("secret"), new java.io.File(context.getFilesDir(), "subscriptions").getAbsolutePath()));
+                        JSONObject fetched = new JSONObject(fetchSubscription(item));
                         if (!fetched.optBoolean("ok")) throw new IllegalStateException(coreError(fetched));
                         JSONObject fetchResult = fetched.getJSONObject("result");
                         links = fetchResult.getJSONArray("links");
@@ -793,8 +801,7 @@ final class MobileRuntime {
             String id = item.getString("id");
             updateRefresh("running", "whitelist_subscriptions", "Обновляем подписку " + (i + 1) + "/" + items.length() + " · «" + item.optString("name") + "»", i, items.length(), "");
             try {
-                JSONObject fetched = new JSONObject(Mobilecore.fetchSubscription(item.optString("parser", "standard"),
-                        item.optString("secret"), new java.io.File(context.getFilesDir(), "subscriptions").getAbsolutePath()));
+                JSONObject fetched = new JSONObject(fetchSubscription(item));
                 if (!fetched.optBoolean("ok")) throw new IllegalStateException(coreError(fetched));
                 ensureRefreshContinues(true);
                 JSONObject fetchResult = fetched.getJSONObject("result");

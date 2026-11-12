@@ -183,6 +183,13 @@ func (store *Store) migrateSubscriptionQualification(ctx context.Context) error 
 			return err
 		}
 	}
+	for _, name := range []string{"hwid_mode", "hwid"} {
+		if !columns[name] {
+			if _, err := store.db.ExecContext(ctx, "ALTER TABLE subscriptions ADD COLUMN "+name+" TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -395,6 +402,9 @@ func (store *Store) Get(ctx context.Context, id string, includeSecret bool) (*su
 }
 
 func (store *Store) Create(ctx context.Context, item subscriptions.Subscription) (*subscriptions.Subscription, error) {
+	if err := subscriptions.ValidateHWIDSelection(item.HWIDMode, item.HWID); err != nil {
+		return nil, err
+	}
 	if item.ID == "" {
 		var err error
 		item.ID, err = randomID()
@@ -406,8 +416,8 @@ func (store *Store) Create(ctx context.Context, item subscriptions.Subscription)
 	if item.IntervalSeconds == 0 {
 		item.IntervalSeconds = 3600
 	}
-	_, err := store.db.ExecContext(ctx, `INSERT INTO subscriptions(id,name,group_name,parser,secret,enabled,interval_seconds,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
-		item.ID, item.Name, item.GroupName, item.Parser, item.Secret, boolInt(item.Enabled), item.IntervalSeconds, now, now)
+	_, err := store.db.ExecContext(ctx, `INSERT INTO subscriptions(id,name,group_name,parser,secret,enabled,interval_seconds,created_at,updated_at,hwid_mode,hwid) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		item.ID, item.Name, item.GroupName, item.Parser, item.Secret, boolInt(item.Enabled), item.IntervalSeconds, now, now, item.HWIDMode, item.HWID)
 	if err != nil {
 		return nil, err
 	}
@@ -415,11 +425,40 @@ func (store *Store) Create(ctx context.Context, item subscriptions.Subscription)
 }
 
 func (store *Store) Update(ctx context.Context, id string, changes map[string]any) (*subscriptions.Subscription, error) {
-	allowed := map[string]bool{"name": true, "group_name": true, "parser": true, "secret": true, "enabled": true, "interval_seconds": true}
+	hwidChanged := false
+	var tx *sql.Tx
+	if _, modeChanged := changes["hwid_mode"]; modeChanged || changes["hwid"] != nil {
+		var err error
+		tx, err = store.db.BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback()
+		previous, err := scanSubscription(tx.QueryRowContext(ctx, subscriptionSelect+" WHERE id=?", id))
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		old := &previous
+		previousMode, previousValue := old.HWIDMode, old.HWID
+		if mode, ok := changes["hwid_mode"].(string); ok {
+			old.HWIDMode = mode
+		}
+		if value, ok := changes["hwid"].(string); ok {
+			old.HWID = value
+		}
+		if err := subscriptions.ValidateHWIDSelection(old.HWIDMode, old.HWID); err != nil {
+			return nil, err
+		}
+		hwidChanged = old.HWIDMode != previousMode || old.HWID != previousValue
+	}
+	allowed := map[string]bool{"name": true, "group_name": true, "parser": true, "secret": true, "enabled": true, "interval_seconds": true, "hwid_mode": true, "hwid": true}
 	assignments := []string{}
 	values := []any{}
 	reset := false
-	for _, key := range []string{"name", "group_name", "parser", "secret", "enabled", "interval_seconds"} {
+	for _, key := range []string{"name", "group_name", "parser", "secret", "enabled", "interval_seconds", "hwid_mode", "hwid"} {
 		value, ok := changes[key]
 		if !ok || !allowed[key] {
 			continue
@@ -436,6 +475,9 @@ func (store *Store) Update(ctx context.Context, id string, changes map[string]an
 		values = append(values, value)
 	}
 	if len(assignments) == 0 {
+		if tx != nil {
+			_ = tx.Rollback()
+		}
 		return store.Get(ctx, id, true)
 	}
 	assignments = append(assignments, "updated_at=?")
@@ -443,8 +485,21 @@ func (store *Store) Update(ctx context.Context, id string, changes map[string]an
 	if reset {
 		assignments = append(assignments, "last_success=0", "last_status='pending'", "last_error=NULL", "last_links=0", "last_tested=0", "last_available=0")
 	}
+	if hwidChanged {
+		assignments = append(assignments, "last_attempt=0")
+		if !reset {
+			assignments = append(assignments, "last_success=0", "last_status='pending'", "last_error=NULL")
+		}
+	}
 	values = append(values, id)
-	result, err := store.db.ExecContext(ctx, "UPDATE subscriptions SET "+strings.Join(assignments, ",")+" WHERE id=?", values...)
+	var result sql.Result
+	var err error
+	query := "UPDATE subscriptions SET " + strings.Join(assignments, ",") + " WHERE id=?"
+	if tx != nil {
+		result, err = tx.ExecContext(ctx, query, values...)
+	} else {
+		result, err = store.db.ExecContext(ctx, query, values...)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -454,6 +509,11 @@ func (store *Store) Update(ctx context.Context, id string, changes map[string]an
 	}
 	if rows == 0 {
 		return nil, nil
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
 	}
 	return store.Get(ctx, id, true)
 }
@@ -492,7 +552,7 @@ SET last_attempt=?,last_status=?,last_error=?,last_tested=?,last_available=?,upd
 	return err
 }
 
-const subscriptionSelect = `SELECT id,name,group_name,parser,secret,enabled,interval_seconds,last_attempt,last_success,last_status,last_error,last_links,last_tested,last_available,created_at,updated_at FROM subscriptions`
+const subscriptionSelect = `SELECT id,name,group_name,parser,secret,enabled,interval_seconds,last_attempt,last_success,last_status,last_error,last_links,last_tested,last_available,created_at,updated_at,hwid_mode,hwid FROM subscriptions`
 
 type scanner interface{ Scan(...any) error }
 
@@ -500,7 +560,7 @@ func scanSubscription(row scanner) (subscriptions.Subscription, error) {
 	var item subscriptions.Subscription
 	var enabled int
 	var lastError sql.NullString
-	err := row.Scan(&item.ID, &item.Name, &item.GroupName, &item.Parser, &item.Secret, &enabled, &item.IntervalSeconds, &item.LastAttempt, &item.LastSuccess, &item.LastStatus, &lastError, &item.LastLinks, &item.LastTested, &item.LastAvailable, &item.CreatedAt, &item.UpdatedAt)
+	err := row.Scan(&item.ID, &item.Name, &item.GroupName, &item.Parser, &item.Secret, &enabled, &item.IntervalSeconds, &item.LastAttempt, &item.LastSuccess, &item.LastStatus, &lastError, &item.LastLinks, &item.LastTested, &item.LastAvailable, &item.CreatedAt, &item.UpdatedAt, &item.HWIDMode, &item.HWID)
 	item.Enabled = enabled != 0
 	item.LastError = nullable(lastError)
 	return item, err

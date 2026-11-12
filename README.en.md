@@ -27,6 +27,12 @@ Use Updates to install new versions. Enable Beta versions for the test channel, 
 
 Allow notifications and background operation. Subscription export is available in Settings.
 
+## Subscription HWID
+
+Subscription settings let you save named HWIDs and copy the current device's HWID. When adding or editing an HTTPS subscription, select a saved identifier, the current device, or enter a custom value. HWID is not sent by default.
+
+The selected identifier is retained across subscription refreshes. Use a device identifier authorized by your subscription provider.
+
 ## Linux Server
 
 Required packages: `ca-certificates`, `iproute2`, `systemd`, `nftables`, `iptables`, `curl`, `tar`, `gzip`, `dpkg`, `apt`, and one time service: `systemd-timesyncd`, `chrony`, `ntpsec`, or `ntp`. APT installs dependencies with the DEB.

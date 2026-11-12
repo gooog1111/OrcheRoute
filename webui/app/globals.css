@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+.hwid-fields { display: grid; gap: 0.75rem; min-width: 0; border: 0; padding: 0; }
+.hwid-fields label { display: grid; gap: 0.5rem; color: var(--text); }
+.hwid-record { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 0.5rem; }
+.hwid-fields input, .hwid-fields select { min-width: 0; width: 100%; }
+@media (max-width: 600px) { .hwid-record { grid-template-columns: minmax(0, 1fr); } }
+
 .server-clock {
   display: grid;
   gap: 0.25rem;

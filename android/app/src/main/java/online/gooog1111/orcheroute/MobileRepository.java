@@ -3,6 +3,7 @@ package online.gooog1111.orcheroute;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.util.AtomicFile;
+import android.provider.Settings;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -29,8 +30,11 @@ final class MobileRepository {
     private final AtomicFile previousSnapshot;
     private final File initializedMarker;
     private JSONObject root;
+    private final String deviceSeed;
 
     MobileRepository(Context context) {
+        String identifier = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
+        deviceSeed = identifier == null ? "" : identifier;
         preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         File stateDirectory = new File(context.getNoBackupFilesDir(), "state");
         if (!stateDirectory.isDirectory() && !stateDirectory.mkdirs()) {
@@ -324,6 +328,25 @@ final class MobileRepository {
         return output;
     }
 
+    synchronized JSONObject hwidSettings() throws JSONException {
+        JSONObject stored = root.optJSONObject("subscription_hwid");
+        if (stored == null) {
+            stored = new JSONObject().put("current", Mobilecore.deviceHWID(deviceSeed)).put("saved", new JSONArray());
+            root.put("subscription_hwid", stored);
+            save();
+        }
+        return new JSONObject(stored.toString());
+    }
+
+    synchronized JSONObject saveHWIDSettings(JSONObject input) throws JSONException {
+        JSONObject validated = new JSONObject(Mobilecore.validateHWIDSettings(input.toString()));
+        if (!validated.optBoolean("ok")) throw new JSONException(coreError(validated));
+        JSONObject value = validated.getJSONObject("result").put("current", hwidSettings().getString("current"));
+        root.put("subscription_hwid", value);
+        save();
+        return new JSONObject(value.toString());
+    }
+
     synchronized JSONObject create(JSONObject payload) throws JSONException {
         long now = now();
         JSONObject item = new JSONObject()
@@ -332,6 +355,8 @@ final class MobileRepository {
                 .put("group", payload.optString("group", "primary"))
                 .put("parser", payload.optString("parser", "standard"))
                 .put("secret", required(payload, "secret"))
+                .put("hwid_mode", payload.optString("hwid_mode", "none"))
+                .put("hwid", payload.optString("hwid", ""))
                 .put("enabled", payload.optBoolean("enabled", true))
                 .put("interval_seconds", payload.optInt("interval_seconds", 900))
                 .put("last_status", "new")
@@ -429,12 +454,19 @@ final class MobileRepository {
     synchronized JSONObject update(String id, JSONObject changes) throws JSONException {
         JSONObject item = findSubscription(id);
         if (item == null) return null;
-        for (String key : new String[]{"name", "group", "parser", "secret", "enabled", "interval_seconds"}) {
+        String previousMode = item.optString("hwid_mode", "none"), previousHWID = item.optString("hwid", "");
+        item = new JSONObject(item.toString());
+        for (String key : new String[]{"name", "group", "parser", "secret", "enabled", "interval_seconds", "hwid_mode", "hwid"}) {
             if (changes.has(key)) item.put(key, changes.get(key));
         }
         validate(item);
         ensureUnique(item, id);
+        if (!previousMode.equals(item.optString("hwid_mode", "none")) || !previousHWID.equals(item.optString("hwid", ""))) {
+            item.put("last_attempt", 0).put("last_success", 0).put("last_status", "pending").put("last_error", JSONObject.NULL);
+        }
         item.put("updated_at", now());
+        JSONArray items = root.getJSONArray("subscriptions");
+        for (int i = 0; i < items.length(); i++) if (id.equals(items.getJSONObject(i).optString("id"))) { items.put(i, item); break; }
         if (!item.optBoolean("enabled", true)) { removeNodesForLocked(id); removeWhitelistSourceLocked(id); }
         save();
         return publicSubscription(item);
@@ -1253,6 +1285,8 @@ final class MobileRepository {
     }
 
     private static void validate(JSONObject item) throws JSONException {
+        JSONObject hwid = new JSONObject(Mobilecore.validateHWIDSelection(item.optString("hwid_mode", "none"), item.optString("hwid", "")));
+        if (!hwid.optBoolean("ok")) throw new JSONException(coreError(hwid));
         required(item, "name"); required(item, "secret");
         String group = item.optString("group"), parser = item.optString("parser");
         if (!"primary".equals(group) && !"emergency".equals(group)) throw new JSONException("invalid_group");
