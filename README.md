@@ -6,8 +6,8 @@ VPN-клиент для Android и VPN-контроллер с веб-интер
 
 ## Скачать
 
-- [Android — APK, arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.6/OrcheRoute-Android-0.8.6-code94-arm64.apk)
-- [Linux Server — DEB, amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.6/OrcheRoute-Linux-Server-0.8.6-amd64.deb)
+- [Android — APK, arm64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.7/OrcheRoute-Android-0.8.7-code95-arm64.apk)
+- [Linux Server — DEB, amd64](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.7/OrcheRoute-Linux-Server-0.8.7-amd64.deb)
 - [Все выпуски](https://github.com/gooog1111/OrcheRoute/releases)
 
 ## Android
@@ -40,7 +40,7 @@ VPN-клиент для Android и VPN-контроллер с веб-интер
 Обязательные пакеты: `ca-certificates`, `iproute2`, `systemd`, `nftables`, `iptables`, `curl`, `tar`, `gzip`, `dpkg`, `apt` и одна служба времени: `systemd-timesyncd`, `chrony`, `ntpsec` или `ntp`. APT устанавливает зависимости вместе с DEB.
 
 ```bash
-sudo apt install ./OrcheRoute-Linux-Server-0.8.6-amd64.deb
+sudo apt install ./OrcheRoute-Linux-Server-0.8.7-amd64.deb
 ```
 
 Откройте `http://127.0.0.1:19110/` на сервере либо `http://АДРЕС_СЕРВЕРА:19110/` с другого устройства. Данные первого входа выводятся установщиком и сохраняются в `/etc/orcheroute/initial-credentials`. Для внешнего доступа настройте HTTPS в разделе «Доступ».

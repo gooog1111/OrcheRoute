@@ -8,9 +8,9 @@ const Module = require("node:module");
 const compiled = ts.transpileModule(await readFile(new URL("../app/lib/updateStatusSync.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS },
 });
-const module = new Module("update-status-sync");
-module._compile(compiled.outputText, "update-status-sync.js");
-const { createUpdateStatusSync } = module.exports;
+const compiledModule = new Module("update-status-sync");
+compiledModule._compile(compiled.outputText, "update-status-sync.js");
+const { createUpdateStatusSync } = compiledModule.exports;
 const deferred = () => { let resolve; let reject; const promise = new Promise((ok, fail) => { resolve = ok; reject = fail; }); return { promise, resolve, reject }; };
 
 test("check immediately shows progress and refreshes the version without reloading the page", async () => {
