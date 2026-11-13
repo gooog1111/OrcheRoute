@@ -6,8 +6,8 @@ An Android VPN client and Linux Server VPN controller built on [Mihomo](https://
 
 ## Downloads
 
-- [Android — arm64 APK](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.7/OrcheRoute-Android-0.8.7-code95-arm64.apk)
-- [Linux Server — amd64 DEB](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.7/OrcheRoute-Linux-Server-0.8.7-amd64.deb)
+- [Android — arm64 APK](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.8/OrcheRoute-Android-0.8.8-code96-arm64.apk)
+- [Linux Server — amd64 DEB](https://github.com/gooog1111/OrcheRoute/releases/download/v0.8.8/OrcheRoute-Linux-Server-0.8.8-amd64.deb)
 - [All releases](https://github.com/gooog1111/OrcheRoute/releases)
 
 ## Android
@@ -40,7 +40,7 @@ Required packages: `ca-certificates`, `iproute2`, `systemd`, `nftables`, `iptabl
 Install on Debian/Ubuntu:
 
 ```bash
-sudo apt install ./OrcheRoute-Linux-Server-0.8.7-amd64.deb
+sudo apt install ./OrcheRoute-Linux-Server-0.8.8-amd64.deb
 ```
 
 Open `http://127.0.0.1:19110/` on the server, or `http://SERVER_ADDRESS:19110/` from another device. The installer prints initial credentials and saves them to `/etc/orcheroute/initial-credentials`. Configure HTTPS in Access settings for external access.
