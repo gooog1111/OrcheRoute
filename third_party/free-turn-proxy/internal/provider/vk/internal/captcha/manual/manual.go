@@ -253,7 +253,14 @@ func rewriteHTMLAttrsServerSide(html string, targetURL *neturl.URL) string {
 		if strings.HasPrefix(absURL, localOrigin) {
 			return rawURL
 		}
-		// прочие абсолютные URL -> через generic_proxy
+		// Keep static resource directories for webpack's relative chunk URLs.
+		if parsed, err := neturl.Parse(absURL); err == nil && validStaticProxyTarget(parsed) {
+			local := &neturl.URL{Path: "/static_proxy/" + parsed.Host + parsed.Path, RawQuery: parsed.RawQuery, Fragment: parsed.Fragment}
+			if parsed.RawPath != "" {
+				local.RawPath = "/static_proxy/" + parsed.Host + parsed.RawPath
+			}
+			return local.String()
+		}
 		return "/generic_proxy?proxy_url=" + neturl.QueryEscape(absURL)
 	}
 
@@ -300,6 +307,26 @@ func rewriteHTMLAttrsServerSide(html string, targetURL *neturl.URL) string {
 	}
 
 	return html
+}
+
+// Preserve directories in script URLs: webpack derives lazy JS/CSS paths
+// from document.currentScript.src, whose query string it discards.
+func validStaticProxyTarget(target *neturl.URL) bool {
+	return target != nil && target.Scheme == "https" && target.User == nil &&
+		(target.Port() == "" || target.Port() == "443") && isAllowedProxyHost(target.Hostname())
+}
+
+func staticProxyTarget(local *neturl.URL) (*neturl.URL, bool) {
+	const prefix = "/static_proxy/"
+	if !strings.HasPrefix(local.EscapedPath(), prefix) {
+		return nil, false
+	}
+	target, err := neturl.Parse("https://" + strings.TrimPrefix(local.EscapedPath(), prefix))
+	if err != nil || !validStaticProxyTarget(target) {
+		return nil, false
+	}
+	target.RawQuery = local.RawQuery
+	return target, true
 }
 
 func rewriteCaptchaHTML(html string, targetURL *neturl.URL) string {
@@ -662,6 +689,18 @@ func solveViaProxy(ctx context.Context, redirectURI string, dialer net.Dialer, p
 			},
 		}
 		genericReverse.ServeHTTP(w, r)
+	})
+
+	mux.HandleFunc("/static_proxy/", func(w http.ResponseWriter, r *http.Request) {
+		target, ok := staticProxyTarget(r.URL)
+		if !ok {
+			http.Error(w, "Forbidden host", http.StatusForbidden)
+			return
+		}
+		proxied := r.Clone(r.Context())
+		proxied.URL.Path, proxied.URL.RawPath = "/generic_proxy", ""
+		proxied.URL.RawQuery = neturl.Values{"proxy_url": {target.String()}}.Encode()
+		mux.ServeHTTP(w, proxied)
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
