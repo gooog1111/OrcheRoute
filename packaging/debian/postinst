@@ -51,6 +51,9 @@ else
     # no longer match runtime.env.
     rm -f /etc/orcheroute/initial-credentials
 fi
+# Patch only the package-owned TUN capture policy; validate before replacement.
+# The helper retains an immutable copy of the exact previous config.
+/opt/orcheroute/bin/orcheroute-network-go --action migrate-call-ingress >/dev/null
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable orcheroute-go.service >/dev/null
 systemctl restart orcheroute-go.service

@@ -43,6 +43,13 @@ func main() {
 	}
 }
 func run(ctx context.Context, current options) error {
+	if current.action == "migrate-call-ingress" {
+		changed, err := migrateCallIngress(ctx, current)
+		if err == nil {
+			write(map[string]any{"changed": changed})
+		}
+		return err
+	}
 	if current.action == "remove" {
 		if err := linuxnetwork.Remove(ctx); err != nil {
 			return err

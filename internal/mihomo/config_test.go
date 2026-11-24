@@ -78,3 +78,18 @@ func TestInvalidDefaultFails(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestCallServerIngressIsExcludedFromHostCapture(t *testing.T) {
+	for _, mode := range []string{"system", "interfaces"} {
+		t.Run(mode, func(t *testing.T) {
+			config, err := Build(testInput(mode))
+			if err != nil {
+				t.Fatal(err)
+			}
+			excluded := config["tun"].(map[string]any)["exclude-interface"].([]string)
+			if len(excluded) != 1 || excluded[0] != "orchecall0" {
+				t.Fatalf("VPN server ingress can be recaptured: %v", excluded)
+			}
+		})
+	}
+}
