@@ -3502,6 +3502,17 @@ function ComponentsForm({
           <div className="detail component-version-detail">
             <span>Последняя версия</span>
             <strong>{versionState}</strong>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={busy}
+              onClick={() => update("check", "Проверяем версию Mihomo", "Проверка версии Mihomo завершена.")}
+            >
+              Проверить версию Mihomo
+            </button>
+            {Boolean(components?.mihomo.checked_at) && (
+              <small>Проверено: {date(components!.mihomo.checked_at)}</small>
+            )}
             {components?.mihomo.update_available && (
               <button
                 className="primary-button"

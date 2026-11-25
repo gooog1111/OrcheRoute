@@ -63,3 +63,14 @@ test("update buttons and foreground events use the same ordered status reader", 
   assert.match(source, /document.addEventListener\("visibilitychange", visible\)/);
   assert.match(source, /sync\?\.dispose\(\)/);
 });
+
+test("server Mihomo card exposes an actual version check and its timestamp", async () => {
+  const source = await readFile(new URL("../app/ui/SettingsModal.tsx", import.meta.url), "utf8");
+  const card = source.slice(source.indexOf('<div className="detail component-version-detail">'), source.indexOf('label="GeoIP"'));
+  assert.match(card, /update\("check", "Проверяем версию Mihomo", "Проверка версии Mihomo завершена\."\)/);
+  assert.match(card, /Проверить версию Mihomo/);
+  assert.match(card, /mihomo\.checked_at/);
+  assert.match(card, /mihomo\.update_available &&/);
+  assert.match(card, /update\("core",/);
+  assert.match(source, /run\(\(\) => actions\.updateComponents\(component\), success, \{\s*title,\s*waitFor: "components"/);
+});
