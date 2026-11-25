@@ -12,7 +12,7 @@ import (
 func TestCallIngressConfigMigrationRetainsExactBackup(t *testing.T) {
 	dir := t.TempDir()
 	current := options{configPath: filepath.Join(dir, "config.json"), stateDirectory: dir, mihomoBinary: filepath.Join(dir, "validator")}
-	original := []byte(`{"secret":"keep","rules":["MATCH,DIRECT"],"tun":{"device":"orcheroute0","exclude-interface":["docker0"]}}`)
+	original := []byte(`{"secret":"keep","rules":["MATCH,DIRECT"],"tun":{"device":"orcheroute0","exclude-interface":["docker0","orchecall0"]}}`)
 	if err := os.WriteFile(current.configPath, original, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestCallIngressConfigValidationFailurePreservesOriginal(t *testing.T) {
 	if changed, err := migrateCallIngress(context.Background(), current); err != nil || changed {
 		t.Fatal("missing clean-install config must be skipped")
 	}
-	original := []byte(`{"tun":{"device":"orcheroute0"}}`)
+	original := []byte(`{"tun":{"device":"orcheroute0","exclude-interface":["orchecall0"]}}`)
 	_ = os.WriteFile(current.configPath, original, 0600)
 	_ = os.WriteFile(current.mihomoBinary, []byte("#!/bin/sh\nexit 1\n"), 0700)
 	if _, err := migrateCallIngress(context.Background(), current); err == nil {

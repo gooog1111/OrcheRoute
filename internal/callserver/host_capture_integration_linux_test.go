@@ -4,6 +4,7 @@ package callserver
 
 import (
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -23,7 +24,35 @@ func TestPacketCaptureHTTPHelper(t *testing.T) {
 	if address == "" {
 		return
 	}
-	t.Fatal(http.ListenAndServe(address, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })))
+	t.Fatal(http.ListenAndServe(address, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodConnect {
+			if r.Host != "203.0.113.4:18080" {
+				http.Error(w, "unexpected proxy target", 403)
+				return
+			}
+			upstream, err := net.Dial("tcp4", "203.0.113.2:18080")
+			if err != nil {
+				http.Error(w, err.Error(), 502)
+				return
+			}
+			defer upstream.Close()
+			client, buffered, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				return
+			}
+			defer client.Close()
+			_, _ = buffered.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n")
+			_ = buffered.Flush()
+			go func() { _, _ = io.Copy(upstream, buffered) }()
+			_, _ = io.Copy(client, upstream)
+			return
+		}
+		if r.Host == "203.0.113.4:18080" {
+			_, _ = w.Write([]byte("proxy-policy"))
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	})))
 }
 
 // Run only in disposable network AND mount namespaces, with a private /run.
@@ -69,9 +98,12 @@ func TestPacketHostCaptureCoexistence(t *testing.T) {
 	run("ip", "link", "set", "wan0", "up")
 	run("ip", "-n", "orche-wan", "address", "add", "198.51.100.2/24", "dev", "wanpeer0")
 	run("ip", "-n", "orche-wan", "address", "add", "203.0.113.2/32", "dev", "lo")
+	run("ip", "-n", "orche-wan", "address", "add", "203.0.113.3/32", "dev", "lo")
 	run("ip", "-n", "orche-wan", "link", "set", "wanpeer0", "up")
 	run("ip", "-n", "orche-wan", "route", "add", "default", "via", "198.51.100.1")
 	run("ip", "route", "add", "default", "via", "198.51.100.2")
+	run("ip", "rule", "add", "priority", "90", "fwmark", "0x5351/0xffff", "lookup", "main")
+	run("ip", "rule", "add", "priority", "91", "fwmark", "0x5352/0xffff", "lookup", "main")
 	run("ip", "address", "add", "10.42.0.1/32", "dev", "lo")
 	allow := true
 	runtime := &embeddedPacketRuntime{interfaceName: "orchecall0"}
@@ -88,7 +120,7 @@ func TestPacketHostCaptureCoexistence(t *testing.T) {
 	defer localServer.Close()
 	self, _ := os.Executable()
 	wanServer := exec.Command("ip", "netns", "exec", "orche-wan", self, "-test.run=^TestPacketCaptureHTTPHelper$", "-test.timeout=90s")
-	wanServer.Env = append(os.Environ(), "ORCHEROUTE_TEST_HTTP_ADDRESS=203.0.113.2:18080")
+	wanServer.Env = append(os.Environ(), "ORCHEROUTE_TEST_HTTP_ADDRESS=0.0.0.0:18080")
 	if err := wanServer.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -105,15 +137,24 @@ func TestPacketHostCaptureCoexistence(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	captureMode := os.Getenv("ORCHEROUTE_TEST_CAPTURE_MODE")
+	if captureMode == "" {
+		captureMode = "system"
+	}
 	config, err := mihomo.Build(mihomo.Input{StateDir: t.TempDir(), Secret: "isolated-test", RouteDefault: "direct", Network: mihomo.Network{
-		Profile:              mihomo.Profile{Capture: mihomo.Capture{Mode: "system", StrictRoute: true}},
+		Profile:              mihomo.Profile{Capture: mihomo.Capture{Mode: captureMode, Interfaces: []string{"unrelated0"}, StrictRoute: true}},
 		ResolvedRoles:        map[string]mihomo.Role{"direct": {Interface: "wan0", Mark: 0x5351}, "vpn_underlay": {Interface: "wan0", Mark: 0x5352}},
 		EffectiveBypassCIDRs: append(append([]string{}, privateIPv4CIDRs...), "198.18.0.0/30"),
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, _ := json.Marshal(map[string]any{"mode": "rule", "log-level": "error", "ipv6": false, "tun": config["tun"], "rules": []string{"MATCH,DIRECT"}})
+	blockedURL := "http://203.0.113.3:18080/"
+	if got := probe("10.77.0.2", blockedURL); got != "200" {
+		t.Fatalf("policy target baseline failed: %s", got)
+	}
+	proxies := append(config["proxies"].([]any), map[string]any{"name": "TEST-PROXY", "type": "http", "server": "198.51.100.2", "port": 18080, "interface-name": "wan0", "routing-mark": 0x5352})
+	data, _ := json.Marshal(map[string]any{"mode": "rule", "log-level": "debug", "ipv6": false, "tun": config["tun"], "proxies": proxies, "rules": []string{"IP-CIDR,203.0.113.3/32,REJECT,no-resolve", "IP-CIDR,203.0.113.4/32,TEST-PROXY,no-resolve", "MATCH,DIRECT-EGRESS"}})
 	directory := t.TempDir()
 	path := filepath.Join(directory, "config.json")
 	if err := os.WriteFile(path, data, 0600); err != nil {
@@ -143,8 +184,25 @@ func TestPacketHostCaptureCoexistence(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Log(strings.TrimSpace(run("ip", "route", "get", "203.0.113.2", "from", "10.77.0.2", "iif", "orchecall0")))
+	if got := probe("10.77.0.2", blockedURL); got == "200" {
+		t.Fatal("client traffic bypassed the host client's routing policy")
+	}
 	if got := probe("10.77.0.2", publicURL); got != "200" {
+		t.Log(run("ip", "rule"))
+		out, _ := exec.Command("ip", "route", "get", "10.77.0.1", "from", "10.77.0.2", "iif", "orchecall0").CombinedOutput()
+		t.Log(string(out))
+		t.Log(run("sysctl", "net.ipv4.conf.all.rp_filter", "net.ipv4.conf.orchecall0.rp_filter", "net.ipv4.conf.all.forwarding"))
+		t.Log(run("ss", "-lnt"))
+		t.Log(run("iptables", "-nvL", "INPUT"))
+		t.Log(run("iptables", "-nvL", "FORWARD"))
+		t.Log(run("nft", "list", "ruleset"))
+		logs, _ := os.ReadFile(logFile.Name())
+		t.Log(string(logs))
 		t.Fatalf("public HTTP blocked by host capture: %s", got)
+	}
+	out, err := exec.Command("ip", "netns", "exec", "orche-client", "curl", "--noproxy", "*", "--interface", "10.77.0.2", "-fsS", "--max-time", "3", "http://203.0.113.4:18080/").CombinedOutput()
+	if err != nil || string(out) != "proxy-policy" {
+		t.Fatalf("host proxy selection was not inherited: %v %s", err, out)
 	}
 	localURL := "http://" + listener.Addr().String() + "/"
 	if got := probe("10.77.0.2", localURL); got == "200" {

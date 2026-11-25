@@ -246,6 +246,9 @@ func packetClientForwardRules(interfaceName string, allowLAN bool, peers []Packe
 }
 
 func packetClientInputRules(interfaceName string, allowLAN bool, peers []PacketPeer) [][]string {
+	// INPUT sees the local address after Mihomo's REDIRECT, not the address
+	// requested by the subscriber. Use the original connection destination so
+	// public requests can enter the host policy without granting access to LAN.
 	rules := [][]string{}
 	for _, peer := range peers {
 		if peer.AllowLAN == nil || *peer.AllowLAN == allowLAN {
@@ -256,12 +259,12 @@ func packetClientInputRules(interfaceName string, allowLAN bool, peers []PacketP
 			action = "ACCEPT"
 		}
 		for _, cidr := range privateIPv4CIDRs {
-			rules = append(rules, []string{"-i", interfaceName, "-s", peer.Address.String(), "-d", cidr, "-j", action})
+			rules = append(rules, []string{"-i", interfaceName, "-s", peer.Address.String(), "-m", "conntrack", "--ctorigdst", cidr, "-j", action})
 		}
 	}
 	if !allowLAN {
 		for _, cidr := range privateIPv4CIDRs {
-			rules = append(rules, []string{"-i", interfaceName, "-d", cidr, "-j", "DROP"})
+			rules = append(rules, []string{"-i", interfaceName, "-m", "conntrack", "--ctorigdst", cidr, "-j", "DROP"})
 		}
 	}
 	return rules

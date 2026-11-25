@@ -62,7 +62,7 @@ func TestInterfaceCaptureIncludesTun(t *testing.T) {
 	}
 	tun := config["tun"].(map[string]any)
 	interfaces := tun["include-interface"].([]string)
-	if len(interfaces) != 1 || interfaces[0] != "lan0" {
+	if len(interfaces) != 2 || interfaces[0] != "lan0" || interfaces[1] != "orchecall0" {
 		t.Fatalf("unexpected interfaces: %#v", interfaces)
 	}
 	excluded := tun["route-exclude-address"].([]string)
@@ -79,16 +79,25 @@ func TestInvalidDefaultFails(t *testing.T) {
 	}
 }
 
-func TestCallServerIngressIsExcludedFromHostCapture(t *testing.T) {
+func TestCallServerIngressSharesHostCapture(t *testing.T) {
 	for _, mode := range []string{"system", "interfaces"} {
 		t.Run(mode, func(t *testing.T) {
 			config, err := Build(testInput(mode))
 			if err != nil {
 				t.Fatal(err)
 			}
-			excluded := config["tun"].(map[string]any)["exclude-interface"].([]string)
-			if len(excluded) != 1 || excluded[0] != "orchecall0" {
-				t.Fatalf("VPN server ingress can be recaptured: %v", excluded)
+			tun := config["tun"].(map[string]any)
+			if _, excluded := tun["exclude-interface"]; excluded {
+				t.Fatal("VPN server ingress must share client policy")
+			}
+			if mode == "interfaces" {
+				found := false
+				for _, name := range tun["include-interface"].([]string) {
+					found = found || name == "orchecall0"
+				}
+				if !found {
+					t.Fatal("interface capture omits server ingress")
+				}
 			}
 		})
 	}

@@ -28,7 +28,7 @@ func migrateCallIngress(ctx context.Context, current options) (bool, error) {
 	if err := json.Unmarshal(original, &config); err != nil {
 		return false, err
 	}
-	changed, err := mihomo.ExcludeCallServerIngress(config)
+	changed, err := mihomo.CaptureCallServerIngress(config)
 	if err != nil || !changed {
 		return false, err
 	}

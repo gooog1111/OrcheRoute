@@ -24,10 +24,10 @@ func TestPacketPerClientLANKeepsIsolationFirst(t *testing.T) {
 		t.Fatal("global block must follow client override")
 	}
 	input := packetClientInputRules("orchecall0", false, []PacketPeer{{Address: netip.MustParseAddr("10.77.0.2"), AllowLAN: &allow}})
-	if strings.Join(input[0], " ") != "-i orchecall0 -s 10.77.0.2 -d 10.0.0.0/8 -j ACCEPT" {
+	if strings.Join(input[0], " ") != "-i orchecall0 -s 10.77.0.2 -m conntrack --ctorigdst 10.0.0.0/8 -j ACCEPT" {
 		t.Fatal(input)
 	}
-	if indexOfRule(input, []string{"-i", "orchecall0", "-d", "10.0.0.0/8", "-j", "DROP"}) < 1 {
+	if indexOfRule(input, []string{"-i", "orchecall0", "-m", "conntrack", "--ctorigdst", "10.0.0.0/8", "-j", "DROP"}) < 1 {
 		t.Fatal("server-local address bypass")
 	}
 }

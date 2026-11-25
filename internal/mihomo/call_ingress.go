@@ -2,9 +2,9 @@ package mihomo
 
 import "fmt"
 
-// ExcludeCallServerIngress prevents the host client from recapturing the
-// VPN-server tunnel. It preserves all unrelated configuration and exclusions.
-func ExcludeCallServerIngress(config map[string]any) (bool, error) {
+// CaptureCallServerIngress shares the host client's routing policy with inbound
+// VPN clients. It also repairs the exclusion introduced by server 0.8.9.
+func CaptureCallServerIngress(config map[string]any) (bool, error) {
 	tun, ok := config["tun"].(map[string]any)
 	if !ok || tun["device"] != "orcheroute0" {
 		return false, nil
@@ -37,30 +37,33 @@ func ExcludeCallServerIngress(config map[string]any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	kept := make([]string, 0, len(included))
-	for _, name := range included {
+	kept := make([]string, 0, len(excluded))
+	for _, name := range excluded {
 		if name != "orchecall0" {
 			kept = append(kept, name)
 		}
 	}
-	if len(included) > 0 && len(kept) == 0 {
-		return false, fmt.Errorf("call_server_interface_cannot_be_host_capture")
-	}
-	changed := len(kept) != len(included)
+	changed := len(kept) != len(excluded)
 	found := false
-	for _, name := range excluded {
+	for _, name := range included {
 		found = found || name == "orchecall0"
 	}
-	if !found {
-		excluded = append(excluded, "orchecall0")
+	if len(included) > 0 && !found {
+		included = append(included, "orchecall0")
 		changed = true
 	}
 	if !changed {
 		return false, nil
 	}
-	if len(kept) != len(included) {
-		tun["include-interface"] = kept
+	if len(kept) != len(excluded) {
+		if len(kept) == 0 {
+			delete(tun, "exclude-interface")
+		} else {
+			tun["exclude-interface"] = kept
+		}
 	}
-	tun["exclude-interface"] = excluded
+	if len(included) > 0 {
+		tun["include-interface"] = included
+	}
 	return true, nil
 }

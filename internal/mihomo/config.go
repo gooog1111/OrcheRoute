@@ -184,7 +184,7 @@ func Build(input Input) (map[string]any, error) {
 		tun["include-interface"] = capture.Interfaces
 	}
 	config["tun"] = tun
-	if _, err := ExcludeCallServerIngress(config); err != nil {
+	if _, err := CaptureCallServerIngress(config); err != nil {
 		return nil, err
 	}
 	return config, nil
